@@ -62,7 +62,19 @@ ifneq ($(VMW_KC_NAME),)
     CERTPATH?=$(VIBTOOLS)/testcerts/$(VMW_KC_NAME).cert
 endif
 
+V5_TAG       = v4_11_0_1021
+V5_URL       = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
+FILE	     = export.files-common
+
 all vib:
+	@while read -r file;do \
+        if [ -f "$$file" ]; then \
+                echo "$$file Present"; \
+        else \
+                wget -O $$file ${V5_URL}/src/driver/common/$$file; \
+        fi; \
+        done < ${FILE}
+
 	@$(SCONS) native-driver-modules native-driver-vibs native-driver-bundle \
 	       RELEASE_PACKAGES_DIR=$(TARGET) \
 	       TOOLKIT_MANIFEST=$(MANIFEST) \
@@ -78,6 +90,13 @@ all vib:
                CERTPATH=$(CERTPATH)
 
 clean:
+	@echo Cleaning out common code files ...
+	@while read -r file;do \
+        if [ -f "$$file" ]; then \
+                rm -f $$file; \
+        fi; \
+        done < ${FILE}
+
 	@echo Cleaning out build directories ...
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.

@@ -211,6 +211,7 @@ sfvmk_mcdi_init(sfvmk_adapter *sfAdapter)
         //praveen 
         esmp->esm_base = sfvmk_AllocCoherentDMAMapping(sfAdapter, max_msg_size,&esmp->io_elem.ioAddr);
         esmp->io_elem.length = max_msg_size;
+  	esmp->esm_handle = sfAdapter->vmkDmaEngine; 
         if (NULL== esmp->esm_base)
         {
           goto mem_alloc_fail; 

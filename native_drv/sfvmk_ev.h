@@ -43,4 +43,8 @@ typedef struct sfvmk_evq {
 
 int
 sfvmk_ev_init(sfvmk_adapter *adapter);
+int
+sfvmk_ev_qpoll(struct sfvmk_evq *evq);
+int
+sfvmk_ev_start(sfvmk_adapter *adapter);
 #endif

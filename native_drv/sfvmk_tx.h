@@ -5,6 +5,29 @@
 #include "efx.h"
 
 #include "sfvmk_driver.h"
+// Number of descriptors per transmit queue
+#define SFVMK_TX_NDESCS             1024
+
+// Number of transmit descriptors processed per batch
+#define SFVMK_TX_BATCH              128
+
+// Maximum number of packets held in the deferred packet list
+#define SFVMK_TX_MAX_DEFERRED       256
+
+
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+
+enum sfvmk_txq_flush_state
+{
+    SFVMK_TXQ_FLUSH_INACTIVE = 0,
+    SFVMK_TXQ_FLUSH_DONE,
+    SFVMK_TXQ_FLUSH_PENDING,
+    SFVMK_TXQ_FLUSH_FAILED,
+};
+
+
 
 
 enum sfvmk_txq_state {
@@ -78,7 +101,7 @@ typedef struct sfvmk_txq {
 	struct sfvmk_txq		*next;
 }sfvmk_txq;
 
-int
-sfvmk_tx_init(sfvmk_adapter *adapter);
+int sfvmk_tx_init(sfvmk_adapter *adapter);
 
+int sfvmk_tx_start(sfvmk_adapter *adapter);
 #endif

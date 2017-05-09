@@ -33,6 +33,21 @@ typedef struct efsys_mem_s
 
 //static int sfvmk_rx_ring_entries = SFVMK_NDESCS;
 //static int sfvmk_tx_ring_entries = SFVMK_NDESCS;
+typedef struct sfvmk_adptrPhyInfo {
+   vmk_uint8 link_status;
+   vmk_uint16 link_speed;
+   vmk_uint16 phy_type;
+   efx_phy_media_type_t interface_type;
+   vmk_uint32 misc_params;
+   vmk_uint32 advertising;
+   vmk_uint32 supported;
+#if ESX_VERSION_NUMBER >= ESX_VERSION(2015)
+   vmk_UplinkCableType cable_type;
+   vmk_UplinkTransceiverType transceiver;
+   vmk_Bool async_evt;
+#endif
+}sfvmk_adptrPhyInfo;
+
 enum sfvmk_txq_type {
 	SFVMK_TXQ_NON_CKSUM = 0,
 	SFVMK_TXQ_IP_CKSUM,
@@ -55,9 +70,9 @@ enum sfvmk_intrState {
 
 typedef struct sfvmk_intr {
 	enum sfvmk_intrState		state; /* ?? TBD */
-	vmk_IntrCookie			intrCookies[20] ; //[SFVMK_MAX_MSIX_VECTORS];
+	vmk_IntrCookie			intrCookies[64] ; //[SFVMK_MAX_MSIX_VECTORS];
 	int				numIntrAlloc;
-	efx_intr_type_t			intrType;
+	efx_intr_type_t			type;
 	unsigned int 			zero_count;      /* ?? TBD */
 }sfvmk_intr;
 enum sfvmk_mcdi_state {
@@ -138,7 +153,6 @@ typedef struct sfvmk_nic_poll {
 typedef struct {
 	/* Device handle passed by VMK */
 	vmk_Device		vmkDevice;
-	vmk_WorldID 		worldId;
 
 	/* VMK kernel related information */
 	vmk_DMAEngine    	vmkDmaEngine;
@@ -160,22 +174,33 @@ typedef struct {
 	/* ESXi SFC Driver related information */
 	struct sfvmk_mcdi	mcdi;
 	struct sfvmk_intr sfvmkIntrInfo;
-
+        struct sfvmk_port		port;
 	/*event queue  */
 	unsigned int			evq_max;
 	unsigned int 			evq_count;
 	unsigned int 			rxq_count;
 	unsigned int 			txq_count;
-	unsigned int			rxq_entries;
-	unsigned int			txq_entries;
+	unsigned int			rxq_enteries;
+	unsigned int			txq_enteries;
 	unsigned int			mtu;
 
+#define	SFVMK_FATSOV1	(1 << 0)
+#define	SFVMK_FATSOV2	(1 << 1)
+
+
+        unsigned int			tso_fw_assisted;
 
 	struct sfvmk_evq		*evq[SFVMK_RX_SCALE_MAX];
 
 	struct sfvmk_rxq		*rxq[SFVMK_RX_SCALE_MAX];
 
 	struct sfvmk_txq		*txq[SFVMK_TXQ_NTYPES + SFVMK_RX_SCALE_MAX];
+	unsigned int			rx_indir_table[SFVMK_RX_SCALE_MAX];
+
+
+        size_t				rx_prefix_size;
+	size_t				rx_buffer_size;
+	size_t				rx_buffer_align;
 
 
 	/*  */
@@ -200,7 +225,7 @@ typedef struct {
    vmk_uint32 supportedModesArraySz;
 
        vmk_Name idName;
-       vmk_uint64 debugMask;
+       vmk_uint32 debugMask;
        vmk_uint64 memSize;
 
      /* TX Rings  */
@@ -208,13 +233,13 @@ typedef struct {
 
    /* Rx rings */
    struct sfvmk_rxObj rx_obj[SFVMK_RX_SCALE_MAX];
-
+   sfvmk_adptrPhyInfo phy;
 }sfvmk_adapter;
 
 /* mcdi calls */
 
 int sfvmk_mcdi_init(sfvmk_adapter *sfAdapter);
-void *sfvmk_memPoolAlloc(vmk_uint64 size, vmk_uint64 *allocSize);
 
+int sfvmk_port_start(sfvmk_adapter *adapter);
 #endif /* __SFVMK_DRIVER_H__ */
 

@@ -1,6 +1,7 @@
 
 #ifndef __SFVMK_RX_H__
 #define __SFVMK_RX_H__
+#include  "sfvmk.h"
 #include "efsys.h"
 #include  "efx.h"
 
@@ -10,6 +11,7 @@
 typedef struct sfvmk_rx_sw_desc {
 //	struct mbuf	*mbuf;
 //	bus_dmamap_t	map;
+//        vmk_PktHandle pkt;
 	int		flags;
 	int		size;
 }sfvmk_rx_sw_desc;
@@ -54,6 +56,6 @@ typedef struct sfvmk_rxq {
         unsigned int                    size;
 }sfvmk_rxq;
 
-int
-sfvmk_rx_init(sfvmk_adapter *adapter);
+int sfvmk_rx_init(sfvmk_adapter *adapter);
+int sfvmk_rx_start( sfvmk_adapter *adapter);
 #endif

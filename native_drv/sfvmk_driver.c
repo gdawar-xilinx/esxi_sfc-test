@@ -10,6 +10,7 @@
 #include "sfvmk_ev.h"
 #include "sfvmk_rx.h"
 #include "sfvmk_uplink.h"
+#include "sfvmk_util.h"
 
 
 static VMK_ReturnStatus sfvmk_DeviceAttach(vmk_Device device);
@@ -22,6 +23,18 @@ extern VMK_ReturnStatus sfvmk_CreateLock(const char *lckName, vmk_LockRank rank,
 extern void sfvmk_DestroyLock(vmk_Lock lock);
 VMK_ReturnStatus sfvmk_removeUplinkDevice();
 
+static int sfvmk_tx_ring_entries = SFVMK_NDESCS;
+static int sfvmk_rx_ring_entries = SFVMK_NDESCS;
+static void elxnet_initializeInterrupts(sfvmk_adapter *devData);
+static void
+elxnet_initializeInterrupts(sfvmk_adapter *devData)
+{
+   vmk_int16 i;
+
+   for (i = 0; i < 30; i++) {
+      devData->sfvmkIntrInfo.intrCookies[i] = VMK_INVALID_INTRCOOKIE;
+   }
+}
 
 /*
  ***********************************************************************
@@ -41,7 +54,7 @@ static vmk_DriverOps sfvmk_DriverOps = {
    .startDevice   = sfvmk_DeviceStart,
    .forgetDevice  = sfvmk_DeviceForget,
 };
-
+#if 0 
 /*
  ***********************************************************************
  *
@@ -122,65 +135,7 @@ sfvmk_memPoolAlloc(vmk_uint64 size, vmk_uint64 *allocSize)
 	return NULL;
 }
 
-
-
-
-/*
- ***********************************************************************
- *
- * elxnet_mpoolFree
- *
- *      Frees memory allocated from the mempool.
- *
- *      param [in] va         pointer to virtual address to be
- *                            freed/unmapped
- *      param [in] size       size of the memory to be freed/unmapped
- *
- * Results:
- *      NULL.
- *
- * Side effects:
- *      None
- *
- ***********************************************************************
- */
-
-void
-sfvmk_memPoolFree(void *va,          // IN
-                 vmk_uint64 size)   // IN
-{
-	VMK_ReturnStatus        status;
-	vmk_MA                  ma;
-	vmk_MpnRange            mpn_range;
-	vmk_MemPoolAllocRequest alloc_request;
-
-	/*
-	* First try getting the MA from VA. This should not fail, but if
-	* it does, all the rest operations should be skipped.
-	*/
-	status = vmk_VA2MA((vmk_VA)va, size, &ma);
-	if (status != VMK_OK) {
-		SFVMK_ERROR("vmk_VA2MA failed: %s", vmk_StatusToString(status));
-		VMK_ASSERT(0);
-	}
-
-	/* Unmap */
-	vmk_Unmap((vmk_VA)va);
-
-	/* Free pages */
-	mpn_range.startMPN = vmk_MA2MPN(ma);
-	mpn_range.numPages = (size/VMK_PAGE_SIZE);
-
-	alloc_request.numPages    = mpn_range.numPages;
-	alloc_request.numElements = 1;
-	alloc_request.mpnRanges   = &mpn_range;
-
-	status = vmk_MemPoolFree(&alloc_request);
-	if (status != VMK_OK) {
-		SFVMK_ERROR("vmk_MemPoolFree failed: %s",
-		                 vmk_StatusToString(status));
-	}
-}
+#endif 
 
 /*
  *****************************************************************************
@@ -373,7 +328,9 @@ sfvmk_estimate_rsrc_limits(sfvmk_adapter *adapter)
          if (status != VMK_OK) {
 				VMK_ASSERT(0);
 		 }
-
+    
+           vmk_LogMessage("Max number of txq %d and rxq %d supported by uplink\n", limits.edl_max_txq_count
+                 ,limits.edl_max_rxq_count); 
 
    evq_max = limits.edl_max_txq_count;
   // tuning parameter
@@ -385,7 +342,7 @@ sfvmk_estimate_rsrc_limits(sfvmk_adapter *adapter)
 	limits.edl_min_txq_count = SFVMK_TXQ_NTYPES;
 //	limits.edl_max_txq_count = evq_max + SFVMK_TXQ_NTYPES - 1;
 	limits.edl_min_rxq_count = 1;
-	//limits.edl_max_rxq_count = evq_max;
+	limits.edl_max_rxq_count = evq_max - SFVMK_TXQ_NTYPES + 1;
 
 	efx_nic_set_drv_limits(adapter->enp, &limits);
 
@@ -416,7 +373,7 @@ sfvmk_estimate_rsrc_limits(sfvmk_adapter *adapter)
 	 */
 	return (0);
 }
-
+#if 0 
 VMK_ReturnStatus
 sfvmk_DMAMapMA(sfvmk_adapter *adapter,   // IN: adapter
                  vmk_MA ma,                  // IN: machine address
@@ -477,10 +434,9 @@ sfvmk_AllocCoherentDMAMapping(sfvmk_adapter *adapter, // IN:  adapter
 {
    VMK_ReturnStatus status;
    void *va;
-   vmk_uint64 alloc_size;
 
    *ioAddr = 0;
-   va = sfvmk_memPoolAlloc(size, &alloc_size);
+   va = sfvmk_memPoolAlloc(size);
    if (va == NULL) {
       goto fail_mempool_alloc;
    }
@@ -561,7 +517,7 @@ sfvmk_FreeCoherentDMAMapping(sfvmk_adapter *adapter,  // IN: adapter
                     adapter->vmkDmaEngine);
    sfvmk_memPoolFree(va, size);
 }
-
+#endif 
 
 
 VMK_ReturnStatus
@@ -579,12 +535,14 @@ sfvmk_intrInit(sfvmk_adapter *adapter)
                                    numVec, NULL,
                                    adapter->sfvmkIntrInfo.intrCookies, &numIntrsAlloced);
    if (status == VMK_OK) {
+
+      vmk_LogMessage("number of interrupt allocated is %d\n", numIntrsAlloced);
       SFVMK_DBG(adapter, SFVMK_DBG_DRIVER, 0,
                      "Alloced %d vectors for device", numIntrsAlloced);
       adapter->sfvmkIntrInfo.numIntrAlloc = numIntrsAlloced;
 			//praveen
       //adapter->sfvmkIntrInfo.msix_enabled = true;
-			adapter->sfvmkIntrInfo.intrType = EFX_INTR_MESSAGE;
+			adapter->sfvmkIntrInfo.type = EFX_INTR_MESSAGE;
    } else {
       for (i = 0; i < numVec; i++) {
          adapter->sfvmkIntrInfo.intrCookies[i] = VMK_INVALID_INTRCOOKIE;
@@ -612,7 +570,7 @@ sfvmk_intrInit(sfvmk_adapter *adapter)
          adapter->sfvmkIntrInfo.numIntrAlloc = 1;
 				 //praveen needs to check
         // adapter->sfvmkIntrInfo.msix_enabled = true;
-				 adapter->sfvmkIntrInfo.intrType = EFX_INTR_MESSAGE;
+				 adapter->sfvmkIntrInfo.type = EFX_INTR_MESSAGE;
       }
 
       /* If RSS is enabled, disable RSS. */
@@ -630,6 +588,40 @@ sfvmk_DestroyDMAEngine(sfvmk_adapter *adapter)
 {
    vmk_DMAEngineDestroy(adapter->vmkDmaEngine);
 }
+
+
+/*
+ *****************************************************************************
+ *
+ * sfvmk_updateDevData --
+ *
+ *    Local function to update shared dev data during init and reset
+ *
+ *    param[in]     devData    Handle to device being attached to driver
+ *
+ * Results:
+ *    None
+ *
+ * Side effects:
+ *    None
+ *
+ *****************************************************************************
+ */
+
+void
+sfvmk_updateDevData(sfvmk_adapter * devData)
+{
+   vmk_UplinkSharedData *sharedData;
+
+   sharedData = &devData->sharedData;
+
+   vmk_NameInitialize(&sharedData->driverInfo.driver, "sfvmk");
+   vmk_NameInitialize(&sharedData->driverInfo.moduleInterface, "native");
+
+}
+
+
+
 
 
 
@@ -652,13 +644,12 @@ sfvmk_DeviceAttach(vmk_Device dev)
 	VMK_ReturnStatus status = VMK_OK;
 	sfvmk_adapter *sfAdapter = NULL;
 	vmk_AddrCookie pciDeviceCookie;
-	vmk_uint64 allocSize;
 	efx_nic_t *enp;
         efsys_lock_t *enp_lock; 
 	int error ;
 
 	// praveen needs to check id second parameter is required
-	sfAdapter = sfvmk_memPoolAlloc(sizeof(sfvmk_adapter), &allocSize);
+	sfAdapter = sfvmk_memPoolAlloc(sizeof(sfvmk_adapter));
 	if (sfAdapter == NULL) {
 		status = VMK_FAILURE;
 		goto fail;
@@ -667,13 +658,14 @@ sfvmk_DeviceAttach(vmk_Device dev)
 	vmk_LogMessage("sfvmk_SetBusMaster1");
 	sfAdapter->max_rss_channels =0;
 	sfAdapter->vmkDevice = dev;
-	sfAdapter->memSize = allocSize;
 	sfAdapter->debugMask = (vmk_uint32)(-1);
+        sfAdapter->rxq_enteries = sfvmk_rx_ring_entries; 
+        sfAdapter->txq_enteries = sfvmk_tx_ring_entries; 
 
 	SFVMK_DBG(sfAdapter, SFVMK_DBG_DRIVER, 2,
 						"*** allocated devData=%p, "
-						"requested size=%lu allocated size=%lu\n",
-						(void *)sfAdapter, sizeof(sfvmk_adapter), allocSize);
+						"requested size=%lu \n",
+						(void *)sfAdapter, sizeof(sfvmk_adapter));
 
 	status = vmk_DeviceGetRegistrationData(dev, &pciDeviceCookie);
 	if (status != VMK_OK) {
@@ -783,14 +775,13 @@ sfvmk_DeviceAttach(vmk_Device dev)
 
      sfvmk_estimate_rsrc_limits(sfAdapter);
    /* Initialize interrupt vectors to invalid value */
-//   elxnet_initializeInterrupts(devData);
+       elxnet_initializeInterrupts(sfAdapter);
 
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_intrInit...");
 	sfvmk_intrInit(sfAdapter);
-
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_ev_init...");
 	sfvmk_ev_init(sfAdapter);
-
+       
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_rx_init...");
      vmk_LogMessage("sfvmk_rx_init...");
 	sfvmk_rx_init(sfAdapter);
@@ -799,9 +790,13 @@ sfvmk_DeviceAttach(vmk_Device dev)
      vmk_LogMessage("sfvmk_tx_init done...");
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_rx_init done...");
       sfvmk_createUplinkData(sfAdapter);
-
+      sfvmk_updateDevData(sfAdapter);
        status = vmk_DeviceSetAttachedDriverData(dev, sfAdapter);
-	vmk_LogMessage("sfvmk_SetBusMaster");
+        {
+         efx_phy_media_type_t medium_type =0;
+        efx_phy_media_type_get(sfAdapter->enp, &medium_type);
+        vmk_LogMessage("phy type is %x\n", medium_type);
+        }
         return status;
 
 
@@ -820,43 +815,6 @@ sfvmk_kernel_dev_fail:
 fail:
   return VMK_OK;
 }
-/*
- ***********************************************************************
- *
- * sfvmk_workerThread
- *    Worker thread for stats collection
- *
- *      param[in] adapter        pointer to sfvmk device
- *
- *
- * Results:
- *      retval:    VMK_OK on exit
- *
- ***********************************************************************
- */
-#define SFVMK_WORKER_TIMEOUT_MSEC 10000 // 10 sec
-
-VMK_ReturnStatus
-sfvmk_workerThread(void *clientData)
-{
-  VMK_ReturnStatus  status;
-  static unsigned int test_count=10;
-
-  do {
-
-     vmk_LogMessage("test_count : %d ", test_count);
-     test_count = test_count + 1;
-
-     status = vmk_WorldWait(VMK_EVENT_NONE,
-                             VMK_LOCK_INVALID,
-                             SFVMK_WORKER_TIMEOUT_MSEC,
-                             "sfvmk_workerThread");
-
-  } while (status != VMK_DEATH_PENDING);
-
- return 0;
-
-}
 
 /*
  ***********************************************************************
@@ -872,37 +830,10 @@ sfvmk_workerThread(void *clientData)
  ***********************************************************************
  */
 static VMK_ReturnStatus
-sfvmk_DeviceStart(vmk_Device sfvmk_Device)
+sfvmk_DeviceStart(vmk_Device dev)
 {
-   VMK_ReturnStatus status = VMK_OK;
-   sfvmk_adapter *adapter = NULL;
-   vmk_WorldProps sfvmk_worldProps;
-
-   status = vmk_DeviceGetAttachedDriverData(sfvmk_Device,
-                                            (vmk_AddrCookie *)&adapter);
-   VMK_ASSERT(status == VMK_OK);
-   VMK_ASSERT(adapter != NULL);
-
-   vmk_LogMessage("StartDevice is invoked!");
-
-   /* Worker thread initialization and creation. */
-   sfvmk_worldProps.moduleID = vmk_ModuleCurrentID;
-   sfvmk_worldProps.name = "sfvmk_workerThread";
-   sfvmk_worldProps.startFunction = sfvmk_workerThread;
-   sfvmk_worldProps.data =  (void*) adapter;
-   sfvmk_worldProps.schedClass = VMK_WORLD_SCHED_CLASS_DEFAULT;
-
-   /* In the previous releases, the vmk_WorldCreate() interface
-      used the module heap internally. */
-   sfvmk_worldProps.heapID = sfvmk_ModInfo.heapID;
-
-   status = vmk_WorldCreate(&sfvmk_worldProps, &adapter->worldId);
-   VMK_ASSERT(status == VMK_OK);
-   if (status != VMK_OK) {
-      vmk_LogMessage("sfvmk driver: Failed to create worker thread");
-   }
-
-   return status;
+  vmk_LogMessage("StartDevice is invoked!");
+  return VMK_OK;
 }
 
 /*
@@ -948,6 +879,8 @@ sfvmk_DeviceScan(vmk_Device sfvmk_Device)
   if (status != VMK_OK) {
 	 vmk_LogMessage("vmk_LogicalCreateBusAddress failed, status %s", vmk_StatusToString(status));
   }
+
+  vmk_LogMessage("Bus address is %s\n " ,deviceID.busAddress);
 
   deviceID.busIdentifier = VMK_UPLINK_DEVICE_IDENTIFIER;
   deviceID.busIdentifierLen = sizeof(VMK_UPLINK_DEVICE_IDENTIFIER) - 1;
@@ -1009,38 +942,17 @@ sfvmk_DeviceDetach(vmk_Device dev)
  * shutdown the specified device.
  *
  * Return values:
- *       retval: VMK_OK        Quiesce of device succeeded :
- *       retval: VMK_FAILURE   Failed  to quiesce device:
- *                             Failed to  retrieve device data
- *
- * Side effects:
- *    None
+ *  VMK_OK
+ *  VMK_FAILURE
  *
  ***********************************************************************
  */
 static VMK_ReturnStatus
-sfvmk_DeviceShutdown(vmk_Device sfvmk_Device)
+sfvmk_DeviceShutdown(vmk_Device dev)
 {
-   VMK_ReturnStatus status = VMK_OK;
-   sfvmk_adapter *adapter = NULL;
-
-   status = vmk_DeviceGetAttachedDriverData(sfvmk_Device, (vmk_AddrCookie *) &adapter);
-
-   VMK_ASSERT(status == VMK_OK);
-   VMK_ASSERT(adapter != NULL);
-
-   vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
-
-   /* Destroy worker thread. */
-   if (adapter->worldId) {
-      vmk_WorldDestroy(adapter->worldId);
-      vmk_WorldWaitForDeath(adapter->worldId);
-      adapter->worldId = 0;
-   }
-
-   return VMK_OK;
+  vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
+  return VMK_OK;
 }
-
 
 /*
  ***********************************************************************

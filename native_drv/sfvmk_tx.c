@@ -1,4 +1,5 @@
 #include "sfvmk_tx.h" 
+#include "sfvmk_ev.h" 
 #include "sfvmk_util.h" 
 
 
@@ -21,7 +22,7 @@ sfvmk_tx_qfini(sfvmk_adapter *adapter, unsigned int index)
 
 	/* Free the context arrays. */
         sfvmk_memPoolFree(txq->pend_desc , txq->pend_desc_size); 
-	nmaps = adapter->txq_entries;
+	nmaps = adapter->txq_enteries;
 
         //praveen free  stmp;
 //	while (nmaps-- != 0)
@@ -50,28 +51,25 @@ sfvmk_tx_qinit(sfvmk_adapter *adapter, unsigned int txq_index,
 	struct sfvmk_evq *evq;
 	//struct sfvmk_tx_dpl *stdp;
 	efsys_mem_t *esmp;
-        vmk_uint64 alloc_size;
 
-	txq = (struct sfvmk_txq *)sfvmk_memPoolAlloc(sizeof(sfvmk_txq), &alloc_size);
+	txq = (struct sfvmk_txq *)sfvmk_memPoolAlloc(sizeof(sfvmk_txq));
 	txq->adapter = adapter;
-	txq->entries = adapter->txq_entries;
+	txq->entries = adapter->txq_enteries;
 	txq->ptr_mask = txq->entries - 1;
-
+        
 	adapter->txq[txq_index] = txq;
 	esmp = &txq->mem;
-
+        esmp->esm_handle  = adapter->vmkDmaEngine;
 	evq = adapter->evq[evq_index];
 
 	/* Allocate and zero DMA space for the descriptor ring. */
-//	if ((rc = sfxge_dma_alloc(sc, EFX_TXQ_SIZE(sc->txq_entries), esmp)) != 0)
-//		return (rc);
 
-        esmp->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_TXQ_SIZE(adapter->txq_entries),&esmp->io_elem.ioAddr);
-        esmp->io_elem.length = EFX_TXQ_SIZE(adapter->txq_entries);
+        esmp->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_TXQ_SIZE(adapter->txq_enteries),&esmp->io_elem.ioAddr);
+        esmp->io_elem.length = EFX_TXQ_SIZE(adapter->txq_enteries);
 
 	/* Allocate pending descriptor array for batching writes. */
-	txq->pend_desc = sfvmk_memPoolAlloc(sizeof(efx_desc_t) * adapter->txq_entries, &txq->pend_desc_size);
-
+	txq->pend_desc = sfvmk_memPoolAlloc(sizeof(efx_desc_t) * adapter->txq_enteries);
+        txq->pend_desc_size = sizeof(efx_desc_t) * adapter->txq_enteries; 
 
         #if 0 
 	/* Allocate and initialise mbuf DMA mapping array. */
@@ -235,4 +233,121 @@ fail:
 	adapter->txq_count = 0;
 	return (rc);
 }
+static int
+sfvmk_tx_qstart(sfvmk_adapter *adapter, unsigned int index)
+{
+  sfvmk_txq *txq;
+  efsys_mem_t *esmp;
+  uint16_t flags;
+  unsigned int tso_fw_assisted;
+  sfvmk_evq *evq;
+  unsigned int desc_index;
+  int rc;
+
+  //SFVMK_ADAPTER_LOCK_ASSERT_OWNED(adapter);
+
+  txq = adapter->txq[index];
+  esmp = &txq->mem;
+  evq = adapter->evq[txq->evq_index];
+
+//  VMK_ASSERT(txq->init_state == SFVMK_TXQ_INITIALIZED);
+//    VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED);
+
+
+  /* Determine the kind of queue we are creating. */
+  tso_fw_assisted = 0;
+  switch (txq->type) {
+  case SFVMK_TXQ_NON_CKSUM:
+    flags = 0;
+    break;
+  case SFVMK_TXQ_IP_CKSUM:
+    flags = EFX_TXQ_CKSUM_IPV4;
+    break;
+  case SFVMK_TXQ_IP_TCP_UDP_CKSUM:
+    flags = EFX_TXQ_CKSUM_IPV4 | EFX_TXQ_CKSUM_TCPUDP;
+    tso_fw_assisted = adapter->tso_fw_assisted;
+    if (tso_fw_assisted & SFVMK_FATSOV2)
+      flags |= EFX_TXQ_FATSOV2;
+    break;
+  default:
+    //VMK_ASSERT(0);
+    flags = 0;
+    break;
+  }
+
+  //praveen 
+  //  adapter->tso_fw_assisted needs to be initialized 
+
+  /* Create the common code transmit queue. */
+  if ((rc = efx_tx_qcreate(adapter->enp, index, txq->type, esmp,
+      adapter->txq_enteries, txq->buf_base_id, flags, evq->common,
+      &txq->common, &desc_index)) != 0) {
+    /* Retry if no FATSOv2 resources, otherwise fail */
+    if ((rc != ENOSPC) || (~flags & EFX_TXQ_FATSOV2))
+      goto fail;
+
+    /* Looks like all FATSOv2 contexts are used */
+    flags &= ~EFX_TXQ_FATSOV2;
+    tso_fw_assisted &= ~SFVMK_FATSOV2;
+    if ((rc = efx_tx_qcreate(adapter->enp, index, txq->type, esmp,
+        adapter->txq_enteries, txq->buf_base_id, flags, evq->common,
+        &txq->common, &desc_index)) != 0)
+      goto fail;
+  }
+
+  /* Initialise queue descriptor indexes */
+  txq->added = txq->pending = txq->completed = txq->reaped = desc_index;
+
+  //SFVMK_TXQ_LOCK(txq);
+
+  /* Enable the transmit queue. */
+  efx_tx_qenable(txq->common);
+
+  txq->init_state = SFVMK_TXQ_STARTED;
+  txq->flush_state = SFVMK_FLUSH_REQUIRED;
+  txq->tso_fw_assisted = tso_fw_assisted;
+
+  // will see later 
+  /*
+  txq->max_pkt_desc = sfvmk_tx_max_pkt_desc(adapter, txq->type,
+              tso_fw_assisted);
+  */
+  //SFVMK_TXQ_UNLOCK(txq);
+
+  return (0);
+
+fail:
+  return (rc);
+}
+
+
+
+
+int sfvmk_tx_start(sfvmk_adapter *adapter)
+{
+  int index;
+  int rc;
+
+  /* Initialize the common code transmit module. */
+  if ((rc = efx_tx_init(adapter->enp)) != 0)
+    return (rc);
+
+  for (index = 0; index < 1/*adapter->txq_count*/; index++) {
+    if ((rc = sfvmk_tx_qstart(adapter, index)) != 0)
+      goto fail;
+  }
+
+  return (0);
+
+fail:
+//  while (--index >= 0)
+//    sfvmk_tx_qstop(adapter, index);
+
+  efx_tx_fini(adapter->enp);
+
+  return (rc);
+}
+
+
+
 

@@ -21,6 +21,60 @@
  * Constants/Defines
  */
 
+
+
+enum sfvmk_port_state {
+  SFVMK_PORT_UNINITIALIZED = 0,
+  SFVMK_PORT_INITIALIZED,
+  SFVMK_PORT_STARTED
+};
+
+typedef struct sfvmk_port {
+  struct sfvmk_adapter  *sc;
+ // struct mtx    lock;
+  enum sfvmk_port_state init_state;
+#ifndef SFXGE_HAVE_PAUSE_MEDIAOPTS
+  unsigned int    wanted_fc;
+#endif
+  //struct sfvmk_hw_stats phy_stats;
+  //struct sfvmk_hw_stats mac_stats;
+  //efx_link_mode_t   link_mode;
+  //uint8_t     mcast_addrs[EFX_MAC_MULTICAST_LIST_MAX *
+  //            EFX_MAC_ADDR_LEN];
+  unsigned int    mcast_count;
+
+  /* Only used in debugging output */
+//  char      lock_name[SFVMK_LOCK_NAME_MAX];
+}sfvmk_port;
+
+
+#define ESX_VERSION(n) (n)
+
+#if VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#define ESX_VERSION_NUMBER 2016
+#elif VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 3, 0, 0)
+#define ESX_VERSION_NUMBER 2015
+#elif VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 2, 0, 0)
+#define ESX_VERSION_NUMBER 2013
+#else
+#error "Unknown VMKAPI version"
+#endif
+#define	SFVMK_NDESCS	1024
+
+#define	EFX_MAC_PDU(_sdu)					\
+	P2ROUNDUP((_sdu) + EFX_MAC_PDU_ADJUSTMENT, 8)
+
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
+#ifndef CACHE_LINE_SIZE
+/* This should be right on most machines the driver will be used on, and
+ * we needn't care too much about wasting a few KB per interface.
+ */
+#define	CACHE_LINE_SIZE 128
+#endif
+
+
+
 #define sfvmk_LE64ToCPU(x)      ((uint64_t)(x))
 #define sfvmk_LE32ToCPU(x)      ((uint32_t)(x))
 

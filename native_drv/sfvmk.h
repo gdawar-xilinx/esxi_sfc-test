@@ -11,11 +11,6 @@
 //#include "sfvmk_driver.h"
 #include "efsys.h"
 
-/*
- * sfvmk.h --
- *
- *      Header file for native solarflare driver.
- */
 
 /*
  * Constants/Defines
@@ -79,6 +74,8 @@ typedef struct sfvmk_port {
 #define sfvmk_LE32ToCPU(x)      ((uint32_t)(x))
 
 #define SFC_DUMP_FILE_NAME SFC_DRIVER_NAME"_dump"
+/* Size of heap to be allocated */
+/* TBD: Add a function to calculate the Heap Size */
 #define SFC_HEAP_EST       (2 * VMK_MEGABYTE)
 #define SFC_MAX_ADAPTERS   10
 #define SFC_SBDF_FMT       "%04x:%02x:%02x.%x"
@@ -222,6 +219,12 @@ sfvmk_MemFree(void *memPtr)
    VMK_ASSERT(memPtr);
    vmk_HeapFree(sfvmk_ModInfo.heapID, memPtr);
 }
+
+#define sfvmk_LE64ToCPU(x)      ((uint64_t)(x))
+#define sfvmk_LE32ToCPU(x)      ((uint32_t)(x))
+#define sfvmk_CPUToLE32(x)      ((uint32_t)(x))
+#define sfvmk_CPUToLE64(x)      ((uint64_t)(x))
+
 //extern VMK_ReturnStatus sfvmk_(const char *lckName, vmk_LockRank rank, vmk_Lock *lock);
 extern VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank, vmk_Mutex *mutex);
 extern void sfvmk_MutexDestroy(vmk_Mutex mutex);

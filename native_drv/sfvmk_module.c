@@ -1,21 +1,13 @@
-/* **********************************************************
- * Copyright 2017 - 2018 Solarflare Inc.  All rights reserved.
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
  * -- Solarflare Confidential
- * **********************************************************/
+ ************************************************************************/
 
 #include "sfvmk.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
-
-#ifdef SFVMK_UT
-extern void sfvmk_run_ut();
-#endif
-
-/*
- ***********************************************************************
- * Module global variables
- ***********************************************************************
- */
 
 sfvmk_ModInfo_t sfvmk_ModInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
@@ -25,54 +17,46 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
 };
 
-/*
- ***********************************************************************
- * cleanup_module --
- *
- * This is the module entry point that gets called automatically when
- * this module is unloaded.
- *
- ***********************************************************************
- */
-
 static void
 sfvmk_ModInfoCleanup(void)
 {
    if (sfvmk_ModInfo.driverID != NULL) {
       sfvmk_DriverUnregister();
+      sfvmk_ModInfo.driverID = NULL;
    }
    if (sfvmk_ModInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
       vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
+      sfvmk_ModInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
    }
    if (sfvmk_ModInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
       vmk_LogUnregister(sfvmk_ModInfo.logThrottledID);
+      sfvmk_ModInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
    }
    if (sfvmk_ModInfo.logID != VMK_INVALID_LOG_HANDLE) {
       vmk_LogUnregister(sfvmk_ModInfo.logID);
+      sfvmk_ModInfo.logID = VMK_INVALID_LOG_HANDLE;
    }
    if (sfvmk_ModInfo.heapID != VMK_INVALID_HEAP_ID) {
       vmk_HeapDestroy(sfvmk_ModInfo.heapID);
+      sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
    }
 }
-/*
- ***********************************************************************
+
+/************************************************************************
  * init_module --
  *
- * This is the driver module entry point that gets invoked automatically
- * when this module is loaded.
+ * @brief   This is the driver module entry point that gets invoked
+ * automatically when this module is loaded.
  *
- * Return values:
- *  0: Success
- *  1: Failure
+ * @param  None
  *
- ***********************************************************************
- */
-
+ * @return 0 <Success> or 1 <Failure>
+ *
+ ************************************************************************/
 int
 init_module(void)
 {
   VMK_ReturnStatus status;
-
   vmk_ByteCount byteCount;
   vmk_LogProperties logProps;
   vmk_HeapCreateProps heapProps;
@@ -166,7 +150,7 @@ init_module(void)
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
   } else {
-    vmk_LogMessage("Initialization of SFC driver failed:");
+    vmk_LogMessage("Initialization of SFC driver failed (%x)", status);
   }
 
   err:
@@ -177,19 +161,26 @@ init_module(void)
   return status;
 }
 
+/************************************************************************
+ * cleanup_module --
+ *
+ * @brief: This is the module entry point that gets called automatically when
+ * this module is unloaded.
+ *
+ * @param  None
+ *
+ * @return None
+ *
+ ************************************************************************/
+
 void
 cleanup_module(void)
 {
-
-#ifdef SFVMK_UT
-  sfvmk_run_ut();
-#endif
-
   sfvmk_ModInfoCleanup();
 
   vmk_LogMessage("Exit: -- Solarflare Native Driver -- ");
 }
-
+#if 0
 /*
  *-----------------------------------------------------------------------------
  *
@@ -223,6 +214,7 @@ sfvmk_CreateLock(const char *lckName,      // IN:  lock name
    }
    return status;
 }
+#endif
 VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex)           // OUT: created lock
 {
    vmk_MutexCreateProps lockProps;
@@ -274,7 +266,7 @@ void sfvmk_MutexDestroy(vmk_Mutex mutex)
 
 
 
-
+#if 0
 /*
  *-----------------------------------------------------------------------------
  *
@@ -294,5 +286,5 @@ sfvmk_DestroyLock(vmk_Lock lock)
   if (lock)
     vmk_SpinlockDestroy(lock);
 }
-
+#endif
 

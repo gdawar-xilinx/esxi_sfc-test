@@ -1,7 +1,9 @@
-/* **********************************************************
- * Copyright 2017 - 2018 Solarflare Inc.  All rights reserved.
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
  * -- Solarflare Confidential
- * **********************************************************/
+ ************************************************************************/
 
 #ifndef __SFVMK_DRIVER_H__
 #define __SFVMK_DRIVER_H__
@@ -10,8 +12,8 @@
 //#include  "sfvmk_rx.h"
 //#include  "sfvmk_tx.h"
 
-extern VMK_ReturnStatus sfvmk_DriverRegister();
-extern void             sfvmk_DriverUnregister();
+extern VMK_ReturnStatus sfvmk_DriverRegister(void);
+extern void             sfvmk_DriverUnregister(void);
 #define SFC_PCI_COMMAND             0x04
 #define SFC_PCI_COMMAND_BUS_MASTER  0x04  // Bus master
 #define	SFVMK_MODERATION	30

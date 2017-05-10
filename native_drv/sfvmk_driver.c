@@ -1,7 +1,9 @@
-/* **********************************************************
- * Copyright 2017 - 2018 Solarflare Inc.  All rights reserved.
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
  * -- Solarflare Confidential
- * **********************************************************/
+ ************************************************************************/
 
 #include "sfvmk.h"
 #include "efsys.h"
@@ -12,13 +14,12 @@
 #include "sfvmk_uplink.h"
 #include "sfvmk_util.h"
 
-
-static VMK_ReturnStatus sfvmk_DeviceAttach(vmk_Device device);
-static VMK_ReturnStatus sfvmk_DeviceDetach(vmk_Device device);
-static VMK_ReturnStatus sfvmk_DeviceScan(vmk_Device device);
-static VMK_ReturnStatus sfvmk_DeviceShutdown(vmk_Device device);
-static VMK_ReturnStatus sfvmk_DeviceStart(vmk_Device device);
-static void sfvmk_DeviceForget(vmk_Device device);
+static VMK_ReturnStatus sfvmk_AttachDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_DetachDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_ScanDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_ShutdownDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_StartDevice(vmk_Device device);
+static void sfvmk_ForgetDevice(vmk_Device device);
 extern VMK_ReturnStatus sfvmk_CreateLock(const char *lckName, vmk_LockRank rank, vmk_Lock *lock);
 extern void sfvmk_DestroyLock(vmk_Lock lock);
 VMK_ReturnStatus sfvmk_removeUplinkDevice();
@@ -47,98 +48,15 @@ static vmk_DeviceOps sfvmk_UplinkDevOps = {
 };
 
 static vmk_DriverOps sfvmk_DriverOps = {
-   .attachDevice  = sfvmk_DeviceAttach,
-   .detachDevice  = sfvmk_DeviceDetach,
-   .scanDevice    = sfvmk_DeviceScan,
-   .quiesceDevice = sfvmk_DeviceShutdown,
-   .startDevice   = sfvmk_DeviceStart,
-   .forgetDevice  = sfvmk_DeviceForget,
+   .attachDevice  = sfvmk_AttachDevice,
+   .detachDevice  = sfvmk_DetachDevice,
+   .scanDevice    = sfvmk_ScanDevice,
+   .quiesceDevice = sfvmk_ShutdownDevice,
+   .startDevice   = sfvmk_StartDevice,
+   .forgetDevice  = sfvmk_ForgetDevice,
 };
-#if 0 
-/*
- ***********************************************************************
- *
- * sfvmk_memPoolAlloc
- *
- *      Allocates memory from the mempool.
- *
- *      param [in]  size           size of memory to be allocated
- *      param [out] allocSize      actual size that got allocated.
- *
- * Results:
- *      Pointer to Mem VA or NULL.
- *
- * Side effects:
- *      None
- *
- ***********************************************************************
- */
 
-void *
-sfvmk_memPoolAlloc(vmk_uint64 size, vmk_uint64 *allocSize)
-{
-	VMK_ReturnStatus status;
-	vmk_VA va;
-	vmk_MemPoolAllocRequest request;
-	vmk_MemPoolAllocProps props;
-	vmk_MapRequest map_req;
-	vmk_MpnRange mpn_range;
-
-//	vmk_LogMessage("sfvmk_memPoolAlloc is invoked!");
-
-	size = VMK_UTIL_ROUNDUP(size, VMK_PAGE_SIZE);
-
-	/* First convert bytes to pages and allocate from the memory pool */
-	props.physContiguity = VMK_MEM_PHYS_CONTIGUOUS;
-	props.physRange = VMK_PHYS_ADDR_ANY;
-	props.creationTimeoutMS = 10;
-
-        request.numPages = size >> VMK_PAGE_SHIFT;
-        request.numElements = 1;
-        request.mpnRanges = &mpn_range;
-        
-        
-	status = vmk_MemPoolAlloc(sfvmk_ModInfo.memPoolID, &props,
-	                         &request);
-	if (status != VMK_OK) {
-	  SFVMK_ERROR("vmk_MemPoolAlloc failed: %s", vmk_StatusToString(status));
-	  goto allocation_err;
-	}
-
-	/* Call vmk_Map to get virtual address */
-	map_req.mapType     = VMK_MAPTYPE_DEFAULT;
-	map_req.mapAttrs    = VMK_MAPATTRS_READWRITE;
-	map_req.numElements = 1;
-	map_req.mpnRanges   = &mpn_range;
-
-	status = vmk_Map(vmk_ModuleCurrentID, &map_req, &va);
-	if (status != VMK_OK) {
-	  SFVMK_ERROR("vmk_Map failed: %s", vmk_StatusToString(status));
-	  goto mapping_err;
-	}
-
-	if ((void *)va != NULL) {
-	  vmk_Memset((void *)va, 0, size);
-	}
-
-	*allocSize = size;
-
-//	vmk_LogMessage("allocated mem va=%p, allocated size=%lu",
-//	                (void *)va, size);
-
-
-	return (void *)va;
-
-	mapping_err:
-	vmk_MemPoolFree(&request);
-	allocation_err:
-	return NULL;
-}
-
-#endif 
-
-/*
- *****************************************************************************
+/******************************************************************************
  *
  * sfvmk_createDMAEngine
  *
@@ -621,24 +539,20 @@ sfvmk_updateDevData(sfvmk_adapter * devData)
 }
 
 
-
-
-
-
-/*
- *********************************************************************
- * Callback routine for the device layer to announce device to the
+ /************************************************************************
+ * sfvmk_AttachDevice --
+ *
+ * @brief  Callback routine for the device layer to announce device to the
  * driver.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 
 static VMK_ReturnStatus
-sfvmk_DeviceAttach(vmk_Device dev)
+sfvmk_AttachDevice(vmk_Device dev)
 {
 	vmk_LogMessage("AttachDevice is invoked!");
 	VMK_ReturnStatus status = VMK_OK;
@@ -816,43 +730,37 @@ fail:
   return VMK_OK;
 }
 
-/*
- ***********************************************************************
- * sfvmk_DeviceStart --                                             */ /**
+/************************************************************************
+ * sfvmk_StartDevice --
  *
- * Callback routine for the device layer to notify the driver to bring
- * up the specified device.
+ * @brief: Callback routine for the device layer to notify the driver to
+ * bring up the specified device.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_DeviceStart(vmk_Device dev)
+sfvmk_StartDevice(vmk_Device dev)
 {
   vmk_LogMessage("StartDevice is invoked!");
   return VMK_OK;
 }
 
-/*
- ***********************************************************************
- * sfvmk_DeviceScan --                                              */ /**
+/************************************************************************
+ * sfvmk_ScanDevice --
  *
  * Callback routine for the device layer to notify the driver to scan
  * for new devices.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
-
-
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_DeviceScan(vmk_Device sfvmk_Device)
+sfvmk_ScanDevice(vmk_Device device)
 {
   VMK_ReturnStatus status = 0;
   sfvmk_adapter *adapter;
@@ -861,7 +769,7 @@ sfvmk_DeviceScan(vmk_Device sfvmk_Device)
   vmk_DeviceProps deviceProps;
 
   vmk_LogMessage("ScanDevice is invoked!");
-  status = vmk_DeviceGetAttachedDriverData(sfvmk_Device, (vmk_AddrCookie *) &adapter);
+  status = vmk_DeviceGetAttachedDriverData(device, (vmk_AddrCookie *) &adapter);
 
   VMK_ASSERT(status == VMK_OK);
   VMK_ASSERT(adapter != NULL);
@@ -891,7 +799,7 @@ sfvmk_DeviceScan(vmk_Device sfvmk_Device)
   deviceProps.registrationData.ptr = &adapter->regData;
 
   status = vmk_DeviceRegister(&deviceProps,
-                             sfvmk_Device, &adapter->uplinkDevice);
+                             device, &adapter->uplinkDevice);
 
   if (status != VMK_OK) {
     vmk_LogMessage("Failed to register device: %s", vmk_StatusToString(status));
@@ -901,22 +809,20 @@ sfvmk_DeviceScan(vmk_Device sfvmk_Device)
   return VMK_OK;
 }
 
-/*
- ***********************************************************************
- * sfvmk_DeviceDetach --                                            */ /**
+/************************************************************************
+ * sfvmk_DetachDevice --
  *
- * Callback routine for the device layer to notify the driver to release
- * control of a device.
+ * @brief : Callback routine for the device layer to notify the driver to
+ * release control of a driver.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 
 static VMK_ReturnStatus
-sfvmk_DeviceDetach(vmk_Device dev)
+sfvmk_DetachDevice(vmk_Device dev)
 {
   vmk_LogMessage("DetachDevice is invoked!");
   return VMK_OK;
@@ -934,98 +840,90 @@ sfvmk_DeviceDetach(vmk_Device dev)
   return VMK_OK;
 }
 
-/*
- ***********************************************************************
- * sfvmk_DeviceShutdown --                                          */ /**
+/************************************************************************
+ * sfvmk_ShutdownDevice --
  *
- * Callback routine for the device layer to notify the driver to
+ * @brief : Callback routine for the device layer to notify the driver to
  * shutdown the specified device.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_DeviceShutdown(vmk_Device dev)
+sfvmk_ShutdownDevice(vmk_Device dev)
 {
   vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
   return VMK_OK;
 }
 
-/*
- ***********************************************************************
- * sfvmk_DeviceForget --                                            */ /**
+/************************************************************************
+ * sfvmk_ForgetDevice --
  *
- * Callback routine for the device layer to notify the driver the
+ * @brief: Callback routine for the device layer to notify the driver the
  * specified device is not responsive.
  *
- * Return values:
- *  None
+ * @param  dev	pointer to vmkDevice
  *
- ***********************************************************************
- */
-
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 static void
-sfvmk_DeviceForget(vmk_Device dev)
+sfvmk_ForgetDevice(vmk_Device dev)
 {
   vmk_LogMessage("ForgetDevice is invoked!");
   return ;
 }
 
 
-/*
- ***********************************************************************
- * sfvmk_DriverRegister --      */ /**
+/************************************************************************
+ * sfvmk_DriverRegister --
  *
- * Register this driver as network driver
+ * @brief: This function registers the driver as network driver
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param : None
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 VMK_ReturnStatus
-sfvmk_DriverRegister()
+sfvmk_DriverRegister(void)
 {
   VMK_ReturnStatus status;
-  vmk_DriverProps sfvmk_DriverProps;
+  vmk_DriverProps driverProps;
 
-  /* Populate sfcDriverProps */
-  sfvmk_DriverProps.moduleID = vmk_ModuleCurrentID;
-  vmk_NameCopy(&sfvmk_DriverProps.name, &sfvmk_ModInfo.driverName);
-  sfvmk_DriverProps.ops = &sfvmk_DriverOps;
-  sfvmk_DriverProps.privateData = (vmk_AddrCookie)NULL;
+  /* Populate driverProps */
+  driverProps.moduleID = vmk_ModuleCurrentID;
+  vmk_NameCopy(&driverProps.name, &sfvmk_ModInfo.driverName);
+  driverProps.ops = &sfvmk_DriverOps;
+  driverProps.privateData = (vmk_AddrCookie)NULL;
 
 
-  /* Register Driver with with device layer */
-  status = vmk_DriverRegister(&sfvmk_DriverProps, &sfvmk_ModInfo.driverID);
+  /* Register Driver with the device layer */
+  status = vmk_DriverRegister(&driverProps, &sfvmk_ModInfo.driverID);
 
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
   } else {
-    vmk_LogMessage("Initialization of SFC driver failed:");
+    vmk_LogMessage("Initialization of SFC driver failed with status: %d", status);
   }
 
   return status;
 }
 
-/*
- ***********************************************************************
- * SFC_NATIVE_DriverUnregister --    */ /**
+/************************************************************************
+ * sfvmk_DriverUnregister --
  *
- * Function to unregister the device that was previous registered.
+ * @brief: Function to unregister the device that was previous registered.
  *
- * Return values:
- *  VMK_OK
- *  VMK_FAILURE
+ * @param : None
  *
- ***********************************************************************
- */
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
 void
-sfvmk_DriverUnregister()
+sfvmk_DriverUnregister(void)
 {
   vmk_DriverUnregister(sfvmk_ModInfo.driverID);
 }

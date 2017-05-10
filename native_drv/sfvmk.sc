@@ -1,20 +1,26 @@
+#*************************************************************************
+# Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+# Use is subject to license terms.
+#
+# -- Solarflare Confidential
+#************************************************************************/
+
 # Driver definition for native sfvmk driver.
 #
 # identification section
 #
 
 driver_name    = "sfvmk"
-driver_ver     = "0.0.1.102"
+driver_ver     = "0.0.0.2"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {
    "name"            : driver_name,
    "module type"     : "device driver",
    "binary compat"   : "yes",
-   "summary"         : "Network driver for solarflare Ethernet Controller",
-   "description"     : "Native solarflare network driver for VMware ESXi",
+   "summary"         : "Network driver for Solarflare Ethernet Controller",
+   "description"     : "Native Network Driver for Solarflare SFC9240 Controller",
    "version"         : driver_ver,
-#   "version_bump"    : 1,
    "license"         : VMK_MODULE_LICENSE_BSD,
    "vendor"          : "Solarflare",
    "vendor_code"     : "SFC",
@@ -35,52 +41,47 @@ module_def = {
                          "sfvmk_uplink.c",
                          "sfvmk_util.c",
                          "sfvmk_port.c",
-                         "ef10_ev.c",
-                         "ef10_filter.c",
-                         "ef10_intr.c",
-                         "ef10_mac.c",
-                         "ef10_mcdi.c",
-                         "ef10_nic.c",
-                         "ef10_nvram.c",
-                         "ef10_phy.c",
-                         "ef10_rx.c",
-                         "ef10_tx.c",
-                         "ef10_vpd.c",
-                         "efx_bootcfg.c",
-                         "efx_crc32.c",
-                         "efx_ev.c",
-			 "efx_filter.c",
-			 "efx_hash.c",
-			 "efx_intr.c",
-			 "efx_lic.c",
-			 "efx_mac.c",
-			 "efx_mcdi.c",
-			 "efx_mon.c",
-			 "efx_nvram.c",
-			 "efx_phy.c",
-			 "efx_port.c",
-			 "efx_rx.c",
-			 "efx_sram.c",
-			 "efx_tx.c",
-			 "efx_nic.c",
-			 "efx_vpd.c",
-			 "hunt_nic.c",
-			 "mcdi_mon.c",
-			 "medford_nic.c",
-			 "siena_mac.c",
-			 "siena_mcdi.c",
-			 "siena_nic.c",
-			 "siena_nvram.c",
-			 "siena_phy.c",
-			 "siena_sram.c",
-			 "siena_vpd.c",
+                         "imported/ef10_ev.c",
+                         "imported/ef10_filter.c",
+                         "imported/ef10_intr.c",
+                         "imported/ef10_mac.c",
+                         "imported/ef10_mcdi.c",
+                         "imported/ef10_nic.c",
+                         "imported/ef10_nvram.c",
+                         "imported/ef10_phy.c",
+                         "imported/ef10_rx.c",
+                         "imported/ef10_tx.c",
+                         "imported/ef10_vpd.c",
+                         "imported/efx_bootcfg.c",
+                         "imported/efx_crc32.c",
+                         "imported/efx_ev.c",
+			 "imported/efx_filter.c",
+			 "imported/efx_hash.c",
+			 "imported/efx_intr.c",
+			 "imported/efx_lic.c",
+			 "imported/efx_mac.c",
+			 "imported/efx_mcdi.c",
+			 "imported/efx_mon.c",
+			 "imported/efx_nvram.c",
+			 "imported/efx_phy.c",
+			 "imported/efx_port.c",
+			 "imported/efx_rx.c",
+			 "imported/efx_sram.c",
+			 "imported/efx_tx.c",
+			 "imported/efx_nic.c",
+			 "imported/efx_vpd.c",
+			 "imported/hunt_nic.c",
+			 "imported/mcdi_mon.c",
+			 "imported/medford_nic.c",
+                       ],
+   "includes"        : [
+                         "./imported",
                        ],
    "cc warnings"     : [ "-Winline", ],
    "cc flags"        : [ ],
    "cc defs"         : { 'SFC_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
                          'SFC_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,
                          'SFC_DRIVER_VERSION_NUM=%s' % (driver_ver_hex)       : None,
-                         'SFC_ENABLE_DRIVER_STATS=1'                          : None,
 
                        },
 }
@@ -104,8 +105,8 @@ sfvmk_vib_def = {
                        ],
    "vib properties"  : {
       "urls":[
-                {'key': 'KB1234', 'link': 'http://vmware.com/kb/1234'},
-                {'key': 'KB5678', 'link': 'http://vmware.com/kb/5678'}
+#                {'key': 'KB1234', 'link': 'http://vmware.com/kb/1234'},
+#                {'key': 'KB5678', 'link': 'http://vmware.com/kb/5678'}
              ],
 
       "provides":
@@ -123,7 +124,7 @@ sfvmk_vib_def = {
 #                 {'name': 'SecondConflict','relation': '>>','version': '1.2.3.4'}
              ],
 
-       "maintenance-mode": True,
+       "maintenance-mode": {'on-remove':True, 'on-install':'True'},
 
        "hwplatform":
              [
@@ -133,12 +134,14 @@ sfvmk_vib_def = {
              ],
 
       # Can use strings to define Boolean values  - see below
-      "acceptance-level": 'certified',
-      "live-install-allowed": False,
-      "live-remove-allowed": False,
-      "cimom-restart": False,
-      "stateless-ready": True,
-      "overlay": False,
+      "acceptance-level"	: 'certified',
+      # Determines if a live install is permitted
+      "live-install-allowed"	: True,
+      # Determines if a live remove is permitted
+      "live-remove-allowed"	: True,
+      "cimom-restart"		: False,
+      "stateless-ready"		: True,
+      "overlay"			: False,
    }
 }
 sfvmk_vib = defineModuleVib(sfvmk_vib_def)

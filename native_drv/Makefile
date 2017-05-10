@@ -1,6 +1,9 @@
-
-# Copyright 2017-2018 Solarflare Inc.
-# All rights reserved. -- Solarflare Confidential
+# ***********************************************************************
+# Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+# Use is subject to license terms.
+#
+# -- Solarflare Confidential
+# **********************************************************************/
 
 #-------------------------------------------------------------------------------
 # Makefile
@@ -19,26 +22,25 @@ include tool-defs.inc
 #-------------------------------------------------------------------------------
 # Parameters to the scons command
 #-------------------------------------------------------------------------------
-PRODUCT      = nativeddk
+PRODUCT       = nativeddk
 
-VMKAPI_DIR   = $(shell /bin/rpm -q --qf '%{INSTPREFIXES}\n' vmware-esx-nativeddk-devtools-6.5.0-0.0.4598673)
-SRC          = $(VMKAPI_DIR)/src/
-FIND_RPM     = $(VMKAPI_DIR)/tools/find_rpm_install_dir.sh
+VMKAPI_DIR    = $(shell /bin/rpm -q --qf '%{INSTPREFIXES}\n' vmware-esx-nativeddk-devtools-6.5.0-0.0.4598673)
+SRC           = $(VMKAPI_DIR)/src/
+FIND_RPM      = $(VMKAPI_DIR)/tools/find_rpm_install_dir.sh
 VIRTUAL_GOBUILD = $(VMKAPI_DIR)/tools/gobuild/nativeddk.cache
 
-VIBTOOLS     = $(shell $(FIND_RPM) vmware-esx-vib-suite)
+VIBTOOLS      = $(shell $(FIND_RPM) vmware-esx-vib-suite)
 
-SCONS        = cd $(SRC); $(SRC)/scons/bin/scons
-FULL_PWD     = $(shell pwd)
-REL_PWD      = $(shell pwd | $(SED) -e 's,$(SRC),,')
-SC           = $(shell echo *.sc | $(AWK) '{print $$1}')
-MANIFEST     = $(REL_PWD)/$(SC)
-BUILDTYPE    = release
-BUILD_NUMBER = 4598673
-BUILD        = build
-SCONS_BUILD  = .build
-TARGET       = $(FULL_PWD)/$(BUILD)
-SCONS_TARGET = $(FULL_PWD)/$(SCONS_BUILD)
+SCONS         = cd $(SRC); $(SRC)/scons/bin/scons
+#FULL_PWD      = $(shell pwd)
+REL_PWD       = $(shell pwd | $(SED) -e 's,$(SRC),,')
+SC            = $(shell echo *.sc | $(AWK) '{print $$1}')
+MANIFEST      = $(REL_PWD)/$(SC)
+BUILDTYPE     = release
+BUILD_NUMBER  = 4598673
+TARGET        = $(CURDIR)/build
+SCONS_TARGET  = $(CURDIR)/.build
+IMPORTED_CODE = $(CURDIR)/imported
 
 # Map VIB acceptance level to canonical default signing-key file base name
 ACCEPT_LEVEL = $(shell grep acceptance-level $(SRC)/$(MANIFEST))
@@ -62,19 +64,25 @@ ifneq ($(VMW_KC_NAME),)
     CERTPATH?=$(VIBTOOLS)/testcerts/$(VMW_KC_NAME).cert
 endif
 
-V5_TAG       = v4_11_0_1021
-V5_URL       = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
-FILE	     = export.files-common
+# Driver requires common code files, import it from v5 repo
+V5_TAG          = v4_11_0_1021
+V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
+FILE            = export.files-common
+IMPORTED_FILES  = $(shell cat ${FILE})
+MAKEFILE_LIST   = $(IMPORTED_FILES)
 
-all vib:
-	@while read -r file;do \
-        if [ -f "$$file" ]; then \
-                echo "$$file Present"; \
-        else \
-                wget -O $$file ${V5_URL}/src/driver/common/$$file; \
-        fi; \
-        done < ${FILE}
+all: vib
 
+imported/%:
+	@wget -q -O $@ $(V5_URL)/src/driver/common/$(@F)
+	@chmod a-w $@
+
+imported_dir:
+	@mkdir -p $(IMPORTED_CODE)
+
+imported_code:	imported_dir $(IMPORTED_FILES)
+
+vib:	imported_code
 	@$(SCONS) native-driver-modules native-driver-vibs native-driver-bundle \
 	       RELEASE_PACKAGES_DIR=$(TARGET) \
 	       TOOLKIT_MANIFEST=$(MANIFEST) \
@@ -89,14 +97,16 @@ all vib:
                KEYPATH=$(KEYPATH) \
                CERTPATH=$(CERTPATH)
 
-clean:
-	@echo Cleaning out common code files ...
-	@while read -r file;do \
-        if [ -f "$$file" ]; then \
-                rm -f $$file; \
-        fi; \
-        done < ${FILE}
+clean_imported:
+	@echo Cleaning out imported common code files ...
+	@$(RM) -rf $(IMPORTED_CODE)
+	@echo Done.
 
+clean_targets:
 	@echo Cleaning out build directories ...
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
+
+cleanall: clean_imported clean_targets
+
+clean:    clean_targets

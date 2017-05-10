@@ -1,20 +1,17 @@
-/* **********************************************************
- * Copyright 2017 - 2018 Solarflare Inc.  All rights reserved.
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
  * -- Solarflare Confidential
- * **********************************************************/
+ ************************************************************************/
 
 #include "sfvmk.h"
 #include "efsys.h"
 
-#ifdef SFVMK_UT
+#ifdef SFVMK_WITH_UNIT_TESTS
 
-#if 0
-extern void sfvmk_DestroyLock(vmk_lock lock);
-//extern VMK_ReturnStatus sfvmk_CreateLock(efsys_lock_t *eslp);
-extern VMK_ReturnStatus sfvmk_CreateLock(const char *lckName, vmk_LockRank rank, vmk_Lock *lock);
-#endif
-
-char *mem_ptr = NULL;
+/* Test variable for memory allocation, only for UT */
+static char *sfvmk_ut_mem_ptr = NULL;
 
 int
 sfvmk_ut_mem_alloc(vmk_ByteCount size)
@@ -23,9 +20,9 @@ sfvmk_ut_mem_alloc(vmk_ByteCount size)
 
   vmk_LogMessage("\n\n Allocate %d bytes memory from heap \n ", (int)size);
 
-  EFSYS_KMEM_ALLOC(unused_ptr, size, mem_ptr);
+  EFSYS_KMEM_ALLOC(unused_ptr, size, sfvmk_ut_mem_ptr);
 
-  if(mem_ptr == NULL) {
+  if(sfvmk_ut_mem_ptr == NULL) {
     vmk_LogMessage("\n Memory allocation : Failed . \n ");
     return 1;
   }
@@ -36,16 +33,14 @@ sfvmk_ut_mem_alloc(vmk_ByteCount size)
 }
 
 void
-sfvmk_ut_mem_free()
+sfvmk_ut_mem_free(void)
 {
-  //vmk_LogMessage("\n\n mem_ptr before EFSYS_KMEM_FREE ... %p", mem_ptr);
   vmk_LogMessage("\n De-allocate heap memory /n ");
-  EFSYS_KMEM_FREE(NULL, 0, mem_ptr);
-  mem_ptr = NULL;
+  EFSYS_KMEM_FREE(NULL, 0, sfvmk_ut_mem_ptr);
+  sfvmk_ut_mem_ptr = NULL;
   vmk_LogMessage("\n Heap memory De-allocated /n ");
-  vmk_LogMessage("\n mem_ptr After EFSYS_KMEM_FREE ... %p", mem_ptr);
+  vmk_LogMessage("\n sfvmk_ut_mem_ptr After EFSYS_KMEM_FREE ... %p", sfvmk_ut_mem_ptr);
 }
-typedef int efx_rc_t;
 
 unsigned int
 sfvmk_run_ut(void)
@@ -54,6 +49,9 @@ sfvmk_run_ut(void)
   uint32_t start, end, test_num=0;
   uint32_t ts_delay = 5000;
   int arg1, arg2, arg3, arg4, arg5, arg6, arg7;
+  efsys_lock_t esl;
+  efsys_lock_t *eslp = &esl;
+  int lock_state=0;
 
 
   /* 1. Memory Allocation */
@@ -99,6 +97,27 @@ sfvmk_run_ut(void)
     vmk_LogMessage(" @@@@ Test : TimeStamp (w/ delay) : Fail @@@@ " );
 
   /* 6. Lock Creation,loc,unlock,lock destriy  : all these are being  done from attach callback  */
+
+
+  /* 5. Lock Creation */
+  vmk_LogMessage(" @@@@ Test : %d Mutex Create @@@@ ", ++test_num);
+
+  status = sfvmk_CreateLock( "testlock", 0x1, &(esl.lock));
+  if (status == VMK_OK) {
+    vmk_LogMessage("sfvmk_CreateLock : Pass");
+  } else {
+    vmk_LogMessage("sfvmk_CreateLock : Failed with staus: 0x%x ", status);
+  }
+   /* Lock */
+  EFSYS_LOCK(eslp, lock_state);
+
+  /* UnLock */
+  EFSYS_UNLOCK(eslp, lock_state);
+
+  /* Lock Destroy  */
+  if(esl.lock)
+    sfvmk_DestroyLock(esl.lock);
+
 
   /* 7. Probe  */
   vmk_LogMessage(" @@@@ Test : %d EFSYS_PROBE<N> @@@@ ", ++test_num);

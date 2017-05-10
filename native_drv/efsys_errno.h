@@ -1,3 +1,10 @@
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #ifndef EFSYS_ERRNO_H
 #define EFSYS_ERRNO_H
 #include <base/vmkapi_status.h>
@@ -14,7 +21,7 @@
 #define EAGAIN      VMK_RETRY
 #define ENOSPC      VMK_NO_SPACE
 #define ENOENT      VMK_NOT_FOUND
-#define EINTR       VMK_ABORTED /* TBD : Check if this is the correct mapping */
+#define EINTR       VMK_WAIT_INTERRUPTED
 #define EFBIG       VMK_LIMIT_EXCEEDED
 #define ENODEV      VMK_INVALID_TARGET
 #define ENOTACTIVE  VMK_NOT_READY /* TBD : Check if this is the correct mapping */

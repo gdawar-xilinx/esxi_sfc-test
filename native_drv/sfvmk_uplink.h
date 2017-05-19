@@ -1,16 +1,29 @@
 
+
+
+
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #ifndef __SFVMK_UPLINK_H__
 #define __SFVMK_UPLINK_H__
 
-#include "sfvmk_driver.h"
-
 VMK_ReturnStatus
-sfvmk_createUplinkData(sfvmk_adapter * adapter);
-#define SFVMK_GET_RX_SHARED_QUEUE_DATA(adapter)                      \
-               &adapter->queueData[0];
+sfvmk_CreateUplinkData(sfvmk_adapter * adapter);
+VMK_ReturnStatus
+sfvmk_DestroyUplinkData(sfvmk_adapter *pAdapter);
 
-#define SFVMK_GET_TX_SHARED_QUEUE_DATA(adapter)                      \
-               &adapter->queueData[adapter->queueInfo.maxRxQueues];
+#define SFVMK_DEFAULT_RX_QUEUE_INDEX 0
+#define SFVMK_DEFAULT_TX_QUEUE_INDEX 0
+
+#define SFVMK_RX_SHARED_QUEUE_START_INDEX 0                       \
+
+#define SFVMK_GET_TX_SHARED_QUEUE_START_INDEX(adapter)                      \
+               adapter->queueInfo.maxRxQueues;
 
 #define SFVMK_SHARED_AREA_BEGIN_WRITE(adapter)                       \
 {											 \
@@ -25,53 +38,30 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter);
  }
 
  /* MultiQueue Helper Routines */
- static inline struct sfvmk_rxObj *
- sfvmk_getRxQueueByQID(sfvmk_adapter *driver, vmk_UplinkQueueID qid)
+ static inline struct sfvmk_rxq *
+ sfvmk_GetRxQueue(sfvmk_adapter *pAdapter, vmk_UplinkQueueID qid)
  {
 		vmk_uint32 qd_index = vmk_UplinkQueueIDVal(qid);
-		vmk_UplinkSharedQueueData *qData = &driver->queueData[qd_index];
-		int q_index = qData - SFVMK_GET_RX_SHARED_QUEUE_DATA(driver);
-		struct sfvmk_rxObj *queue = &driver->rx_obj[q_index];
+		int q_index =  qd_index - SFVMK_RX_SHARED_QUEUE_START_INDEX;
+		struct sfvmk_rxq *queue = pAdapter->rxq[q_index];
 
 		VMK_ASSERT(vmk_UplinkQueueIDType(qid) == VMK_UPLINK_QUEUE_TYPE_RX);
-		VMK_ASSERT(q_index < driver->queueInfo.maxRxQueues && q_index >= 0);
-
 		return queue;
  }
 
- static inline struct sfvmk_txObj *
- sfvmk_getTxQueueByQID(sfvmk_adapter *driver, vmk_UplinkQueueID qid)
+ static inline struct sfvmk_txq *
+ sfvmk_GetTxQueue(sfvmk_adapter *adapter, vmk_UplinkQueueID qid)
  {
 		vmk_uint32 qd_index = vmk_UplinkQueueIDVal(qid);
-		vmk_UplinkSharedQueueData *qData = &driver->queueData[qd_index];
-		int q_index = qData - SFVMK_GET_TX_SHARED_QUEUE_DATA(driver);
-		struct sfvmk_txObj *queue = &driver->tx_obj[q_index];
+		int q_index = qd_index - SFVMK_GET_TX_SHARED_QUEUE_START_INDEX(adapter) ;
+		struct sfvmk_txq *queue = adapter->txq[q_index];
 
 		VMK_ASSERT(vmk_UplinkQueueIDType(qid) == VMK_UPLINK_QUEUE_TYPE_TX);
-		VMK_ASSERT(q_index < driver->queueInfo.maxTxQueues && q_index >= 0);
-
 		return queue;
- }
-
- static inline vmk_Bool
- sfvmk_isDefaultRxQueue(sfvmk_adapter *driver, struct sfvmk_rxObj *queue)
- {
-		return queue == driver->rx_obj;
- }
-
- static inline vmk_Bool
- sfvmk_isDefaultTxQueue(sfvmk_adapter *driver, struct sfvmk_txObj *queue)
- {
-		return queue == driver->tx_obj;
- }
-
- static inline vmk_uint32
- sfvmk_getQIDValByQData(sfvmk_adapter *driver,												 vmk_UplinkSharedQueueData *qData)
- {
-		return (qData - &driver->queueData[0]);
  }
 
 #define  SFVMK_RSS_START_INDEX(adapter)               \
-    adapter->txq_count - adapter->max_rss_channels
+    adapter->rxq_count - adapter->max_rss_channels
 
 #endif
+

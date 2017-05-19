@@ -1,10 +1,17 @@
 
+
+
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #ifndef __SFVMK_TX_H__
 #define __SFVMK_TX_H__
-#include "efsys.h"
-#include "efx.h"
 
-#include "sfvmk_driver.h"
+#include "sfvmk.h"
 // Number of descriptors per transmit queue
 #define SFVMK_TX_NDESCS             1024
 
@@ -47,31 +54,22 @@ typedef struct sfvmk_txq {
 	unsigned int			txq_index;
 	unsigned int			evq_index;
 	efsys_mem_t			mem;
-	unsigned int			buf_base_id;
 	unsigned int			entries;
 	unsigned int			ptr_mask;
 	unsigned int			max_pkt_desc;
 
-//	struct sfxge_tx_mapping		*stmp;	/* Packets in flight. */
-//	bus_dma_tag_t			packet_dma_tag;
 	efx_desc_t			*pend_desc;
         vmk_uint64                      pend_desc_size;
 	efx_txq_t			*common;
 
-//	efsys_mem_t			*tsoh_buffer;
 
 	char				lock_name[SFVMK_LOCK_NAME_MAX];
 
-	/* This field changes more often and is read regularly on both
-	 * the initiation and completion paths
-	 */
-//	int				blocked __aligned(CACHE_LINE_SIZE);
 
+	int				blocked VMK_ATTRIBUTE_L1_ALIGNED;
 	/* The following fields change more often, and are used mostly
 	 * on the initiation path
 	 */
-//	struct mtx			lock __aligned(CACHE_LINE_SIZE);
-//	struct sfxge_tx_dpl		dpl;	/* Deferred packet list. */
 	unsigned int			n_pend_desc;
 	unsigned int			added;
 	unsigned int			reaped;
@@ -81,17 +79,12 @@ typedef struct sfvmk_txq {
 //	uint16_t			hw_vlan_tci;
 
 	/* Statistics */
-//	unsigned long			tso_bursts;
-//	unsigned long			tso_packets;
-//	unsigned long			tso_long_headers;
 	unsigned long			collapses;
 	unsigned long			drops;
 	unsigned long			get_overflow;
 	unsigned long			get_non_tcp_overflow;
 	unsigned long			put_overflow;
 	unsigned long			netdown_drops;
-//	unsigned long			tso_pdrop_too_many;
-//	unsigned long			tso_pdrop_no_rsrc;
 
 	/* The following fields change more often, and are used mostly
 	 * on the completion path
@@ -101,7 +94,11 @@ typedef struct sfvmk_txq {
 	struct sfvmk_txq		*next;
 }sfvmk_txq;
 
-int sfvmk_tx_init(sfvmk_adapter *adapter);
+int sfvmk_TxInit(sfvmk_adapter *adapter);
 
-int sfvmk_tx_start(sfvmk_adapter *adapter);
+void sfvmk_TxFini(sfvmk_adapter *adapter);
+
+int sfvmk_TXStart(sfvmk_adapter *adapter);
+void sfvmk_TXStop(sfvmk_adapter *adapter);
+
 #endif

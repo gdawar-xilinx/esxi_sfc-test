@@ -5,7 +5,8 @@
  * -- Solarflare Confidential
  ************************************************************************/
 
-#include "sfvmk.h"
+
+//#include "sfvmk.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
 
@@ -40,6 +41,8 @@ sfvmk_ModInfoCleanup(void)
       vmk_HeapDestroy(sfvmk_ModInfo.heapID);
       sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
    }
+   vmk_MemPoolDestroy(sfvmk_ModInfo.memPoolID);
+     
 }
 
 /************************************************************************
@@ -61,15 +64,14 @@ init_module(void)
   vmk_LogProperties logProps;
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
-	vmk_MemPoolProps memPoolProps;
-
+  vmk_MemPoolProps memPoolProps;
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
       /* size, alignment, count */
-      { SFC_HEAP_EST, 1, 1},
+      { SFVMK_HEAP_EST, 1, 1},
       { vmk_LogHeapAllocSize(), 1, 1 },
       { vmk_LockDomainAllocSize(), 1, 1 },
-      { vmk_SpinlockAllocSize(VMK_SPINLOCK), 1, 4}
+      { vmk_SpinlockAllocSize(VMK_SPINLOCK), 1, 8}
    };
 
   /* Populate sfvmk_ModInfo fields */
@@ -117,7 +119,8 @@ init_module(void)
      vmk_WarningMessage("Failed to register throttled log component (%x)", status);
      goto err;
   }
-	/* Mempool */
+
+  	/* Mempool */
 	vmk_NameCopy(&memPoolProps.name, &sfvmk_ModInfo.driverName);
 	memPoolProps.module = vmk_ModuleCurrentID;
 	memPoolProps.parentMemPool = VMK_MEMPOOL_INVALID;
@@ -129,6 +132,7 @@ init_module(void)
 		 vmk_WarningMessage("Failed to create mempool (%x)", status);
 		 goto err;
 	}
+
 
   /* 4. Lock Domain */
   status = vmk_LockDomainCreate(vmk_ModuleCurrentID,
@@ -180,111 +184,3 @@ cleanup_module(void)
 
   vmk_LogMessage("Exit: -- Solarflare Native Driver -- ");
 }
-#if 0
-/*
- *-----------------------------------------------------------------------------
- *
- * sfvmk_DestroyLock --
- *
- *      Create spin lock with specified name and lock rank.
- *
- * Results:
- *      VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------
- */
-
-VMK_ReturnStatus
-sfvmk_CreateLock(const char *lckName,      // IN:  lock name
-                       vmk_LockRank rank,        // IN:  lock rank
-                       vmk_Lock *lock)           // OUT: created lock
-{
-   vmk_SpinlockCreateProps lockProps;
-   VMK_ReturnStatus status;
-   lockProps.moduleID = vmk_ModuleCurrentID;
-   lockProps.heapID = sfvmk_ModInfo.heapID;
-   vmk_NameFormat(&lockProps.name, "sfcnet-%s", lckName);
-
-   lockProps.type = VMK_SPINLOCK;
-   lockProps.domain = sfvmk_ModInfo.lockDomain;
-   lockProps.rank = rank;
-   status = vmk_SpinlockCreate(&lockProps, lock);
-   if (VMK_UNLIKELY(status != VMK_OK)) {
-      vmk_LogMessage("Failed to create spinlock (%x)", status);
-   }
-   return status;
-}
-#endif
-VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex)           // OUT: created lock
-{
-   vmk_MutexCreateProps lockProps;
-   VMK_ReturnStatus status;
-   lockProps.moduleID = vmk_ModuleCurrentID;
-   lockProps.heapID = sfvmk_ModInfo.heapID;
-   vmk_NameFormat(&lockProps.className, "sfvmk-%s", lckName);
-
-   lockProps.type = VMK_MUTEX;
-   lockProps.domain = sfvmk_ModInfo.lockDomain;
-   lockProps.rank = rank;
-   status = vmk_MutexCreate(&lockProps ,mutex);
-   if (VMK_UNLIKELY(status != VMK_OK)) {
-      vmk_LogMessage("Failed to create mutex (%x)", status);
-   }
-
-   return status ;
-
-}
-#if 0 
-VMK_ReturnStatus sfvmk_InitLock(const char *lckName,vmk_LockRank rank, efsys_lock_t *efsysLock)       // OUT: created lock
-{
-   vmk_MutexCreateProps lockProps;
-   VMK_ReturnStatus status;
-   lockProps.moduleID = vmk_ModuleCurrentID;
-   lockProps.heapID = sfvmk_ModInfo.heapID;
-   vmk_NameFormat(&lockProps.className, "sfvmk-%s", lckName);
-   vmk_NameFormat(&efsysLock->lock_name,"sfvmk-%s", lckName);
-
-   lockProps.type = VMK_MUTEX;
-   lockProps.domain = sfvmk_ModInfo.lockDomain;
-   lockProps.rank = rank;
-   status = vmk_MutexCreate(&lockProps , &efsysLock->lock);
-   if (VMK_UNLIKELY(status != VMK_OK)) {
-      vmk_LogMessage("Failed to create mutex (%x)", status);
-   }
-
-   return status ;
-
-}
-#endif 
-
-void sfvmk_MutexDestroy(vmk_Mutex mutex) 
-{
-  if(mutex)
-    vmk_MutexDestroy(mutex);  
-}
-
-
-
-
-#if 0
-/*
- *-----------------------------------------------------------------------------
- *
- * sfvmk_DestroyLock --
- *
- *      Destroy the spin lock.
- *
- * Results:
- *      None.
- *
- *-----------------------------------------------------------------------------
- */
-
-void
-sfvmk_DestroyLock(vmk_Lock lock)
-{
-  if (lock)
-    vmk_SpinlockDestroy(lock);
-}
-#endif
-

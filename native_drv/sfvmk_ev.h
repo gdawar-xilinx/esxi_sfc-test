@@ -1,11 +1,16 @@
 
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #ifndef __SFVMK_EV_H__
 #define __SFVMK_EV_H__
 
-#include "sfvmk_driver.h"
-
-
-
+#include "sfvmk.h"
+#define SFVMK_EVQ_LOCK_ASSERT_OWNED(evq)
 
 enum sfvmk_evq_state {
 	SFVMK_EVQ_UNINITIALIZED = 0,
@@ -34,17 +39,21 @@ typedef struct sfvmk_evq {
 	struct sfvmk_txq	**txqs;
 
 	/* Structure members not used on event processing path */
-	unsigned int		buf_base_id;
 	unsigned int		entries;
 	char			lock_name[SFVMK_LOCK_NAME_MAX];
         unsigned int            size;
+        vmk_NetPoll             netPoll;
+         vmk_IntrCookie vector;
 }sfvmk_evq;
 
 
 int
-sfvmk_ev_init(sfvmk_adapter *adapter);
+sfvmk_EvInit(sfvmk_adapter *adapter);
+
+void
+sfvmk_EvFini(sfvmk_adapter *adapter);
 int
-sfvmk_ev_qpoll(struct sfvmk_evq *evq);
-int
-sfvmk_ev_start(sfvmk_adapter *adapter);
+sfvmk_ev_qpoll(sfvmk_evq *evq);
+void sfvmk_EVStop(sfvmk_adapter *adapter);
+int sfvmk_EVStart(sfvmk_adapter *adapter);
 #endif

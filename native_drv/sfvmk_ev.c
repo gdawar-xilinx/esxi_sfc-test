@@ -1,33 +1,14 @@
-#include "sfvmk_ev.h"
+
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #include "sfvmk_driver.h"
-#include "sfvmk_util.h"
-#include "sfvmk_rx.h"
-#include "sfvmk_tx.h"
-
-#define SFVMK_EVQ_LOCK(evq)   \
-{                         \
-	vmk_MutexLock(evq->lock);\
-}
-
-
-#define SFVMK_EVQ_UNLOCK(evq)   \
-{                         \
-	vmk_MutexUnlock(evq->lock);\
-}
- 
-#define SFVMK_EVQ_LOCK_ASSERT_OWNED(evq) 
-
-
-int roundup_pow_of_two(unsigned int _n)	
-{                      
-   unsigned int index=0;
-  _n = _n -1 ;       
-   do{                 
-     _n >>=1;      
-     index++;      
-   }while(_n);      
-  return (1ULL << index);    
-}
+#include "sfvmk_ev.h"
+#include "sfvmk_utils.h"
 
 static boolean_t sfvmk_ev_initialized(void *arg);
 static boolean_t sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
@@ -43,8 +24,6 @@ static boolean_t sfvmk_ev_sram(void *arg, uint32_t code);
 static boolean_t sfvmk_ev_timer(void *arg, uint32_t index);
 static boolean_t sfvmk_ev_wake_up(void *arg, uint32_t index);
 static boolean_t sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode);
-
-
 
 
 
@@ -87,7 +66,7 @@ sfvmk_ev_initialized(void *arg)
 static boolean_t
 sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode)
 {
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
 
@@ -99,33 +78,16 @@ sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode)
   sfvmk_mac_link_update(adapter, link_mode);
   #endif
 
-  vmk_LogMessage("calling sfvmk_ev_link_change\n"); 
+  vmk_LogMessage("calling sfvmk_ev_link_change\n");
   return (0);
 }
 
-#if 0 
-static struct sfvmk_rxq *
-sfvmk_get_rxq_by_label(struct sfvmk_evq *evq, uint32_t label)
-{
-  struct sfvmk_rxq *rxq;
-
-  VMK_ASSERT(label == 0, ("unexpected rxq label != 0"));
-
-  rxq = evq->adapter->rxq[evq->index];
-
-//  VMK_ASSERT(rxq != NULL);
-//  VMK_ASSERT(evq->index == rxq->index);
-
-  return (rxq);
-}
-
-#endif 
 static boolean_t
 sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
       uint16_t flags)
 {
 
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
   sfvmk_rxq *rxq;
@@ -186,9 +148,9 @@ sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
 done:
   return (evq->rx_done >= SFVMK_EV_BATCH);
 
-  #endif 
+  #endif
 
-   return  B_FALSE ; 
+   return  B_FALSE ;
 }
 
 static boolean_t
@@ -202,7 +164,7 @@ sfvmk_ev_exception(void *arg, uint32_t code, uint32_t data)
 
   adapter = evq->adapter;
 
-#if 0 
+#if 0
   DBGPRINT(adapter->dev, "[%d] %s", evq->index,
         (code == EFX_EXCEPTION_RX_RECOVERY) ? "RX_RECOVERY" :
         (code == EFX_EXCEPTION_RX_DSC_ERROR) ? "RX_DSC_ERROR" :
@@ -214,18 +176,18 @@ sfvmk_ev_exception(void *arg, uint32_t code, uint32_t data)
         (code == EFX_EXCEPTION_TX_ERROR) ? "TX_ERROR" :
         (code == EFX_EXCEPTION_EV_ERROR) ? "EV_ERROR" :
         "UNKNOWN");
-#endif 
+#endif
 
   evq->exception = B_TRUE;
 
   if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
-  #if 0 
+  #if 0
     device_printf(adapter->dev,
             "hardware exception (code=%u); resetting\n",
             code);
 
     sfvmk_schedule_reset(adapter);
-  #endif 
+  #endif
    vmk_LogMessage ("Got exception ................\n");
   }
 
@@ -235,7 +197,7 @@ sfvmk_ev_exception(void *arg, uint32_t code, uint32_t data)
 static boolean_t
 sfvmk_ev_rxq_flush_done(void *arg, uint32_t rxq_index)
 {
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
   sfvmk_rxq *rxq;
@@ -263,14 +225,14 @@ sfvmk_ev_rxq_flush_done(void *arg, uint32_t rxq_index)
   VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED,
       ("evq not started"));
   efx_ev_qpost(evq->common, magic);
-#endif 
+#endif
   return (B_FALSE);
 }
 
 static boolean_t
 sfvmk_ev_rxq_flush_failed(void *arg, uint32_t rxq_index)
 {
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
   sfvmk_rxq *rxq;
@@ -293,10 +255,10 @@ sfvmk_ev_rxq_flush_failed(void *arg, uint32_t rxq_index)
 //  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED);
 
   efx_ev_qpost(evq->common, magic);
-  #endif 
+  #endif
   return (B_FALSE);
 }
-#if 0 
+#if 0
 static struct sfvmk_txq *
 sfvmk_get_txq_by_label(struct sfvmk_evq *evq, enum sfvmk_txq_type label)
 {
@@ -308,12 +270,12 @@ sfvmk_get_txq_by_label(struct sfvmk_evq *evq, enum sfvmk_txq_type label)
   index = (evq->index == 0) ? label : (evq->index - 1 + SFVMK_TXQ_NTYPES);
   return (evq->adapter->txq[index]);
 }
-#endif 
+#endif
 static boolean_t
 sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
 {
 
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_txq *txq;
   unsigned int stop;
@@ -352,13 +314,13 @@ done:
   return (evq->tx_done >= SFVMK_EV_BATCH);
   #endif
 
-  return B_FALSE; 
+  return B_FALSE;
 }
 
 static boolean_t
 sfvmk_ev_txq_flush_done(void *arg, uint32_t txq_index)
 {
-  #if 0 
+  #if 0
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
   sfvmk_txq *txq;
@@ -386,242 +348,8 @@ sfvmk_ev_txq_flush_done(void *arg, uint32_t txq_index)
   VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED,
       ("evq not started"));
   efx_ev_qpost(evq->common, magic);
-#endif 
+#endif
   return (B_FALSE);
-}
-
-
-
-static int
-sfvmk_ev_qinit(sfvmk_adapter *adapter, unsigned int index)
-{
-	struct sfvmk_evq *evq;
-	efsys_mem_t *esmp;
-
-	VMK_ASSERT(index < SFVMK_RX_SCALE_MAX);
-
-
-	evq = (struct sfvmk_evq *)sfvmk_memPoolAlloc(sizeof(sfvmk_evq));
-
-	evq->adapter = adapter;
-	evq->index = index;
-
-	adapter->evq[index] = evq;
-	esmp = &evq->mem;
-
-	/* Build an event queue with room for one event per tx and rx buffer,
-	 * plus some extra for link state events and MCDI completions.
-	 * There are three tx queues in the first event queue and one in
-	 * other.
-	 */
-	if (index == 0)
-		evq->entries =
-			roundup_pow_of_two(adapter->rxq_enteries +
-					   3 * adapter->txq_enteries +
-					   128);
-	else
-		evq->entries =
-			roundup_pow_of_two(adapter->rxq_enteries +
-					   adapter->txq_enteries +
-					   128);
-
-	/* Initialise TX completion list */
-	evq->txqs = &evq->txq;
-
-	/* Allocate DMA space. */
-        esmp->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_EVQ_SIZE(evq->entries),&esmp->io_elem.ioAddr);
-        esmp->io_elem.length = EFX_EVQ_SIZE(evq->entries);
-        // praveen needs to check the name 
-        sfvmk_MutexInit("evq" ,VMK_MUTEX_RANK_HIGHEST - 1, &evq->lock);
-
-	evq->init_state = SFVMK_EVQ_INITIALIZED;
-
-	return (0);
-}
-
-static void
-sfvmk_ev_qfini(sfvmk_adapter *adapter, unsigned int index)
-{
-	struct sfvmk_evq *evq;
-	efsys_mem_t *esmp;
-
-	evq = adapter->evq[index];
-
-	esmp = &evq->mem;
-	VMK_ASSERT(evq->init_state == SFXGE_EVQ_INITIALIZED);
-	VMK_ASSERT(evq->txqs == &evq->txq);
-        //praveen
-
-        sfvmk_FreeCoherentDMAMapping(adapter,esmp->esm_base, esmp->io_elem.ioAddr, EFX_RXQ_SIZE(adapter->rxq_enteries));
-	adapter->evq[index] = NULL;
-
-        sfvmk_MutexDestroy(evq->lock);
-
-  //praveen free evq structure
-	//free(evq, M_SFXGE);
-}
-
-
-void
-sfvmk_ev_fini(sfvmk_adapter *adapter)
-{
-	sfvmk_intr *intr;
-	int index;
-
-	intr = &adapter->sfvmkIntrInfo;
-
-	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
-
-	adapter->ev_moderation = 0;
-
-	/* Tear down the event queue(s). */
-	index = adapter->evq_count;
-	while (--index >= 0)
-		sfvmk_ev_qfini(adapter, index);
-
-	adapter->evq_count = 0;
-}
-
-int
-sfvmk_ev_init(sfvmk_adapter *adapter)
-{
-
-  // praveen
-	//struct sysctl_ctx_list *sysctl_ctx = device_get_sysctl_ctx(sc->dev);
-	//struct sysctl_oid *sysctl_tree = device_get_sysctl_tree(sc->dev);
-	sfvmk_intr *intr;
-	int index;
-	int rc;
-
-	intr = &adapter->sfvmkIntrInfo;
-
-	adapter->evq_count = intr->numIntrAlloc;
-        vmk_LogMessage("Number of event queue %d\n" , adapter->evq_count);
-	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
-
-	/* Set default interrupt moderation; add a sysctl to
-	 * read and change it.
-	 */
-	adapter->ev_moderation = SFVMK_MODERATION;
-
-  //praveen needs to check
-  /*
-	SYSCTL_ADD_PROC(sysctl_ctx, SYSCTL_CHILDREN(sysctl_tree),
-			OID_AUTO, "int_mod", CTLTYPE_UINT|CTLFLAG_RW,
-			sc, 0, sfxge_int_mod_handler, "IU",
-			"sfxge interrupt moderation (us)");
- */
-	/*
-	 * Initialize the event queue(s) - one per interrupt.
-	 */
-	for (index = 0; index < adapter->evq_count; index++) {
-		if ((rc = sfvmk_ev_qinit(adapter, index)) != 0)
-			goto fail;
-	}
-
-	return (0);
-
-fail:
-	while (--index >= 0)
-		sfvmk_ev_qfini(adapter, index);
-
-	adapter->evq_count = 0;
-	return (rc);
-}
-void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop)
-{
-
-   #if 0 
-  sfvmk_adapter *adapter;
-  unsigned int index;
-  sfvmk_rxq *rxq;
-  sfvmk_txq *txq;
-
-//  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  index = evq->index;
-  rxq = (sfvmk_rxq *)adapter->rxq[index];
-
-  if ((txq = evq->txq) != NULL) {
-    evq->txq = NULL;
-    evq->txqs = &(evq->txq);
-
-    do {
-      sfvmk_txq *next;
-
-      next = txq->next;
-      txq->next = NULL;
-
-//      VMK_ASSERT(txq->evq_index == index);
-
-      if (txq->pending != txq->completed)
-               ; 
-    //    sfvmk_tx_qcomplete(txq, evq);
-
-      txq = next;
-    } while (txq != NULL);
-  }
-
-  if (rxq->pending != rxq->completed)
-    //sfvmk_rx_qcomplete(rxq, eop);
-    ; 
- #endif 
-  return ; 
-}
-
-
-
-
-int
-sfvmk_ev_qpoll(sfvmk_evq *evq)
-{
-
-	int rc;
-
-//	SFVMK_EVQ_LOCK(evq);
-
-        vmk_LogMessage("calling sfvmk_ev_qpoll\n");
-	if ((evq->init_state != SFVMK_EVQ_STARTING &&
-			    evq->init_state != SFVMK_EVQ_STARTED)) {
-        vmk_LogMessage("event queus state is %d\n", evq->init_state );
-		rc = EINVAL;
-		goto fail;
-	}
-
-	/* Synchronize the DMA memory for reading */
-
-       //praveen code for syncing 
-	//bus_dmamap_sync(evq->mem.esm_tag, evq->mem.esm_map,
-	//    BUS_DMASYNC_POSTREAD);
-
-//	VMK_ASSERT(evq->rx_done == 0);
-//	VMK_ASSERT(evq->tx_done == 0);
-//	VMK_ASSERT(evq->txq == NULL);
-//	VMK_ASSERT(evq->txqs == &evq->txq);
-
-	/* Poll the queue */
-        vmk_LogMessage("calling efx_ev_qpoll\n");
-	efx_ev_qpoll(evq->common, &evq->read_ptr, &sfvmk_ev_callbacks, evq);
-        vmk_LogMessage("exiting efx_ev_qpoll\n");
-	evq->rx_done = 0;
-	evq->tx_done = 0;
-
-	/* Perform any pending completion processing */
-	sfvmk_ev_qcomplete(evq, B_TRUE);
-        vmk_LogMessage("calling sfvmk_ev_qcomplete\n");
-
-	/* Re-prime the event queue for interrupts */
-	if ((rc = efx_ev_qprime(evq->common, evq->read_ptr)) != 0)
-		goto fail;
-
-        vmk_LogMessage("calling efx_ev_qprime\n");
-//	SFVMK_EVQ_UNLOCK(evq);
-	return (0);
-
-fail:
-//	SFVMK_EVQ_UNLOCK(evq);
-	return (rc);
 }
 
 static boolean_t
@@ -661,8 +389,263 @@ sfvmk_ev_wake_up(void *arg, uint32_t index)
 }
 
 
+
 static void
-sfvmk_ev_qstop(sfvmk_adapter *adapter, unsigned int index)
+sfvmk_EVQFini(sfvmk_adapter *adapter, unsigned int index);
+int roundup_pow_of_two(unsigned int _n)	
+{                      
+   unsigned int index=0;
+  _n = _n -1 ;       
+   do{                 
+     _n >>=1;      
+     index++;      
+   }while(_n);      
+  return (1ULL << index);    
+}
+void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop)
+{
+
+   #if 0
+  sfvmk_adapter *adapter;
+  unsigned int index;
+  sfvmk_rxq *rxq;
+  sfvmk_txq *txq;
+
+//  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+
+  adapter = evq->adapter;
+  index = evq->index;
+  rxq = (sfvmk_rxq *)adapter->rxq[index];
+
+  if ((txq = evq->txq) != NULL) {
+    evq->txq = NULL;
+    evq->txqs = &(evq->txq);
+
+    do {
+      sfvmk_txq *next;
+
+      next = txq->next;
+      txq->next = NULL;
+
+//      VMK_ASSERT(txq->evq_index == index);
+
+      if (txq->pending != txq->completed)
+               ;
+    //    sfvmk_tx_qcomplete(txq, evq);
+
+      txq = next;
+    } while (txq != NULL);
+  }
+
+  if (rxq->pending != rxq->completed)
+    //sfvmk_rx_qcomplete(rxq, eop);
+    ;
+ #endif
+  return ;
+}
+
+
+int
+sfvmk_ev_qpoll(sfvmk_evq *evq)
+{
+
+	int rc;
+
+//	SFVMK_EVQ_LOCK(evq);
+
+        vmk_LogMessage("calling sfvmk_ev_qpoll\n");
+	if ((evq->init_state != SFVMK_EVQ_STARTING &&
+			    evq->init_state != SFVMK_EVQ_STARTED)) {
+        vmk_LogMessage("event queus state is %d\n", evq->init_state );
+		rc = EINVAL;
+		goto fail;
+	}
+
+	/* Synchronize the DMA memory for reading */
+
+       //praveen code for syncing
+	//bus_dmamap_sync(evq->mem.esm_tag, evq->mem.esm_map,
+	//    BUS_DMASYNC_POSTREAD);
+
+//	VMK_ASSERT(evq->rx_done == 0);
+//	VMK_ASSERT(evq->tx_done == 0);
+//	VMK_ASSERT(evq->txq == NULL);
+//	VMK_ASSERT(evq->txqs == &evq->txq);
+
+	/* Poll the queue */
+
+	efx_ev_qpoll(evq->common, &evq->read_ptr, &sfvmk_ev_callbacks, evq);
+
+	evq->rx_done = 0;
+	evq->tx_done = 0;
+
+	/* Perform any pending completion processing */
+	sfvmk_ev_qcomplete(evq, B_TRUE);
+
+	/* Re-prime the event queue for interrupts */
+	if ((rc = efx_ev_qprime(evq->common, evq->read_ptr)) != 0)
+		goto fail;
+
+
+//	SFVMK_EVQ_UNLOCK(evq);
+	return (0);
+
+fail:
+//	SFVMK_EVQ_UNLOCK(evq);
+	return (rc);
+}
+
+
+
+static int
+sfvmk_EVQinit(sfvmk_adapter *adapter, unsigned int index)
+{
+	struct sfvmk_evq *evq;
+	efsys_mem_t *esmp;
+
+	VMK_ASSERT(index < SFVMK_RX_SCALE_MAX);
+
+
+	evq = (struct sfvmk_evq *)sfvmk_MemPoolAlloc(sizeof(sfvmk_evq));
+  vmk_Memset(evq, 0 , sizeof(sfvmk_evq));
+
+	evq->adapter = adapter;
+	evq->index = index;
+
+	adapter->evq[index] = evq;
+	esmp = &evq->mem;
+
+	/* Build an event queue with room for one event per tx and rx buffer,
+	 * plus some extra for link state events and MCDI completions.
+	 * There are three tx queues in the first event queue and one in
+	 * other.
+	 */
+	if (index == 0)
+		evq->entries =
+			roundup_pow_of_two(adapter->rxq_entries +
+					   3 * adapter->txq_entries +
+					   128);
+	else
+		evq->entries =
+			roundup_pow_of_two(adapter->rxq_entries +
+					   adapter->txq_entries +
+					   128);
+
+	/* Initialise TX completion list */
+	evq->txqs = &evq->txq;
+
+	/* Allocate DMA space. */
+  esmp->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_EVQ_SIZE(evq->entries),&esmp->io_elem.ioAddr);
+  esmp->io_elem.length = EFX_EVQ_SIZE(evq->entries);
+	esmp->esm_handle = adapter->vmkDmaEngine; 
+
+	
+  // praveen needs to check the name 
+  sfvmk_MutexInit("evq" ,VMK_MUTEX_RANK_HIGHEST - 1, &evq->lock);
+
+	evq->init_state = SFVMK_EVQ_INITIALIZED;
+
+	return (0);
+}
+
+
+
+
+int
+sfvmk_EvInit(sfvmk_adapter *adapter)
+{
+
+  // praveen
+	sfvmk_intr *intr;
+	int index;
+	int rc;
+
+	intr = &adapter->intr;
+
+	adapter->evq_count = intr->numIntrAlloc;
+
+	vmk_LogMessage("Number of event queue %d\n" , adapter->evq_count);
+	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
+
+	/* Set default interrupt moderation; add a sysctl to
+	 * read and change it.
+	 */
+	adapter->ev_moderation = SFVMK_MODERATION;
+
+  //praveen needs to check
+  /*
+	SYSCTL_ADD_PROC(sysctl_ctx, SYSCTL_CHILDREN(sysctl_tree),
+			OID_AUTO, "int_mod", CTLTYPE_UINT|CTLFLAG_RW,
+			sc, 0, sfxge_int_mod_handler, "IU",
+			"sfxge interrupt moderation (us)");
+ */
+	/*
+	 * Initialize the event queue(s) - one per interrupt.
+	 */
+	for (index = 0; index < adapter->evq_count; index++) {
+		if ((rc = sfvmk_EVQinit(adapter, index)) != 0)
+                 {
+                     vmk_LogMessage(" failed createing evq %d\n", index);
+			goto fail;
+                 }
+		else
+                     vmk_LogMessage(" createing evq %d\n", index);
+	}
+
+	return (0);
+
+fail:
+	while (--index >= 0)
+		sfvmk_EVQFini(adapter, index);
+
+	adapter->evq_count = 0;
+	return (rc);
+}
+
+
+
+static void
+sfvmk_EVQFini(sfvmk_adapter *adapter, unsigned int index)
+{
+	struct sfvmk_evq *evq;
+	efsys_mem_t *esmp;
+
+	evq = adapter->evq[index];
+
+	esmp = &evq->mem;
+	VMK_ASSERT(evq->init_state == SFXGE_EVQ_INITIALIZED);
+	VMK_ASSERT(evq->txqs == &evq->txq);
+        //praveen
+
+        sfvmk_FreeCoherentDMAMapping(adapter,esmp->esm_base, esmp->io_elem.ioAddr, EFX_RXQ_SIZE(adapter->rxq_entries));
+	adapter->evq[index] = NULL;
+
+        sfvmk_MutexDestroy(evq->lock);
+        
+        sfvmk_MemPoolFree(evq, sizeof(sfvmk_evq));
+}
+
+void
+sfvmk_EvFini(sfvmk_adapter *adapter)
+{
+	sfvmk_intr *intr;
+	int index;
+
+	intr = &adapter->intr;
+
+	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
+
+	adapter->ev_moderation = 0;
+
+	/* Tear down the event queue(s). */
+	index = adapter->evq_count;
+	while (--index >= 0)
+		sfvmk_EVQFini(adapter, index);
+
+	adapter->evq_count = 0;
+}
+static void
+sfvmk_EVQStop(sfvmk_adapter *adapter, unsigned int index)
 {
   sfvmk_evq *evq;
 
@@ -671,19 +654,38 @@ sfvmk_ev_qstop(sfvmk_adapter *adapter, unsigned int index)
 //  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED)
 
 
-  SFVMK_EVQ_LOCK(evq);
+  //SFVMK_EVQ_LOCK(evq);
   evq->init_state = SFVMK_EVQ_INITIALIZED;
   evq->read_ptr = 0;
   evq->exception = B_FALSE;
 
 
   efx_ev_qdestroy(evq->common);
-  SFVMK_EVQ_UNLOCK(evq);
+  //SFVMK_EVQ_UNLOCK(evq);
+}
+void
+sfvmk_EVStop(sfvmk_adapter *adapter)
+{
+        sfvmk_intr *intr;
+        efx_nic_t *enp;
+        int index;
+
+        intr = &adapter->intr;
+        enp = adapter->enp;
+
+        //VMK_ASSERT(intr->state == SFVMK_INTR_STARTED);
+
+        /* Stop the event queue(s) */
+        index = 2;//adapter->evq_count;
+        while (--index >= 0)
+                sfvmk_EVQStop(adapter, index);
+
+        /* Tear down the event module */
+        efx_ev_fini(enp);
 }
 
-
 static int
-sfvmk_ev_qstart(sfvmk_adapter *adapter, unsigned int index)
+sfvmk_EVQStart(sfvmk_adapter *adapter, unsigned int index)
 {
   sfvmk_evq *evq;
   efsys_mem_t *esmp;
@@ -700,17 +702,15 @@ sfvmk_ev_qstart(sfvmk_adapter *adapter, unsigned int index)
   (void)vmk_Memset(esmp->esm_base, 0xff, EFX_EVQ_SIZE(evq->entries));
 
   /* Create the common code event queue. */
-  if ((rc = efx_ev_qcreate(adapter->enp, index, esmp, evq->entries,0 , adapter->ev_moderation, 
+  if ((rc = efx_ev_qcreate(adapter->enp, index, esmp, evq->entries,0 , adapter->ev_moderation,
                            EFX_EVQ_FLAGS_NOTIFY_INTERRUPT, &evq->common)) != 0)
-    goto fail;
+    goto sfvmk_qcreate_fail;
 
-
-  vmk_LogMessage( "calling efx_ev_qcreate \n");
 //  SFVMK_EVQ_LOCK(evq);
 
   /* Prime the event queue for interrupts */
   if ((rc = efx_ev_qprime(evq->common, evq->read_ptr)) != 0)
-    goto fail2;
+    goto sfvmk_qprime_fail;
 
   evq->init_state = SFVMK_EVQ_STARTING;
 
@@ -719,10 +719,6 @@ sfvmk_ev_qstart(sfvmk_adapter *adapter, unsigned int index)
   /* Wait for the initialization event */
   count = 0;
   do {
-    /* Pause for 100 ms */
-
-    // delay from kernel 
-//    pause("sfxge evq init", hz / 10);
     vmk_DelayUsecs(100*1000);
 
     /* Check to see if the test event has been processed */
@@ -733,34 +729,31 @@ sfvmk_ev_qstart(sfvmk_adapter *adapter, unsigned int index)
   vmk_LogMessage( "event queue is not yet started \n");
 
   rc = ETIMEDOUT;
-  goto fail3;
+  goto sfvmk_qstart_fail;
 
 done:
 
   vmk_LogMessage( "event queue is started \n");
   return (0);
 
-fail3:
-  SFVMK_EVQ_LOCK(evq);
+sfvmk_qstart_fail:
+//  SFVMK_EVQ_LOCK(evq);
   evq->init_state = SFVMK_EVQ_INITIALIZED;
-fail2:
-  SFVMK_EVQ_UNLOCK(evq);
-  efx_ev_qdestroy(evq->common);
-fail:
+sfvmk_qprime_fail:
+    efx_ev_qdestroy(evq->common);
+sfvmk_qcreate_fail:
   return (rc);
 }
 
-
-
-
 int
-sfvmk_ev_start(sfvmk_adapter *adapter)
+sfvmk_EVStart(sfvmk_adapter *adapter)
 {
+
   sfvmk_intr *intr;
   int index;
   int rc;
 
-  intr = &adapter->sfvmkIntrInfo;
+  intr = &adapter->intr;
 
 //  VMK_ASSERT(intr->state == SFVMK_INTR_STARTED);
 
@@ -770,26 +763,25 @@ sfvmk_ev_start(sfvmk_adapter *adapter)
 
   /* Start the event queues */
   // praveen initializing only one event queue
-  for (index = 0; index < 1 /*adapter->evq_count*/; index++) {
-    if ((rc = sfvmk_ev_qstart(adapter, index)) != 0)
-      goto fail;
+  for (index = 0; index < 2 /*adapter->evq_count*/; index++) {
+    if ((rc = sfvmk_EVQStart(adapter, index)) != 0)
+      goto sfvmk_qstart_fail;
+    else
+       vmk_NetPollEnable(adapter->evq[index]->netPoll);
   }
 
   return (0);
 
-fail:
+sfvmk_qstart_fail:
   vmk_LogMessage("failed to start event queue %d\n", index);
   /* Stop the event queue(s) */
   while (--index >= 0)
-    sfvmk_ev_qstop(adapter, index);
+    sfvmk_EVQStop(adapter, index);
 
   /* Tear down the event module */
   efx_ev_fini(adapter->enp);
 
   return (rc);
 }
-
-
-
 
 

@@ -6,7 +6,6 @@
  ************************************************************************/
 
 #include "sfvmk.h"
-#include "efsys.h"
 
 #ifdef SFVMK_WITH_UNIT_TESTS
 
@@ -142,7 +141,7 @@ sfvmk_run_ut(void)
 
 }
 
-#endif
+#endif /* SFVMK_WITH_UNIT_TESTS */
 
 
 

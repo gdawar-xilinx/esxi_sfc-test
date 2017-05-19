@@ -1,7 +1,41 @@
 #include "sfvmk_driver.h"
 #include "efx.h"
-int sfvmk_port_start(sfvmk_adapter *adapter)
+void sfvmk_PortStop(sfvmk_adapter *adapter)
 {
+	sfvmk_port *port;
+	efx_nic_t *enp;
+
+	port = &adapter->port;
+	enp = adapter->enp;
+
+//	SFVMK_PORT_LOCK(port);
+
+//	VMK_ASSERT(port->init_state == SFVMK_PORT_STARTED);
+
+	port->init_state = SFVMK_PORT_INITIALIZED;
+
+//	port->mac_stats.update_time = 0;
+
+	/* This may call MCDI */
+	(void)efx_mac_drain(enp, B_TRUE);
+
+//	(void)efx_mac_stats_periodic(enp, &port->mac_stats.dma_buf, 0, B_FALSE);
+
+	port->link_mode = EFX_LINK_UNKNOWN;
+
+	/* Destroy the common code port object. */
+	efx_port_fini(enp);
+
+	efx_filter_fini(enp);
+
+//	SFVMK_PORT_UNLOCK(port);
+}
+
+
+
+int sfvmk_PortStart(sfvmk_adapter *adapter)
+{
+
 //	uint8_t mac_addr[ETHER_ADDR_LEN];
 	sfvmk_port *port;
 	efx_nic_t *enp;

@@ -169,12 +169,13 @@ typedef vmk_IOA  efsys_dma_addr_t;
 
 /* LOCK */
 typedef unsigned int efsys_lock_state_t;
-#define SFVMK_LOCK_NAME_MAX     32
 
 typedef struct efsys_lock_s {
         vmk_Lock        lock;
         vmk_Name        lock_name;
 } efsys_lock_t;
+
+#define SFVMK_LOCK_NAME_MAX 32
 
 #define EFSYS_LOCK(_lockp, _state)                                      \
         do {                                                            \
@@ -487,7 +488,7 @@ typedef uint64_t    efsys_stat_t;
 
 /* Probes */
 
-#define EFSYS_PROBES
+//#define EFSYS_PROBES
 
 #ifndef EFSYS_PROBES
 

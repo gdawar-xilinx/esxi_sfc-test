@@ -8,10 +8,11 @@
 #include "sfvmk_driver.h"
 
 
+#define	SFVMK_RX_BATCH	128
 typedef struct sfvmk_rx_sw_desc {
 //	struct mbuf	*mbuf;
 //	bus_dmamap_t	map;
-//        vmk_PktHandle pkt;
+        vmk_PktHandle *pkt;
 	int		flags;
 	int		size;
 }sfvmk_rx_sw_desc;
@@ -58,4 +59,5 @@ typedef struct sfvmk_rxq {
 
 int sfvmk_rx_init(sfvmk_adapter *adapter);
 int sfvmk_rx_start( sfvmk_adapter *adapter);
+void sfvmk_rx_qcomplete(sfvmk_rxq *rxq, boolean_t eop);
 #endif

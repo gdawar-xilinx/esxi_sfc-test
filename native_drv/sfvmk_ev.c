@@ -29,6 +29,7 @@ int roundup_pow_of_two(unsigned int _n)
   return (1ULL << index);    
 }
 
+static void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop);
 static boolean_t sfvmk_ev_initialized(void *arg);
 static boolean_t sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
 				      uint16_t flags);
@@ -45,6 +46,21 @@ static boolean_t sfvmk_ev_wake_up(void *arg, uint32_t index);
 static boolean_t sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode);
 
 
+
+static struct sfvmk_rxq *
+sfvmk_get_rxq_by_label(sfvmk_evq *evq, uint32_t label)
+{
+	struct sfvmk_rxq *rxq;
+
+	VMK_ASSERT(label == 0);
+
+	rxq = evq->adapter->rxq[evq->index];
+
+	VMK_ASSERT(rxq != NULL);
+	VMK_ASSERT(evq->index == rxq->index);
+
+	return (rxq);
+}
 
 
 
@@ -65,6 +81,8 @@ static const efx_ev_callbacks_t sfvmk_ev_callbacks = {
 };
 
 
+void
+sfvmk_mac_link_update(sfvmk_adapter *adapter,efx_link_mode_t link_mode );
 static boolean_t
 sfvmk_ev_initialized(void *arg)
 {
@@ -87,17 +105,15 @@ sfvmk_ev_initialized(void *arg)
 static boolean_t
 sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode)
 {
-  #if 0 
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
 
   evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+  //SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
 
   adapter = evq->adapter;
 
   sfvmk_mac_link_update(adapter, link_mode);
-  #endif
 
   vmk_LogMessage("calling sfvmk_ev_link_change\n"); 
   return (0);
@@ -119,13 +135,12 @@ sfvmk_get_rxq_by_label(struct sfvmk_evq *evq, uint32_t label)
   return (rxq);
 }
 
-#endif 
+#endif
 static boolean_t
 sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
       uint16_t flags)
 {
 
-  #if 0 
   sfvmk_evq *evq;
   sfvmk_adapter *adapter;
   sfvmk_rxq *rxq;
@@ -134,15 +149,15 @@ sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
   struct sfvmk_rx_sw_desc *rx_desc;
 
   evq = arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
+  //SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+  vmk_LogMessage("Praveen: Rx packet is received\n");
   adapter = evq->adapter;
 
   if (evq->exception)
     goto done;
 
   rxq = sfvmk_get_rxq_by_label(evq, label);
-  if ((rxq->init_state != SFVMK_RXQ_STARTED))
+  if (VMK_UNLIKELY(rxq->init_state != SFVMK_RXQ_STARTED))
     goto done;
 
   stop = (id + 1) & rxq->ptr_mask;
@@ -166,12 +181,11 @@ sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
 
   rx_desc = &rxq->queue[id];
 
-  prefetch_read_many(rx_desc->mbuf);
+  prefetch_read_many(rx_desc->pkt);
 
   for (; id != stop; id = (id + 1) & rxq->ptr_mask) {
     rx_desc = &rxq->queue[id];
-    VMK_ASSERT(rx_desc->flags == EFX_DISCARD,
-        ("rx_desc->flags != EFX_DISCARD"));
+    VMK_ASSERT(rx_desc->flags == EFX_DISCARD);
     rx_desc->flags = flags;
 
     VMK_ASSERT(size < (1 << 16), ("size > (1 << 16)"));
@@ -186,7 +200,6 @@ sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
 done:
   return (evq->rx_done >= SFVMK_EV_BATCH);
 
-  #endif 
 
    return  B_FALSE ; 
 }
@@ -389,6 +402,49 @@ sfvmk_ev_txq_flush_done(void *arg, uint32_t txq_index)
 #endif 
   return (B_FALSE);
 }
+static void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop)
+{
+
+
+  sfvmk_adapter *adapter;
+  unsigned int index;
+  sfvmk_rxq *rxq;
+  sfvmk_txq *txq;
+
+//  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+
+  adapter = evq->adapter;
+  index = evq->index;
+  rxq = (sfvmk_rxq *)adapter->rxq[index];
+
+  if ((txq = evq->txq) != NULL) {
+    vmk_LogMessage("praveen : sfvmk_ev_qcomplete TX\n");
+    evq->txq = NULL;
+    evq->txqs = &(evq->txq);
+
+    do {
+      sfvmk_txq *next;
+
+      next = txq->next;
+      txq->next = NULL;
+
+//      VMK_ASSERT(txq->evq_index == index);
+
+      if (txq->pending != txq->completed)
+               ;
+    //    sfvmk_tx_qcomplete(txq, evq);
+
+      txq = next;
+    } while (txq != NULL);
+  }
+
+  if (rxq->pending != rxq->completed)
+  {
+    vmk_LogMessage("praveen : sfvmk_ev_qcomplete RX\n");
+    sfvmk_rx_qcomplete(rxq, eop);
+   }
+  return ;
+}
 
 
 
@@ -527,47 +583,6 @@ fail:
 
 	adapter->evq_count = 0;
 	return (rc);
-}
-void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop)
-{
-
-   #if 0 
-  sfvmk_adapter *adapter;
-  unsigned int index;
-  sfvmk_rxq *rxq;
-  sfvmk_txq *txq;
-
-//  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  index = evq->index;
-  rxq = (sfvmk_rxq *)adapter->rxq[index];
-
-  if ((txq = evq->txq) != NULL) {
-    evq->txq = NULL;
-    evq->txqs = &(evq->txq);
-
-    do {
-      sfvmk_txq *next;
-
-      next = txq->next;
-      txq->next = NULL;
-
-//      VMK_ASSERT(txq->evq_index == index);
-
-      if (txq->pending != txq->completed)
-               ; 
-    //    sfvmk_tx_qcomplete(txq, evq);
-
-      txq = next;
-    } while (txq != NULL);
-  }
-
-  if (rxq->pending != rxq->completed)
-    //sfvmk_rx_qcomplete(rxq, eop);
-    ; 
- #endif 
-  return ; 
 }
 
 

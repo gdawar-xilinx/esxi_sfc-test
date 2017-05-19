@@ -1,5 +1,50 @@
 #include "sfvmk_driver.h"
 #include "efx.h"
+void
+sfvmk_mac_link_update(sfvmk_adapter *adapter,efx_link_mode_t link_mode )
+
+{
+   vmk_UplinkSharedData *sharedData = &adapter->sharedData;
+
+   sharedData->link.speed = 10000 ;
+   sharedData->link.duplex = VMK_LINK_DUPLEX_FULL;
+    if (link_mode >EFX_LINK_DOWN)
+      sharedData->link.state = VMK_LINK_STATE_UP;
+else
+    sharedData->link.state = VMK_LINK_STATE_DOWN;
+   vmk_UplinkUpdateLinkState(adapter->uplink, &adapter->sharedData.link);
+
+   return;
+}
+static void
+sfvmk_mac_poll_work(void *arg, int npending)
+{
+	sfvmk_adapter *adapter;
+	efx_nic_t *enp;
+	struct sfvmk_port *port;
+	efx_link_mode_t mode;
+
+       adapter = (sfvmk_adapter *)arg;
+	enp = adapter->enp;
+	port = &adapter->port;
+
+//	SFXGE_PORT_LOCK(port);
+
+	if (VMK_UNLIKELY(port->init_state != SFVMK_PORT_STARTED))
+		goto done;
+
+	/* This may sleep waiting for MCDI completion */
+	(void)efx_port_poll(enp, &mode);
+	sfvmk_mac_link_update(adapter, mode);
+
+done:
+  return ; 
+//	SFXGE_PORT_UNLOCK(port);
+}
+
+
+
+
 int sfvmk_port_start(sfvmk_adapter *adapter)
 {
 //	uint8_t mac_addr[ETHER_ADDR_LEN];
@@ -57,10 +102,10 @@ int sfvmk_port_start(sfvmk_adapter *adapter)
 
 #endif 
 	port->init_state = SFVMK_PORT_STARTED;
-
+        efx_mac_filter_set(adapter->enp, 1,0, 0 , 1);
 	/* Single poll in case there were missing initial events */
 //	SFVMK_PORT_UNLOCK(port);
-//	sfvmk_mac_poll_work(adapter, 0);
+	sfvmk_mac_poll_work(adapter, 0);
 
 	return (0);
 

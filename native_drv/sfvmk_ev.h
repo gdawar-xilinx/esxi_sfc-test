@@ -5,6 +5,7 @@
 #include "sfvmk_driver.h"
 
 
+#define	SFVMK_EV_BATCH	16384
 
 
 enum sfvmk_evq_state {

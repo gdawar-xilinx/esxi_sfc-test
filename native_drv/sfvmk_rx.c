@@ -1,8 +1,9 @@
-
+#include "sfvmk.h"
 #include "sfvmk_util.h"
 #include "sfvmk_rx.h"
 #include "sfvmk_ev.h"
 #include "sfvmk_driver.h"
+#if 0 
 static uint8_t toep_key[] = {
 	0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
 	0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
@@ -10,7 +11,7 @@ static uint8_t toep_key[] = {
 	0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
 	0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa
 };
-
+#endif 
 #define	SFVMK_REFILL_BATCH  64
 
 
@@ -288,7 +289,7 @@ sfvmk_rx_qfill(sfvmk_rxq *rxq, unsigned int  num_bufs , boolean_t retrying)
       id = (rxq->added + batch) & rxq->ptr_mask;
       rx_desc = &rxq->queue[id];
       rx_desc->flags = EFX_DISCARD;
-      //rx_desc->pkt = newpkt;
+      rx_desc->pkt = newpkt;
       rx_desc->size = mblksize;
       
       addr[batch++] = mapper_out.ioAddr;
@@ -328,6 +329,133 @@ sfvmk_rx_qfill(sfvmk_rxq *rxq, unsigned int  num_bufs , boolean_t retrying)
     */
   #endif 
    return;
+}
+void sfvmk_rx_deliver(sfvmk_adapter *adapter, struct sfvmk_rx_sw_desc *rx_desc, unsigned int qindex)
+{
+	vmk_PktHandle *pkt= rx_desc->pkt;
+	int flags = rx_desc->flags;
+	
+	/* Convert checksum flags */
+	if (flags & EFX_CKSUM_TCPUDP)
+		vmk_PktSetCsumVfd(pkt);
+
+         vmk_PktFrameLenSet(pkt, rx_desc->size - adapter->rx_prefix_size);
+	vmk_NetPollRxPktQueue(adapter->nicPoll[qindex].netPoll, pkt);
+
+	rx_desc->flags = EFX_DISCARD;
+	rx_desc->pkt = NULL;
+}
+
+void
+sfvmk_rx_qcomplete(sfvmk_rxq *rxq, boolean_t eop)
+{
+  sfvmk_adapter *adapter = rxq->adapter;
+  unsigned int index;
+  struct sfvmk_evq *evq;
+  unsigned int completed;
+  unsigned int level;
+  vmk_PktHandle *pkt ; 
+  struct sfvmk_rx_sw_desc *prev = NULL;
+
+  index = rxq->index;
+  evq = adapter->evq[index];
+
+  //SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+
+  completed = rxq->completed;
+  while (completed != rxq->pending) {
+    unsigned int id;
+    struct sfvmk_rx_sw_desc *rx_desc;
+
+    id = completed++ & rxq->ptr_mask;
+    rx_desc = &rxq->queue[id];
+    pkt = rx_desc->pkt;
+    vmk_LogMessage(" completed %d pending %d\n", completed , rxq->pending);
+
+    if (VMK_UNLIKELY(rxq->init_state != SFVMK_RXQ_STARTED))
+      goto discard;
+
+    if (rx_desc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
+    
+      goto discard;
+
+    /* Read the length from the pseudo header if required */
+    if (rx_desc->flags & EFX_PKT_PREFIX_LEN) {
+     #if 0 
+      uint16_t tmp_size;
+      int rc;
+      rc = efx_psuedo_hdr_pkt_length_get(adapter->enp,
+                 pkt,
+                 &tmp_size);
+//      KASSERT(rc == 0, ("cannot get packet length: %d", rc));
+      rx_desc->size = (int)tmp_size + adapter->rx_prefix_size;
+     vmk_LogMessage( " temp size = %d prefix size =%d\n", tmp_size, adapter->rx_prefix_size);
+     #endif 
+      vmk_LogMessage("Praveen : EFX_PKT_PREFIX_LEN not supported\n");
+    }
+
+    prefetch_read_many(pkt);
+
+    switch (rx_desc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
+    case EFX_PKT_IPV4:
+        rx_desc->flags &=
+            ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
+      break;
+    case EFX_PKT_IPV6:
+        rx_desc->flags &= ~EFX_CKSUM_TCPUDP;
+      break;
+    case 0:
+      /* Check for loopback packets */
+       #if 0 
+      {
+        struct ether_header *etherhp;
+
+        /*LINTED*/
+        etherhp = mtod(m, struct ether_header *);
+
+        if (etherhp->ether_type ==
+            htons(SFVMK_ETHERTYPE_LOOPBACK)) {
+          EFSYS_PROBE(loopback);
+
+          rxq->loopback++;
+          goto discard;
+        }
+      }
+			 #endif 
+      break;
+			
+    default:
+      //KASSERT(B_FALSE,
+       //   ("Rx descriptor with both IPv4 and IPv6 flags"));
+      goto discard;
+    }
+
+    /* Pass packet up the stack or into LRO (pipelined) */
+    if (prev != NULL) {
+        sfvmk_rx_deliver(adapter, prev, rxq->index);
+    }
+    prev = rx_desc;
+    continue;
+
+discard:
+    /* Return the packet to the pool */
+    //m_free(m);
+    vmk_LogMessage ("pkt is discarded \n");
+    rx_desc->pkt = NULL;
+  }
+  rxq->completed = completed;
+
+  level = rxq->added - rxq->completed;
+
+  /* Pass last packet up the stack or into LRO */
+  if (prev != NULL) {
+      sfvmk_rx_deliver(adapter, prev, rxq->index);
+  }
+
+
+  /* Top up the queue if necessary */
+  if (level < rxq->refill_threshold)
+    sfvmk_rx_qfill(rxq, EFX_RXQ_LIMIT(rxq->entries), B_FALSE);
 }
 
 
@@ -430,6 +558,7 @@ int sfvmk_rx_start( sfvmk_adapter *adapter)
   /*
    * Set up the scale table.  Enable all hash types and hash insertion.
    */
+#if 0 
   for (index = 0; index < SFVMK_RX_SCALE_MAX; index++)
     adapter->rx_indir_table[index] = index % adapter->rxq_count;
   if ((rc = efx_rx_scale_tbl_set(adapter->enp, adapter->rx_indir_table,
@@ -442,6 +571,7 @@ int sfvmk_rx_start( sfvmk_adapter *adapter)
   if ((rc = efx_rx_scale_key_set(adapter->enp, toep_key,
                sizeof(toep_key))) != 0)
     goto fail;
+#endif 
   /* Start the receive queue(s). */
   for (index = 0; index < 1/*adapter->rxq_count*/; index++) {
     if ((rc = sfvmk_rx_qstart(adapter, index)) != 0)
@@ -449,20 +579,19 @@ int sfvmk_rx_start( sfvmk_adapter *adapter)
   }
 
   // praveen needs to do after port init 
-  #if 1 
-  rc = efx_mac_filter_default_rxq_set(adapter->enp, adapter->rxq[0]->common,
-              adapter->sfvmkIntrInfo.numIntrAlloc > 1);
-   #endif 
+  rc = efx_mac_filter_default_rxq_set(adapter->enp, adapter->rxq[0]->common,0);
+//              adapter->sfvmkIntrInfo.numIntrAlloc > 1);
   if (rc != 0)
     goto fail3;
   
  return (0);
 
 fail3:
+  vmk_LogMessage("Praveen Error in RX\"n");
 fail2:
   while (--index >= 0)
     sfvmk_rx_qstop(adapter, index);
-fail:
+//fail:
   efx_rx_fini(adapter->enp);
 
   return (rc);

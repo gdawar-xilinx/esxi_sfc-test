@@ -14,6 +14,30 @@
 #include "sfvmk.h"
 #include "efsys_errno.h"
 
+/* Machine dependend prefetch wrappers */
+#if defined(__i386__) || defined(__amd64__)
+static __inline void
+prefetch_read_many(void *addr)
+{
+
+        __asm__(
+            "prefetcht0 (%0)"
+            :
+            : "r" (addr));
+}
+
+static __inline void
+prefetch_read_once(void *addr)
+{
+
+        __asm__(
+            "prefetchnta (%0)"
+            :
+            : "r" (addr));
+}
+#endif
+
+
 /* ESXi 6.5 only supports x86_64 platform */
 /* Byte Order */
 #define EFSYS_IS_BIG_ENDIAN 0

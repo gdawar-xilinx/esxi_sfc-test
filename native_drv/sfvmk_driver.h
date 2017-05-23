@@ -172,6 +172,8 @@ typedef struct {
 	efsys_bar_t       bar;
 	efsys_lock_t	  enp_lock;
 	efx_nic_t	  *enp;
+  
+        vmk_WorldID 	  worldId;
 
 	/* ESXi SFC Driver related information */
 	struct sfvmk_mcdi	mcdi;

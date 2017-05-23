@@ -731,21 +731,83 @@ fail:
 }
 
 /************************************************************************
+ * sfvmk_workerThread
+ * @brief: Worker thread for stats collection
+ *
+ * @param[in]: adapter  pointer to sfvmk device
+ *
+ * @return:  VMK_OK on exit
+ *
+ ************************************************************************/
+#define SFVMK_WORKER_TIMEOUT_MSEC 10000 // 10 sec
+
+VMK_ReturnStatus
+sfvmk_workerThread(void *clientData)
+{
+  VMK_ReturnStatus  status;
+  static unsigned int test_count=10;
+
+  /* Test Code added for testing only , would be removed*/
+  do {
+
+     vmk_LogMessage("test_count : %d ", test_count);
+     test_count = test_count + 1;
+
+     status = vmk_WorldWait(VMK_EVENT_NONE,
+                             VMK_LOCK_INVALID,
+                             SFVMK_WORKER_TIMEOUT_MSEC,
+                             "sfvmk_workerThread");
+
+  } while (status != VMK_DEATH_PENDING);
+
+ return 0;
+
+}
+
+
+/************************************************************************
  * sfvmk_StartDevice --
  *
  * @brief: Callback routine for the device layer to notify the driver to
  * bring up the specified device.
  *
- * @param  dev	pointer to vmkDevice
+ * @param  sfvmk_Device	- pointer to vmkDevice
  *
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_StartDevice(vmk_Device dev)
+sfvmk_StartDevice(vmk_Device sfvmk_Device)
 {
+  VMK_ReturnStatus status = VMK_OK;
+  sfvmk_adapter *adapter = NULL;
+  vmk_WorldProps sfvmk_worldProps;
+
+  status = vmk_DeviceGetAttachedDriverData(sfvmk_Device,
+                                            (vmk_AddrCookie *)&adapter);
+  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT(adapter != NULL);
+
   vmk_LogMessage("StartDevice is invoked!");
-  return VMK_OK;
+
+  /* Worker thread initialization and creation. */
+  sfvmk_worldProps.moduleID = vmk_ModuleCurrentID;
+  sfvmk_worldProps.name = "sfvmk_workerThread";
+  sfvmk_worldProps.startFunction = sfvmk_workerThread;
+  sfvmk_worldProps.data =  (void*) adapter;
+  sfvmk_worldProps.schedClass = VMK_WORLD_SCHED_CLASS_DEFAULT;
+
+  /* In the previous releases, the vmk_WorldCreate() interface
+     used the module heap internally. */
+  sfvmk_worldProps.heapID = sfvmk_ModInfo.heapID;
+
+  status = vmk_WorldCreate(&sfvmk_worldProps, &adapter->worldId);
+  VMK_ASSERT(status == VMK_OK);
+  if (status != VMK_OK) {
+     vmk_LogMessage("sfvmk driver: Failed to create worker thread");
+  }
+
+  return status;
 }
 
 /************************************************************************
@@ -846,15 +908,31 @@ sfvmk_DetachDevice(vmk_Device dev)
  * @brief : Callback routine for the device layer to notify the driver to
  * shutdown the specified device.
  *
- * @param  dev	pointer to vmkDevice
+ * @param: sfvmk_Device	- pointer to vmkDevice
  *
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_ShutdownDevice(vmk_Device dev)
+sfvmk_ShutdownDevice(vmk_Device sfvmk_Device)
 {
+  VMK_ReturnStatus status = VMK_OK;
+  sfvmk_adapter *adapter = NULL;
+
+  status = vmk_DeviceGetAttachedDriverData(sfvmk_Device, (vmk_AddrCookie *) &adapter);
+
+  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT(adapter != NULL);
+
   vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
+
+  /* Destroy worker thread. */
+  if (adapter->worldId) {
+     vmk_WorldDestroy(adapter->worldId);
+     vmk_WorldWaitForDeath(adapter->worldId);
+     adapter->worldId = 0;
+  }
+
   return VMK_OK;
 }
 

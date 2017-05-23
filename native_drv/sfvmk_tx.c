@@ -1,7 +1,7 @@
 #include "sfvmk_tx.h" 
 #include "sfvmk_ev.h" 
 #include "sfvmk_util.h" 
-
+#include "sfvmk_uplink.h"
 
 static void
 sfvmk_tx_qfini(sfvmk_adapter *adapter, unsigned int index)
@@ -36,7 +36,7 @@ sfvmk_tx_qfini(sfvmk_adapter *adapter, unsigned int index)
 	adapter->txq[index] = NULL;
         sfvmk_MutexDestroy(txq->lock);
 
-//	SFXGE_TXQ_LOCK_DESTROY(txq);
+	//SFVMK_TXQ_LOCK_DESTROY(txq);
 
         //praveen free
 	//free(txq, M_SFXGE);
@@ -71,11 +71,10 @@ sfvmk_tx_qinit(sfvmk_adapter *adapter, unsigned int txq_index,
 	txq->pend_desc = sfvmk_memPoolAlloc(sizeof(efx_desc_t) * adapter->txq_enteries);
         txq->pend_desc_size = sizeof(efx_desc_t) * adapter->txq_enteries; 
 
-        #if 0 
-	/* Allocate and initialise mbuf DMA mapping array. */
-	txq->stmp = malloc(sizeof(struct sfxge_tx_mapping) * sc->txq_entries,
-	    M_SFXGE, M_ZERO | M_WAITOK);
-	for (nmaps = 0; nmaps < sc->txq_entries; nmaps++) {
+	/* Allocate and initialise pkt DMA mapping array. */
+	txq->stmp = sfvmk_memPoolAlloc(sizeof(struct sfvmk_tx_mapping) * adapter->txq_enteries);
+	#if 0
+	for (nmaps = 0; nmaps < adapter->txq_entries; nmaps++) {
 		rc = bus_dmamap_create(txq->packet_dma_tag, 0,
 				       &txq->stmp[nmaps].map);
 		if (rc != 0)
@@ -145,7 +144,7 @@ sfvmk_tx_qinit(sfvmk_adapter *adapter, unsigned int txq_index,
 			"put_hiwat", CTLFLAG_RD | CTLFLAG_STATS,
 			&stdp->std_put_hiwat, 0, "");
 
-	rc = sfxge_txq_stat_init(txq, txq_node);
+	rc = sfvmk_txq_stat_init(txq, txq_node);
 	if (rc != 0)
 		goto fail_txq_stat_init;
         #endif 
@@ -177,6 +176,7 @@ sfvmk_tx_init(sfvmk_adapter *adapter)
 	VMK_ASSERT(intr->state == SFXGE_INTR_INITIALIZED);
 
 	adapter->txq_count = SFVMK_TXQ_NTYPES - 1 + intr->numIntrAlloc;
+	vmk_LogMessage("txq_count: %d, intr->numIntrAlloc: %d",adapter->txq_count, intr->numIntrAlloc);
 
         //praveen willl do it later 
        /*
@@ -298,7 +298,7 @@ sfvmk_tx_qstart(sfvmk_adapter *adapter, unsigned int index)
   /* Initialise queue descriptor indexes */
   txq->added = txq->pending = txq->completed = txq->reaped = desc_index;
 
-  //SFVMK_TXQ_LOCK(txq);
+  SFVMK_TXQ_LOCK(txq);
 
   /* Enable the transmit queue. */
   efx_tx_qenable(txq->common);
@@ -312,7 +312,7 @@ sfvmk_tx_qstart(sfvmk_adapter *adapter, unsigned int index)
   txq->max_pkt_desc = sfvmk_tx_max_pkt_desc(adapter, txq->type,
               tso_fw_assisted);
   */
-  //SFVMK_TXQ_UNLOCK(txq);
+  SFVMK_TXQ_UNLOCK(txq);
 
   return (0);
 
@@ -348,6 +348,309 @@ fail:
   return (rc);
 }
 
+static void
+sfvmk_tx_qreap(struct sfvmk_txq *txq)
+{
+	SFVMK_TXQ_LOCK_ASSERT_OWNED(txq);
+
+	txq->reaped = txq->completed;
+}
 
 
+void
+sfvmk_tx_qlist_post(struct sfvmk_txq *txq)
+{
+	unsigned int old_added;
+	unsigned int block_level;
+	unsigned int level;
+	int rc;
+
+	SFVMK_TXQ_LOCK_ASSERT_OWNED(txq);
+
+	KASSERT(txq->n_pend_desc != 0, ("txq->n_pend_desc == 0"));
+	KASSERT(txq->n_pend_desc <= txq->max_pkt_desc,
+		("txq->n_pend_desc too large"));
+	KASSERT(!txq->blocked, ("txq->blocked"));
+
+	old_added = txq->added;
+	vmk_LogMessage("old_added: %d, reaped: %d", old_added, txq->reaped);
+
+	/* Post the fragment list. */
+	rc = efx_tx_qdesc_post(txq->common, txq->pend_desc, txq->n_pend_desc,
+			  txq->reaped, &txq->added);
+	KASSERT(rc == 0, ("efx_tx_qdesc_post() failed"));
+
+	/* If efx_tx_qdesc_post() had to refragment, our information about
+	 * buffers to free may be associated with the wrong
+	 * descriptors.
+	 */
+	vmk_LogMessage("added: %d, reaped: %d", txq->added, txq->reaped);
+	KASSERT(txq->added - old_added == txq->n_pend_desc,
+		("efx_tx_qdesc_post() refragmented descriptors"));
+
+	level = txq->added - txq->reaped;
+	KASSERT(level <= txq->entries, ("overfilled TX queue"));
+
+	/* Clear the fragment list. */
+	txq->n_pend_desc = 0;
+
+	/*
+	 * Set the block level to ensure there is space to generate a
+	 * large number of descriptors for TSO.
+	 */
+	block_level = EFX_TXQ_LIMIT(txq->entries) - txq->max_pkt_desc;
+	vmk_LogMessage("TXQ_LIMIT: %d, max_pkt_dec: %d, block_level: %d", EFX_TXQ_LIMIT(txq->entries), txq->max_pkt_desc, block_level);
+
+	/* Have we reached the block level? */
+	if (level < block_level)
+		return;
+
+	/* Reap, and check again */
+	sfvmk_tx_qreap(txq);
+	level = txq->added - txq->reaped;
+	if (level < block_level)
+		return;
+
+	txq->blocked = 1;
+	/* Mark the queue as stopped */
+	sfvmk_updateQueueStatus(txq->adapter, VMK_UPLINK_QUEUE_STATE_STOPPED);
+	vmk_LogMessage("Marked queue as stopped as level: %d", level);
+
+	/*
+	 * Avoid a race with completion interrupt handling that could leave
+	 * the queue blocked.
+	 */
+	//mb();
+	vmk_CPUMemFenceWrite();
+	sfvmk_tx_qreap(txq);
+	level = txq->added - txq->reaped;
+	if (level < block_level) {
+	        vmk_CPUMemFenceWrite();
+		//mb();
+		/* Mark the queue as started */
+		txq->blocked = 0;
+		sfvmk_updateQueueStatus(txq->adapter, VMK_UPLINK_QUEUE_STATE_STARTED);
+		vmk_LogMessage("Marked queue as started as level: %d", level);
+	}
+}
+
+static inline void
+sfvmk_next_stmp(struct sfvmk_txq *txq, struct sfvmk_tx_mapping **pstmp)
+{
+	if (VMK_UNLIKELY(*pstmp == &txq->stmp[txq->ptr_mask]))
+		*pstmp = &txq->stmp[0];
+	else
+		(*pstmp)++;
+}
+
+
+
+static void
+sfvmk_tx_qunblock(struct sfvmk_txq *txq)
+{
+	/*
+	 * If evq pointer is really required, it may be passed as the function
+	 * argument.
+	 */
+	SFVMK_EVQ_LOCK_ASSERT_OWNED(txq->adapter->evq[txq->evq_index]);
+
+	if (VMK_UNLIKELY(txq->init_state != SFVMK_TXQ_STARTED))
+		return;
+
+	SFVMK_TXQ_LOCK(txq);
+
+	if (txq->blocked) {
+		unsigned int level;
+
+		level = txq->added - txq->completed;
+   		vmk_LogMessage("completed: %d, added: %d, level: %d", txq->completed, txq->added, level);
+		if (level <= SFVMK_TXQ_UNBLOCK_LEVEL(txq->entries)) {
+			/* reaped must be in sync with blocked */
+			sfvmk_tx_qreap(txq);
+			txq->blocked = 0;
+		}
+	}
+
+	SFVMK_TXQ_UNLOCK(txq);
+	//TODO: we don't have pkt handle to service here
+	//sfvmk_tx_qdpl_service(txq);
+	/* note: lock has been dropped */
+}
+
+
+void
+sfvmk_tx_qcomplete(struct sfvmk_txq *txq, struct sfvmk_evq *evq)
+{
+	unsigned int completed;
+
+	SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+
+	completed = txq->completed;
+	while (completed != txq->pending) {
+		struct sfvmk_tx_mapping *stmp;
+		unsigned int id;
+
+		id = completed++ & txq->ptr_mask;
+   		vmk_LogMessage("completed: %d, pending: %d, id: %d", completed, txq->pending, id);
+
+		stmp = &txq->stmp[id];
+		if (stmp->sgelem.ioAddr != 0) {
+   			vmk_LogMessage("Unmapping frag at addr: %lx", stmp->sgelem.ioAddr);
+			vmk_DMAUnmapElem(txq->adapter->vmkDmaEngine, VMK_DMA_DIRECTION_FROM_MEMORY,
+					&stmp->sgelem);
+		}
+
+		if (stmp->pkt) {
+   			vmk_LogMessage("Calling vmk_NetPollQueueCompPkt");
+			vmk_NetPollQueueCompPkt(txq->adapter->nicPoll[0].netPoll, stmp->pkt);
+		} 
+	}
+
+	txq->completed = completed;
+
+   	vmk_LogMessage("completed: %d, pending: %d, blocked: %d", txq->completed, txq->pending, txq->blocked);
+	/* Check whether we need to unblock the queue. */
+	//mb();
+	vmk_CPUMemFenceWrite();
+	if (txq->blocked) {
+		unsigned int level;
+
+		level = txq->added - txq->completed;
+   		vmk_LogMessage("added: %d, completed: %d, level: %d", txq->added, txq->completed, level);
+		if (level <= SFVMK_TXQ_UNBLOCK_LEVEL(txq->entries))
+			sfvmk_tx_qunblock(txq);
+	}
+}
+
+void sfvmk_MakeTxDescriptor(sfvmk_adapter *adapter,sfvmk_txq *txq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
+{
+   int i=0;
+   int id=0;
+   vmk_uint16 num_frags=0;
+   vmk_uint16 vlan_tagged=0;
+   const vmk_SgElem *frag;
+   efx_desc_t *desc;
+   int eop;
+   vmk_SgElem mapper_in, mapper_out;
+   vmk_DMAMapErrorInfo dmaMapErr;
+   vmk_ByteCountSmall frag_length;
+   struct sfvmk_tx_mapping *stmp=NULL;
+   int start_id = (txq->added) & txq->ptr_mask;
+
+   num_frags = vmk_PktSgArrayGet(pkt)->numElems;
+   vmk_LogMessage("num frags: %d", num_frags);
+
+   for (i = 0; i < num_frags; i++) {
+      VMK_ReturnStatus status;
+
+      /* Get MA of fragment and its length. */
+      frag = vmk_PktSgElemGet(pkt, i);
+      VMK_ASSERT(frag != NULL);
+
+      frag_length = frag->length;
+      vmk_LogMessage("frag %d len: %d, pkt len: %d", i+1, frag_length, pktLen);
+      if (pktLen < frag_length) {
+         frag_length = pktLen;
+      }
+
+
+      pktLen -= frag_length;
+
+      mapper_in.addr = frag->addr;
+      mapper_in.length = frag_length;
+      status = vmk_DMAMapElem(adapter->vmkDmaEngine,
+                              VMK_DMA_DIRECTION_FROM_MEMORY,
+                              &mapper_in, VMK_TRUE, &mapper_out, &dmaMapErr);
+
+      if (status != VMK_OK) {
+                     vmk_LogMessage("Failed to map %p size %d to IO address, %s.",
+                        pkt, vmk_PktFrameLenGet(pkt),
+                        vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+         goto dma_err;
+      }
+      else
+         vmk_LogMessage("Mapped frag addr %lx len: %d to IO addr: %lx, len: %d", 
+		mapper_in.addr, mapper_in.length, mapper_out.addr, mapper_out.length);
+
+      /* update the list of in-flight packets */
+      id = (txq->added + i) & txq->ptr_mask;
+      vmk_LogMessage("added: %d mask: %x, id: %d", txq->added, txq->ptr_mask, id);
+      stmp = &txq->stmp[id];
+      vmk_Memcpy(&stmp->sgelem, &mapper_out, sizeof(vmk_SgElem));
+      stmp->pkt=NULL;
+
+      desc = &txq->pend_desc[i + vlan_tagged];
+      eop = (i == num_frags - 1);
+      efx_tx_qdesc_dma_create(txq->common,
+		      mapper_out.ioAddr ,
+		      frag_length,
+		      eop,
+		      desc);
+      if(!eop)
+      	sfvmk_next_stmp(txq, &stmp);
+    }
+
+   /* fill the pkt handle in the last mapping area */
+   if(stmp)
+   {
+      vmk_LogMessage("Filling in pkt handle %p for id: %d", pkt, id);
+      stmp->pkt = pkt;
+   }
+
+   txq->n_pend_desc = num_frags + vlan_tagged;
+   /* Post the fragment list. */
+   sfvmk_tx_qlist_post(txq);
+
+   return;
+dma_err:
+   //check for successfully mapped elements and unmap them
+   for (i = start_id; i < id; i++) {
+	   stmp = &txq->stmp[i];
+	   if (stmp->sgelem.ioAddr != 0) {
+		   vmk_LogMessage("Unmapping frag at addr: %lx", stmp->sgelem.ioAddr);
+		   vmk_DMAUnmapElem(txq->adapter->vmkDmaEngine, VMK_DMA_DIRECTION_FROM_MEMORY,
+				   &stmp->sgelem);
+	   }
+   }
+}
+
+void sfvmk_queuedPkt(sfvmk_adapter *adapter,  sfvmk_txq *txq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
+{
+   vmk_PktHeaderEntry* l3_header;
+   VMK_ReturnStatus status;
+   //vmk_Bool is_vxlan = VMK_FALSE;
+   unsigned int pushed = txq->added;
+   vmk_uint8 proto = 0, ip_ver = 0;
+   //int rc;
+
+   /* Find layer 3 header and populate L3 parameters */
+   status = vmk_PktHeaderL3Find(pkt, &l3_header, NULL);
+   if (status == VMK_OK) {
+      if (l3_header->type == VMK_PKT_HEADER_L3_IPv4) {
+         ip_ver = 4;
+         proto = l3_header->nextHdrProto;
+      	 vmk_LogMessage("proto: %d", proto);
+         //vmk_findInnerL4ProtoForVxlanPkt(adapter, pkt, &proto, &is_vxlan);
+	}
+   }
+
+   /* TODO: VLAN handling */
+   /* TODO: TSO handling */
+
+   sfvmk_MakeTxDescriptor(adapter, txq, pkt, pktLen);
+
+   if (txq->blocked)
+	   return;
+
+   /* Push the fragments to the hardware in batches. */
+   vmk_LogMessage("added: %d, pushed: %d", txq->added , pushed);
+   if (txq->added - pushed >= SFVMK_TX_BATCH) {
+	   efx_tx_qpush(txq->common, txq->added, pushed);
+	   pushed = txq->added;
+   }
+
+   if (txq->added != pushed)
+	   efx_tx_qpush(txq->common, txq->added, pushed);
+
+}
 

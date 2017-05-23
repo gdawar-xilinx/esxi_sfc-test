@@ -37,5 +37,12 @@ sfvmk_CreateLock(const char *lockName,
 extern void
 sfvmk_DestroyLock(vmk_Lock lock);
 
+#define KASSERT(expression, msg, ...)	
+#if 0
+//TODO
+#define KASSERT(expression, msg, ...)	{\
+vmk_LogMessage(msg,  ## __VA_ARGS__);\
+VMK_ASSERT(expression);\}
+#endif
 
 #endif

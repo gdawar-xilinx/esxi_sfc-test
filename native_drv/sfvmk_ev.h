@@ -7,6 +7,18 @@
 
 #define	SFVMK_EV_BATCH	16384
 
+#define SFVMK_EVQ_LOCK(evq)   \
+{                         \
+	vmk_MutexLock(evq->lock);\
+}
+
+
+#define SFVMK_EVQ_UNLOCK(evq)   \
+{                         \
+	vmk_MutexUnlock(evq->lock);\
+}
+ 
+#define SFVMK_EVQ_LOCK_ASSERT_OWNED(evq) 
 
 enum sfvmk_evq_state {
 	SFVMK_EVQ_UNINITIALIZED = 0,

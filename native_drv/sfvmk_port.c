@@ -1,18 +1,47 @@
 #include "sfvmk_driver.h"
 #include "efx.h"
+
+const uint64_t sfvmk_link_baudrate[EFX_LINK_NMODES] = {
+	[EFX_LINK_10HDX]	= VMK_LINK_SPEED_10_MBPS,
+	[EFX_LINK_10FDX]	= VMK_LINK_SPEED_10_MBPS,
+	[EFX_LINK_100HDX]	= VMK_LINK_SPEED_100_MBPS,
+	[EFX_LINK_100FDX]	= VMK_LINK_SPEED_100_MBPS,
+	[EFX_LINK_1000HDX]	= VMK_LINK_SPEED_1000_MBPS,
+	[EFX_LINK_1000FDX]	= VMK_LINK_SPEED_1000_MBPS,
+	[EFX_LINK_10000FDX]	= VMK_LINK_SPEED_10000_MBPS,
+	[EFX_LINK_40000FDX]	= VMK_LINK_SPEED_40000_MBPS
+};
+
+const uint8_t sfvmk_link_duplex[EFX_LINK_NMODES] = {
+	[EFX_LINK_10HDX]	= VMK_LINK_DUPLEX_HALF,
+	[EFX_LINK_10FDX]	= VMK_LINK_DUPLEX_FULL,
+	[EFX_LINK_100HDX]	= VMK_LINK_DUPLEX_HALF,
+	[EFX_LINK_100FDX]	= VMK_LINK_DUPLEX_FULL,
+	[EFX_LINK_1000HDX]	= VMK_LINK_DUPLEX_HALF,
+	[EFX_LINK_1000FDX]	= VMK_LINK_DUPLEX_FULL,
+	[EFX_LINK_10000FDX]	= VMK_LINK_DUPLEX_FULL,
+	[EFX_LINK_40000FDX]	= VMK_LINK_DUPLEX_FULL,
+};
+
+
+
 void
 sfvmk_mac_link_update(sfvmk_adapter *adapter,efx_link_mode_t link_mode )
-
 {
    vmk_UplinkSharedData *sharedData = &adapter->sharedData;
 
-   sharedData->link.speed = 10000 ;
-   sharedData->link.duplex = VMK_LINK_DUPLEX_FULL;
-    if (link_mode >EFX_LINK_DOWN)
+   sharedData->link.speed = sfvmk_link_baudrate[link_mode];
+   sharedData->link.duplex = sfvmk_link_duplex[link_mode];
+
+    if (link_mode > EFX_LINK_DOWN)
       sharedData->link.state = VMK_LINK_STATE_UP;
-else
-    sharedData->link.state = VMK_LINK_STATE_DOWN;
-   vmk_UplinkUpdateLinkState(adapter->uplink, &adapter->sharedData.link);
+    else
+      sharedData->link.state = VMK_LINK_STATE_DOWN;
+  
+    vmk_LogMessage("sfvmk_mac_link_update: setting uplink state to %d speed: %d duplex: %d\n", 
+		sharedData->link.state, sharedData->link.speed, sharedData->link.duplex);
+   
+    vmk_UplinkUpdateLinkState(adapter->uplink, &adapter->sharedData.link);
 
    return;
 }
@@ -41,8 +70,6 @@ done:
   return ; 
 //	SFXGE_PORT_UNLOCK(port);
 }
-
-
 
 
 int sfvmk_port_start(sfvmk_adapter *adapter)

@@ -228,6 +228,10 @@ sfvmk_MemFree(void *memPtr)
 //extern VMK_ReturnStatus sfvmk_(const char *lckName, vmk_LockRank rank, vmk_Lock *lock);
 extern VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank, vmk_Mutex *mutex);
 extern void sfvmk_MutexDestroy(vmk_Mutex mutex);
+
+extern const vmk_uint64 sfvmk_link_baudrate[];
+extern const vmk_uint8 sfvmk_link_duplex[];
+
 //int
 //sfvmk_mcdi_init(sfvmk_adapter *sfAdapter);
 #endif /* __SFVMK_H__ */

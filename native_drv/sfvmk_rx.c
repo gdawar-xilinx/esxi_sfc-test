@@ -333,13 +333,23 @@ sfvmk_rx_qfill(sfvmk_rxq *rxq, unsigned int  num_bufs , boolean_t retrying)
 void sfvmk_rx_deliver(sfvmk_adapter *adapter, struct sfvmk_rx_sw_desc *rx_desc, unsigned int qindex)
 {
 	vmk_PktHandle *pkt= rx_desc->pkt;
+        vmk_VA frameVA  ; 
 	int flags = rx_desc->flags;
 	
 	/* Convert checksum flags */
 	if (flags & EFX_CKSUM_TCPUDP)
 		vmk_PktSetCsumVfd(pkt);
 
-         vmk_PktFrameLenSet(pkt, rx_desc->size - adapter->rx_prefix_size);
+	vmk_PktSetCsumVfd(pkt);
+
+	/* pad the pkt if it is shorter than 60 bytes */
+	if (rx_desc->size < 60) {
+		frameVA = vmk_PktFrameMappedPointerGet(pkt);
+		vmk_Memset((vmk_uint8 *)frameVA + rx_desc->size, 0, 60-rx_desc->size);
+	}
+
+	vmk_PktFrameLenSet(pkt, rx_desc->size);//rx_desc->size - adapter->rx_prefix_size);
+	vmk_LogMessage("packet size %d\n", rx_desc->size);
 	vmk_NetPollRxPktQueue(adapter->nicPoll[qindex].netPoll, pkt);
 
 	rx_desc->flags = EFX_DISCARD;

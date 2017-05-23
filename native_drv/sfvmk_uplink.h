@@ -24,6 +24,13 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter);
 		vmk_SpinlockUnlock(adapter->sharedDataWriterLock);				 \
  }
 
+#define sfvmk_for_all_pkts_in_list(iter, pktList)                    \
+   for (vmk_PktListIterStart(iter, pktList);                       \
+       !vmk_PktListIterIsAtEnd(iter);                             \
+       )
+
+#define SFVMK_MAX_PKT_SIZE	   65535
+
  /* MultiQueue Helper Routines */
  static inline struct sfvmk_rxObj *
  sfvmk_getRxQueueByQID(sfvmk_adapter *driver, vmk_UplinkQueueID qid)
@@ -47,6 +54,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter);
 		int q_index = qData - SFVMK_GET_TX_SHARED_QUEUE_DATA(driver);
 		struct sfvmk_txObj *queue = &driver->tx_obj[q_index];
 
+      		vmk_LogMessage("qd_index=%d,q_index=%d,queue=%p",qd_index, q_index, queue);
 		VMK_ASSERT(vmk_UplinkQueueIDType(qid) == VMK_UPLINK_QUEUE_TYPE_TX);
 		VMK_ASSERT(q_index < driver->queueInfo.maxTxQueues && q_index >= 0);
 
@@ -71,6 +79,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter);
 		return (qData - &driver->queueData[0]);
  }
 
+void sfvmk_updateQueueStatus(sfvmk_adapter *adapter, vmk_UplinkQueueState qState);
 #define  SFVMK_RSS_START_INDEX(adapter)               \
     adapter->txq_count - adapter->max_rss_channels
 

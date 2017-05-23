@@ -4,20 +4,6 @@
 #include "sfvmk_rx.h"
 #include "sfvmk_tx.h"
 
-#define SFVMK_EVQ_LOCK(evq)   \
-{                         \
-	vmk_MutexLock(evq->lock);\
-}
-
-
-#define SFVMK_EVQ_UNLOCK(evq)   \
-{                         \
-	vmk_MutexUnlock(evq->lock);\
-}
- 
-#define SFVMK_EVQ_LOCK_ASSERT_OWNED(evq) 
-
-
 int roundup_pow_of_two(unsigned int _n)	
 {                      
    unsigned int index=0;
@@ -105,17 +91,32 @@ sfvmk_ev_initialized(void *arg)
 static boolean_t
 sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode)
 {
-  sfvmk_evq *evq;
   sfvmk_adapter *adapter;
+  sfvmk_evq *evq;
+  struct sfvmk_port *port;
 
   evq = (struct sfvmk_evq *)arg;
   //SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
 
   adapter = evq->adapter;
+  port = &adapter->port;
+#if 0
+  // this generates compiler error: efx_link_mode_t isn't resolved
+  if (port->link_mode == link_mode)
+  {
+  	vmk_LogMessage("Spurious link change event: %d\n", link_mode);
+	return 0;
+  }
+  else
+        vmk_LogMessage("calling sfvmk_ev_link_change: %d\n", link_mode ); 
+
+
+  port->link_mode = link_mode;
+#endif
+  vmk_LogMessage("sfvmk_ev_link_change called for mode: %d", link_mode);
 
   sfvmk_mac_link_update(adapter, link_mode);
-
-  vmk_LogMessage("calling sfvmk_ev_link_change\n"); 
+  
   return (0);
 }
 
@@ -309,7 +310,7 @@ sfvmk_ev_rxq_flush_failed(void *arg, uint32_t rxq_index)
   #endif 
   return (B_FALSE);
 }
-#if 0 
+
 static struct sfvmk_txq *
 sfvmk_get_txq_by_label(struct sfvmk_evq *evq, enum sfvmk_txq_type label)
 {
@@ -319,14 +320,14 @@ sfvmk_get_txq_by_label(struct sfvmk_evq *evq, enum sfvmk_txq_type label)
 //      (label == SFVMK_TXQ_IP_TCP_UDP_CKSUM));
 
   index = (evq->index == 0) ? label : (evq->index - 1 + SFVMK_TXQ_NTYPES);
+  vmk_LogMessage ("sfvmk_get_txq_by_label: index %d for evq_index: %d label: %d", index, evq->index, label);
   return (evq->adapter->txq[index]);
 }
-#endif 
+
 static boolean_t
 sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
 {
 
-  #if 0 
   sfvmk_evq *evq;
   sfvmk_txq *txq;
   unsigned int stop;
@@ -338,8 +339,10 @@ sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
   txq = sfvmk_get_txq_by_label(evq, label);
 
   VMK_ASSERT(txq != NULL, ("txq == NULL"));
-  VMK_ASSERT(evq->index == txq->evq_index,
-      ("evq->index != txq->evq_index"));
+  //VMK_ASSERT(evq->index == txq->evq_index,
+   //   ("evq->index != txq->evq_index"));
+
+  vmk_LogMessage ("id: %d txq_index %d for evq_index: %d, init_state:%d", id, txq->evq_index, evq->index, txq->init_state);
 
   if ((txq->init_state != SFVMK_TXQ_STARTED))
     goto done;
@@ -352,6 +355,8 @@ sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
 
   evq->tx_done++;
 
+  vmk_LogMessage ("id %d stop %d mask: %x delta:%d pending: %d, completed: %d, txq->next: %p, evq_txq: %p", 
+		id, stop, txq->ptr_mask, delta, txq->pending,txq->completed, txq->next ,  &(txq->next));
   if (txq->next == NULL &&
       evq->txqs != &(txq->next)) {
     *(evq->txqs) = txq;
@@ -363,7 +368,6 @@ sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
 
 done:
   return (evq->tx_done >= SFVMK_EV_BATCH);
-  #endif
 
   return B_FALSE; 
 }

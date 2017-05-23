@@ -7,52 +7,52 @@
 /****************************************************************************
  *                     vmk_UplinkQueueOps Handlers                          *
  ****************************************************************************/
-static VMK_ReturnStatus elxnet_allocQueue(vmk_AddrCookie, vmk_UplinkQueueType,
+static VMK_ReturnStatus sfvmk_allocQueue(vmk_AddrCookie, vmk_UplinkQueueType,
                                           vmk_UplinkQueueID *, vmk_NetPoll *);
-static VMK_ReturnStatus elxnet_allocQueueWithAttr(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_allocQueueWithAttr(vmk_AddrCookie,
                                                   vmk_UplinkQueueType,
                                                   vmk_uint16,
                                                   vmk_UplinkQueueAttr *,
                                                   vmk_UplinkQueueID *,
                                                   vmk_NetPoll *);
-static VMK_ReturnStatus elxnet_freeQueue(vmk_AddrCookie, vmk_UplinkQueueID);
-static VMK_ReturnStatus elxnet_quiesceQueue(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_freeQueue(vmk_AddrCookie, vmk_UplinkQueueID);
+static VMK_ReturnStatus sfvmk_quiesceQueue(vmk_AddrCookie,
                                             vmk_UplinkQueueID);
-static VMK_ReturnStatus elxnet_startQueue(vmk_AddrCookie, vmk_UplinkQueueID);
-static VMK_ReturnStatus elxnet_applyQueueFilter(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_startQueue(vmk_AddrCookie, vmk_UplinkQueueID);
+static VMK_ReturnStatus sfvmk_applyQueueFilter(vmk_AddrCookie,
                                                 vmk_UplinkQueueID,
                                                 vmk_UplinkQueueFilter *,
                                                 vmk_UplinkQueueFilterID *,
                                                 vmk_uint32 *);
-static VMK_ReturnStatus elxnet_removeQueueFilter(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_removeQueueFilter(vmk_AddrCookie,
                                                  vmk_UplinkQueueID,
                                                  vmk_UplinkQueueFilterID);
-static VMK_ReturnStatus elxnet_getQueueStats(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_getQueueStats(vmk_AddrCookie,
                                              vmk_UplinkQueueID,
                                              vmk_UplinkStats *);
-static VMK_ReturnStatus elxnet_toggleQueueFeature(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_toggleQueueFeature(vmk_AddrCookie,
                                                   vmk_UplinkQueueID,
                                                   vmk_UplinkQueueFeature,
                                                   vmk_Bool);
-static VMK_ReturnStatus elxnet_setQueueTxPriority(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_setQueueTxPriority(vmk_AddrCookie,
                                                   vmk_UplinkQueueID,
                                                   vmk_UplinkQueuePriority);
-static VMK_ReturnStatus elxnet_setQueueCoalesceParams(vmk_AddrCookie,
+static VMK_ReturnStatus sfvmk_setQueueCoalesceParams(vmk_AddrCookie,
                                                   vmk_UplinkQueueID,
                                                   vmk_UplinkCoalesceParams *);
 
-static vmk_UplinkQueueOps elxnetQueueOps = {
-   .queueAlloc             = elxnet_allocQueue,
-   .queueAllocWithAttr     = elxnet_allocQueueWithAttr,
-   .queueFree              = elxnet_freeQueue,
-   .queueQuiesce           = elxnet_quiesceQueue,
-   .queueStart             = elxnet_startQueue,
-   .queueApplyFilter       = elxnet_applyQueueFilter,
-   .queueRemoveFilter      = elxnet_removeQueueFilter,
-   .queueGetStats          = elxnet_getQueueStats,
-   .queueToggleFeature     = elxnet_toggleQueueFeature,
-   .queueSetPriority       = elxnet_setQueueTxPriority,
-   .queueSetCoalesceParams = elxnet_setQueueCoalesceParams,
+static vmk_UplinkQueueOps sfvmkQueueOps = {
+   .queueAlloc             = sfvmk_allocQueue,
+   .queueAllocWithAttr     = sfvmk_allocQueueWithAttr,
+   .queueFree              = sfvmk_freeQueue,
+   .queueQuiesce           = sfvmk_quiesceQueue,
+   .queueStart             = sfvmk_startQueue,
+   .queueApplyFilter       = sfvmk_applyQueueFilter,
+   .queueRemoveFilter      = sfvmk_removeQueueFilter,
+   .queueGetStats          = sfvmk_getQueueStats,
+   .queueToggleFeature     = sfvmk_toggleQueueFeature,
+   .queueSetPriority       = sfvmk_setQueueTxPriority,
+   .queueSetCoalesceParams = sfvmk_setQueueCoalesceParams,
 };
 
 #endif 
@@ -237,12 +237,12 @@ static VMK_ReturnStatus sfvmk_panicInfoGet(vmk_AddrCookie cookie,
 	} 
 
 #if 1 
-static VMK_ReturnStatus elxnet_allocQueue(vmk_AddrCookie var1, vmk_UplinkQueueType var2,
+static VMK_ReturnStatus sfvmk_allocQueue(vmk_AddrCookie var1, vmk_UplinkQueueType var2,
                                           vmk_UplinkQueueID *var3, vmk_NetPoll *var4)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_allocQueueWithAttr(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_allocQueueWithAttr(vmk_AddrCookie var1,
                                                   vmk_UplinkQueueType var2,
                                                   vmk_uint16 var3,
                                                   vmk_UplinkQueueAttr *var4,
@@ -251,20 +251,20 @@ static VMK_ReturnStatus elxnet_allocQueueWithAttr(vmk_AddrCookie var1,
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_freeQueue(vmk_AddrCookie var1, vmk_UplinkQueueID var2)
+static VMK_ReturnStatus sfvmk_freeQueue(vmk_AddrCookie var1, vmk_UplinkQueueID var2)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_quiesceQueue(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_quiesceQueue(vmk_AddrCookie var1,
                                             vmk_UplinkQueueID var2)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_startQueue(vmk_AddrCookie var1, vmk_UplinkQueueID var2)
+static VMK_ReturnStatus sfvmk_startQueue(vmk_AddrCookie var1, vmk_UplinkQueueID var2)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_applyQueueFilter(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_applyQueueFilter(vmk_AddrCookie var1,
                                                 vmk_UplinkQueueID var2,
                                                 vmk_UplinkQueueFilter *var3,
                                                 vmk_UplinkQueueFilterID *var4,
@@ -272,32 +272,32 @@ static VMK_ReturnStatus elxnet_applyQueueFilter(vmk_AddrCookie var1,
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_removeQueueFilter(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_removeQueueFilter(vmk_AddrCookie var1,
                                                  vmk_UplinkQueueID var2,
                                                  vmk_UplinkQueueFilterID var3)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_getQueueStats(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_getQueueStats(vmk_AddrCookie var1,
                                              vmk_UplinkQueueID var2,
                                              vmk_UplinkStats *var3)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_toggleQueueFeature(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_toggleQueueFeature(vmk_AddrCookie var1,
                                                   vmk_UplinkQueueID var2,
                                                   vmk_UplinkQueueFeature var3,
                                                   vmk_Bool var4)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_setQueueTxPriority(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_setQueueTxPriority(vmk_AddrCookie var1,
                                                   vmk_UplinkQueueID var2,
                                                   vmk_UplinkQueuePriority var3)
 {
    return VMK_NOT_SUPPORTED;
 }
-static VMK_ReturnStatus elxnet_setQueueCoalesceParams(vmk_AddrCookie var1,
+static VMK_ReturnStatus sfvmk_setQueueCoalesceParams(vmk_AddrCookie var1,
                                                   vmk_UplinkQueueID var2,
                                                   vmk_UplinkCoalesceParams *var3)
 {
@@ -363,11 +363,11 @@ sfvmk_intr_start(sfvmk_adapter *adapter)
 
 	 /* Register all the interrupts */
    SFVMK_DBG(adapter, SFVMK_DBG_UPLINK, 3,
-                  "elxnet register interrupts");
+                  "sfvmk register interrupts");
    status = sfvmk_setup_Interrupts(adapter);
           vmk_LogMessage("sfvmk_setup_Interrupts\n");
    if (status != VMK_OK) {
-      vmk_WarningMessage("%s elxnet driver: Failed to register interrupts",
+      vmk_WarningMessage("%s sfvmk driver: Failed to register interrupts",
                          adapter->pciDeviceName.string);
       status = VMK_FAILURE;
       goto sfvmk_intr_registration_fail;
@@ -417,11 +417,132 @@ static vmk_UplinkOps sfvmkUplinkOps = {
 };
 
 
+/*
+ ***********************************************************************
+ *
+ * sfvmk_isTxQueueStopped
+ *
+ *      Local function that is invoked from sfvmk_pollTx and
+ *      and sfvmk_uplinkTx
+ *
+ *
+ *      param[in] driverData       pointer to uplink dev
+ *      param[in] txQueue          tx queue id
+ *
+ * Results:
+ *      retval: VMK_TRUE        Tx Queue has stopped
+ *      retval: VMK_FALSE        Tx Queue  is not stopped
+ *
+ * Side effects:
+ *      None
+ *
+ ***********************************************************************
+ */
 
-static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie var1, vmk_PktList var2)
+vmk_Bool
+sfvmk_isTxQueueStopped(sfvmk_adapter * devData, vmk_uint32 txQueue)
 {
-        vmk_LogMessage(" calling  sfvmk_uplinkTx ");
-	return VMK_OK;
+   vmk_UplinkSharedQueueData *txQueueData;
+
+   /* Get shared data */
+   txQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(devData);
+
+   if (txQueueData[txQueue].state == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+      return VMK_TRUE;
+   }
+
+   return VMK_FALSE;
+}
+
+static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
+{
+   sfvmk_adapter *devData = (sfvmk_adapter *)cookie.ptr;
+   vmk_PktHandle *pkt;
+   vmk_UplinkQueueID vmkQid;
+   vmk_uint32 txq_ind = 0;
+   VMK_ReturnStatus status = VMK_OK;
+   vmk_ByteCountSmall pktLen;
+   vmk_Bool isFirstPkt = VMK_TRUE;
+   vmk_int16 maxRxQueues = 0, maxTxQueues = 0;
+            
+   vmk_LogMessage("sfvmk_uplinkTx called");
+
+   VMK_PKTLIST_ITER_STACK_DEF(iter);
+   sfvmk_for_all_pkts_in_list(iter, pktList) {
+      vmk_PktListIterRemovePkt(iter, &pkt);
+      VMK_ASSERT(pkt);
+
+      maxRxQueues = devData->queueInfo.maxRxQueues;
+      maxTxQueues = devData->queueInfo.maxTxQueues;
+   
+      vmk_LogMessage("maxRxQueues: %d, maxTxQueues: %d", maxRxQueues, maxTxQueues);
+
+      if (isFirstPkt) {
+
+         /*
+          * Get QId from first packet and use it for the rest of the
+          * packets in that list.
+          */
+         vmkQid = vmk_PktQueueIDGet(pkt);
+         txq_ind = vmk_UplinkQueueIDVal(vmkQid);
+      
+
+         vmk_LogMessage("txq_ind: %d", txq_ind);
+         if ((!txq_ind) ||
+             (txq_ind >= (maxTxQueues + maxRxQueues))) {
+#if 0
+            static vmk_uint32 sfvmk_txQidThrottle = 0;
+            SFVMK_THROTTLED_LOG(sfvmk_txQidThrottle,
+                                 "Invalid QID %d, numTxQueue %d,  device %s",
+                                 txq_ind,
+                                 maxTxQueues,
+                                 vmk_NameToString(&devData->uplinkName));
+            devData->drv_stats.count_invalid_txq_mapping++;
+#endif
+            vmk_LogMessage("Invalid QID %d, numTxQueue %d,  device %s",
+                                 txq_ind,
+                                 maxTxQueues,
+                                 vmk_NameToString(&devData->uplinkName));
+            goto sfvmk_tx_drop_cont;
+         }
+         txq_ind -= maxRxQueues;
+         isFirstPkt = VMK_FALSE;
+      }
+
+      if (sfvmk_isTxQueueStopped(devData, txq_ind)) {
+         vmk_LogMessage("sfvmk_isTxQueueStopped returned TRUE");
+         status = VMK_BUSY;
+         goto sfvmk_tx_put_back_bail;
+      }
+
+      pktLen = vmk_PktFrameLenGet(pkt);
+      vmk_LogMessage("pktLen: %d", pktLen);
+      if (pktLen > SFVMK_MAX_PKT_SIZE) {
+#if 0
+         static vmk_uint32 sfvmk_txLenThrottle = 0;
+         SFVMK_THROTTLED_LOG(sfvmk_txLenThrottle,
+                              "Invalid len %d, device %s",
+                              pktLen, vmk_NameToString(&devData->uplinkName));
+         devData->drv_stats.tso_gr_than_64k++;
+#endif
+         vmk_LogMessage("Invalid len %d, device %s",
+                              pktLen, vmk_NameToString(&devData->uplinkName));
+         goto sfvmk_tx_drop_cont;
+      }
+
+      vmk_LogMessage("Calling sfvmk_queuedPkt");
+      sfvmk_queuedPkt(devData, devData->txq[txq_ind], pkt, pktLen);
+
+      continue;
+
+sfvmk_tx_drop_cont:
+      vmk_PktRelease(pkt);
+      continue;
+sfvmk_tx_put_back_bail:
+      vmk_PktListIterInsertPktBefore(iter, pkt);
+      break;
+   }
+   return (status);
 }
 
 static VMK_ReturnStatus sfvmk_uplinkMTUSet(vmk_AddrCookie var1, vmk_uint32 var2)
@@ -466,8 +587,42 @@ static VMK_ReturnStatus sfvmk_uplinkCapDisable(vmk_AddrCookie var1 ,
 	return VMK_OK;
 }
 
-static VMK_ReturnStatus sfvmk_uplinkStartIO(void * driverData) 
+void sfvmk_updateQueueStatus(sfvmk_adapter *adapter, vmk_UplinkQueueState qState)
+{
+   vmk_UplinkSharedQueueData *queueData;
+   struct sfvmk_txq *txq;
+   vmk_uint16 i;
 
+   vmk_LogMessage("sfvmk_updateQueueStatus called for state: %d", qState);
+   SFVMK_SHARED_AREA_BEGIN_WRITE(adapter);
+   queueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(adapter);
+   for (i=0; i<adapter->queueInfo.maxTxQueues; i++) {
+      vmk_LogMessage("queueData flags: %x", queueData[i].flags);
+      if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+	 txq = adapter->txq[i];
+
+	 /* TODO: if the queue is nearly full, don't honor the queue start request */
+   	 queueData[i].state = qState;
+      }
+   }
+   SFVMK_SHARED_AREA_END_WRITE(adapter);
+
+   for (i=0; i<adapter->queueInfo.maxTxQueues; i++) {
+      if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+	 txq = adapter->txq[i];
+
+	 /* TODO: if the queue is nearly full, don't honor the queue start request */
+         if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+            vmk_UplinkQueueStop(adapter->uplink, queueData[i].qid);
+         } else {
+            vmk_UplinkQueueStart(adapter->uplink, queueData[i].qid);
+         }
+
+      }
+   }
+}
+
+static VMK_ReturnStatus sfvmk_uplinkStartIO(void * driverData) 
 {
 
 
@@ -525,7 +680,10 @@ static VMK_ReturnStatus sfvmk_uplinkStartIO(void * driverData)
    sfvmk_tx_start(adapter);
   vmk_LogMessage(" Exiting  sfvmk_uplinkStartIO \n");
 
-  
+
+  /*Start/Stop the queues */
+  sfvmk_updateQueueStatus(adapter,
+        (adapter->sharedData.link.state = VMK_LINK_STATE_DOWN)?VMK_UPLINK_QUEUE_STATE_STOPPED:VMK_UPLINK_QUEUE_STATE_STARTED);
 
 
 	return VMK_OK;
@@ -560,9 +718,9 @@ static VMK_ReturnStatus sfvmk_uplinkReset(vmk_AddrCookie var1)
  /*
   **************************************************************************
   *
-  * elxnet_updateCableType
+  * sfvmk_updateCableType
   *
-  *      Local function invoked from elxnet_cmdUpdatePhyInfo
+  *      Local function invoked from sfvmk_cmdUpdatePhyInfo
   *
   *      param[in] adapter       pointer to uplink dev
   *
@@ -606,13 +764,13 @@ static VMK_ReturnStatus sfvmk_uplinkReset(vmk_AddrCookie var1)
 /*
  ***********************************************************************
  *
- * elxnet_netPollCB
+ * sfvmk_netPollCB
  *
  *      Callback invoked by vmkernel net poll thread to poll for
  *      Tx/Rx/MCC  completions
  *
  *
- *      param[in] nicPoll    pointer to elxnet_nicPoll object
+ *      param[in] nicPoll    pointer to sfvmk_nicPoll object
  *                           registered with vmkernel.
  *      param[in] budget     Indicates the number of packets to be
  *                           processed in each invocation
@@ -645,7 +803,7 @@ sfvmk_netPollCB(void *evq, vmk_uint32 budget)
 /*
  ***********************************************************************
  *
- * SFVMK_allociTxQueue
+ * SFVMK_allocTxQueue
  *
  *      Local function to allocate Tx Queue
  *
@@ -743,9 +901,9 @@ sfvmk_allocRxQueue(sfvmk_adapter *driver,
    /* If the Queue is for RSS feature - use RSS leading Q */
    if (feat & (VMK_UPLINK_QUEUE_FEAT_RSS |
               VMK_UPLINK_QUEUE_FEAT_RSS_DYN)) {
-      i = ELXNET_RSS_START_INDEX(driver);
+      i = SFVMK_RSS_START_INDEX(driver);
       if (qData[i].flags & VMK_UPLINK_QUEUE_FLAG_IN_USE) {
-         ELXNET_LOG_ERR(driver, "RSS leading queue already allocated");
+         SFVMK_LOG_ERR(driver, "RSS leading queue already allocated");
          return VMK_FAILURE;
       }
    } else
@@ -780,7 +938,7 @@ sfvmk_allocRxQueue(sfvmk_adapter *driver,
    qData[i].qid = *qid;
    SFVMK_SHARED_AREA_END_WRITE(driver);
 
-   //SFVMK_DBG(driver, ELXNET_DBG_QUEUE, 2,
+   //SFVMK_DBG(driver, SFVMK_DBG_QUEUE, 2,
      //             "sfvmk_allocRxQueue %u alloced", qidVal);
 
    return VMK_OK;
@@ -810,7 +968,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
    //sfvmk_cmdUpdatePhyInfo(adapter);
    //sfvmk_updateSpeedFromPhy(adapter);
 /*
-   if ((ELXNET_IS_DEV_STATE(adapter, RESET))) {
+   if ((SFVMK_IS_DEV_STATE(adapter, RESET))) {
       goto sfvmk_shared_data_init;
    }
 */
@@ -875,18 +1033,18 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
        VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY;
 
 #if 0
-   if (ELXNET_IS_VXLAN_OFFLOAD_ENABLED(adapter)) {
+   if (SFVMK_IS_VXLAN_OFFLOAD_ENABLED(adapter)) {
       queueInfo->supportedRxQueueFilterClasses |=
 	     VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
    }
 #endif
 #if 0
-   if (ELXNET_IS_RSS_ENABLED(adapter)) {
+   if (SFVMK_IS_RSS_ENABLED(adapter)) {
       queueInfo->maxTxQueues =
-         ((ELXNET_GET_NUM_QUEUES(adapter) - ELXNET_RSS_RING_SETS + 1));
+         ((SFVMK_GET_NUM_QUEUES(adapter) - SFVMK_RSS_RING_SETS + 1));
 
       queueInfo->maxRxQueues =
-         (ELXNET_GET_NUM_QUEUES(adapter) - ELXNET_RSS_RING_SETS + 1);
+         (SFVMK_GET_NUM_QUEUES(adapter) - SFVMK_RSS_RING_SETS + 1);
    } else
 #endif
    {
@@ -932,18 +1090,18 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
 #if 0
 #if ESX_VERSION_NUMBER >= ESX_VERSION(2015)
          /* DYNAMIC Net Queues will not be supported when RSS is enabled. */
-         if (!ELXNET_IS_RSS_ENABLED(adapter)) {
+         if (!SFVMK_IS_RSS_ENABLED(adapter)) {
             queueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
          }
          /* Enable RSS Feature support for RSS Qs*/
-         if (ELXNET_IS_RSS_ENABLED(adapter) &&
-            (i >= ELXNET_RSS_START_INDEX(adapter))) {
+         if (SFVMK_IS_RSS_ENABLED(adapter) &&
+            (i >= SFVMK_RSS_START_INDEX(adapter))) {
             queueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
          }
 #else
          /* Enable RSS Feature support for RSS Qs*/
-         if (ELXNET_IS_RSS_ENABLED(adapter) &&
-            (i >= ELXNET_RSS_START_INDEX(adapter))) {
+         if (SFVMK_IS_RSS_ENABLED(adapter) &&
+            (i >= SFVMK_RSS_START_INDEX(adapter))) {
             queueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS;
          }
 #endif
@@ -973,7 +1131,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
 
 			//praveen needs to check
 			/*
-      if ((ELXNET_IS_DEV_STATE(adapter, RESET))) {
+      if ((SFVMK_IS_DEV_STATE(adapter, RESET))) {
          goto sfvmk_update_nicPoll;
       }
        */
@@ -1011,15 +1169,15 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
    }
 #if 0
    /* RSS Qs are hidden from the kernel. So only creat the NetPoll */
-   if (ELXNET_IS_RSS_ENABLED(adapter)) {
+   if (SFVMK_IS_RSS_ENABLED(adapter)) {
       for (i = queueInfo->maxRxQueues;
-           i < (queueInfo->maxRxQueues + ELXNET_RSS_RING_SETS - 1); i++) {
+           i < (queueInfo->maxRxQueues + SFVMK_RSS_RING_SETS - 1); i++) {
 
          vmk_NetPollProperties pollProp;
          sfvmk_nicPoll *nicPoll;
 
          nicPoll = &adapter->nicPoll[i];
-         if ((ELXNET_IS_DEV_STATE(adapter, RESET))) {
+         if ((SFVMK_IS_DEV_STATE(adapter, RESET))) {
             goto sfvmk_update_rss_nicPoll;
          }
 
@@ -1032,7 +1190,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
          pollProp.deliveryCallback = NULL;
          pollProp.features = VMK_NETPOLL_NONE;
          status = vmk_NetPollCreate(&pollProp, serviceID,
-                                    elxnetDriver.moduleID,
+                                    sfvmkDriver.moduleID,
                                     &nicPoll->netPoll);
          if (status != VMK_OK) {
             for (i--; i >= 0; i--) {
@@ -1046,7 +1204,7 @@ sfvmk_createUplinkData(sfvmk_adapter * adapter)
 sfvmk_update_rss_nicPoll:
          nicPoll->vector = adapter->intrCookies[i];
 
-         SFVMK_DBG(adapter, ELXNET_DBG_DRIVER, 3, "RXq=%d, poll=0x%p",
+         SFVMK_DBG(adapter, SFVMK_DBG_DRIVER, 3, "RXq=%d, poll=0x%p",
                         i, nicPoll->netPoll);
          /* TBD: queueData->coalesceParams: Add support when AIC is enabled */
       }
@@ -1116,6 +1274,7 @@ sfvmk_create_data_fail:
 sfvmk_create_data_lock_fail:
    return (status);
 }
+
 
 /*
  ***********************************************************************
@@ -1212,7 +1371,7 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
       //VMK_ASSERT(0);
    }
    status = vmk_UplinkCapRegister(adapter->uplink,
-                                     VMK_UPLINK_CAP_MULTI_QUEUE,&elxnetQueueOps);
+                                     VMK_UPLINK_CAP_MULTI_QUEUE,&sfvmkQueueOps);
 
 
 
@@ -1221,7 +1380,7 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
 #if 0 
    if (adapter->msix_enabled) {
       status = vmk_UplinkCapRegister(adapter->uplink,
-                                     VMK_UPLINK_CAP_MULTI_QUEUE,&elxnetQueueOps);
+                                     VMK_UPLINK_CAP_MULTI_QUEUE,&sfvmkQueueOps);
       if (status != VMK_OK) {
          SFVMK_ERR(adapter,
                         "MULTI_QUEUE cap register failed with error 0x%x",
@@ -1236,10 +1395,10 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
 #endif
 #if 0
 #if ESX_VERSION_NUMBER >= ESX_VERSION(2015)
-   if (ELXNET_IS_RSS_ENABLED(adapter)) {
+   if (SFVMK_IS_RSS_ENABLED(adapter)) {
       status = vmk_UplinkQueueRegisterFeatureOps(adapter->uplink,
                                                 VMK_UPLINK_QUEUE_FEAT_RSS_DYN,
-                                                &elxnetUplinkQueueRssDynOps);
+                                                &sfvmkUplinkQueueRssDynOps);
       if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
          SFVMK_ERR(adapter,
                         "RSS Queue Feature register failed for %s"
@@ -1255,7 +1414,7 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
 
    /* Register private stats capability */
    status = vmk_UplinkCapRegister(adapter->uplink, VMK_UPLINK_CAP_PRIV_STATS,
-                                  &elxnetPrivStatsOps);
+                                  &sfvmkPrivStatsOps);
    if (status != VMK_OK) {
       SFVMK_ERR(adapter,
                      "PRIV_STATS cap register failed "
@@ -1268,14 +1427,17 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
    status = vmk_UplinkCapRegister(adapter->uplink,
    																VMK_UPLINK_CAP_LINK_STATUS_SET,
                                   &sfvmk_linkStatusSet);
+   /* */
+   vmk_LogMessage("VMK_UPLINK_CAP_LINK_STATUS_SET set to sfvmk_linkStatusSet\n");
+
    //VMK_ASSERT(status == VMK_OK);
  
 #if 0
    /* Register  WOL Capability */
-   if (ELXNET_IS_WOL_SUPPORTED(adapter)) {
+   if (SFVMK_IS_WOL_SUPPORTED(adapter)) {
       status = vmk_UplinkCapRegister(adapter->uplink,
                                      VMK_UPLINK_CAP_WAKE_ON_LAN,
-                                     &elxnetLinkWolOps);
+                                     &sfvmkLinkWolOps);
       if (status != VMK_OK) {
          SFVMK_ERR(adapter,
                     "WOL cap register failed with error 0x%x", status);
@@ -1283,7 +1445,7 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
       }
    }
 	 else {
-      SFVMK_DBG(adapter, ELXNET_DBG_DRIVER, 0, "Does not support WOL");
+      SFVMK_DBG(adapter, SFVMK_DBG_DRIVER, 0, "Does not support WOL");
 
    }
 	 #endif
@@ -1310,12 +1472,12 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
 #endif
 
 #if 0
-   if (ELXNET_IS_VXLAN_OFFLOAD_ENABLED(adapter)) {
+   if (SFVMK_IS_VXLAN_OFFLOAD_ENABLED(adapter)) {
       SFVMK_DBG(adapter, SFVMK_DBG_UPLINK, 2, "Register vxlan offload");
 
       status = vmk_UplinkCapRegister(adapter->uplink,
                                      VMK_UPLINK_CAP_ENCAP_OFFLOAD,
-                                     &elxnetEncapOffloadOps);
+                                     &sfvmkEncapOffloadOps);
       if (status != VMK_OK) {
          SFVMK_ERR(adapter,
                         "VXLAN OFFLOAD cap register failed with error 0x%x",
@@ -1419,16 +1581,12 @@ sfvmk_registerIOCaps(sfvmk_adapter * adapter)
  *
  ***********************************************************************
  */
-static int test =0 ; 
 static VMK_ReturnStatus
 sfvmk_uplinkCapsRegister(vmk_AddrCookie cookie)
 {
    sfvmk_adapter *adapter = (sfvmk_adapter *)cookie.ptr;
    VMK_ReturnStatus status = VMK_OK;
-   test++; 
 
-   if(test >1)
-    return VMK_OK;
    vmk_LogMessage("calling sfvmk_uplinkCapsRegister \n");
    //VMK_ASSERT(adapter->uplink != NULL);
 
@@ -1465,7 +1623,7 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplink)
 {
    sfvmk_adapter *adapter = (sfvmk_adapter *)cookie.ptr;
    vmk_LogMessage("calling sfvmk_uplinkAssociate \n");
-   /* Backup uplink object in elxnet device data */
+   /* Backup uplink object in sfvmk device data */
    //VMK_ASSERT(uplink != NULL);
    //VMK_ASSERT(adapter->uplink == NULL);
 
@@ -1502,7 +1660,7 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 {
    sfvmk_adapter *adapter = (sfvmk_adapter *)cookie.ptr;
 
-   /* forget uplink object in elxnet device data */
+   /* forget uplink object in sfvmk device data */
    //VMK_ASSERT(adapter->uplink != NULL);
 
     adapter->uplink = NULL;

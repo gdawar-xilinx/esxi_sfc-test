@@ -9,12 +9,26 @@
 #define SFVMK_TX_NDESCS             1024
 
 // Number of transmit descriptors processed per batch
-#define SFVMK_TX_BATCH              128
+#define SFVMK_TX_BATCH              64
 
 // Maximum number of packets held in the deferred packet list
 #define SFVMK_TX_MAX_DEFERRED       256
 
+#define	SFVMK_TXQ_UNBLOCK_LEVEL(_entries)	(EFX_TXQ_LIMIT(_entries) / 4)
 
+#define SFVMK_TXQ_LOCK(txq)   \
+{                         \
+	vmk_MutexLock(txq->lock);\
+}
+
+
+#define SFVMK_TXQ_UNLOCK(txq)   \
+{                         \
+	vmk_MutexUnlock(txq->lock);\
+}
+ 
+//TODO
+#define SFVMK_TXQ_LOCK_ASSERT_OWNED(txq)
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
@@ -36,6 +50,15 @@ enum sfvmk_txq_state {
 	SFVMK_TXQ_STARTED
 };
 
+/*
+ * Buffer mapping information for descriptors in flight.
+ */
+struct sfvmk_tx_mapping {
+	vmk_PktHandle *pkt;
+	vmk_SgElem sgelem;
+};
+
+
 typedef struct sfvmk_txq {
 	/* The following fields should be written very rarely */
 	sfvmk_adapter		*adapter;
@@ -52,7 +75,7 @@ typedef struct sfvmk_txq {
 	unsigned int			ptr_mask;
 	unsigned int			max_pkt_desc;
 
-//	struct sfxge_tx_mapping		*stmp;	/* Packets in flight. */
+	struct sfvmk_tx_mapping		*stmp;	/* Packets in flight. */
 //	bus_dma_tag_t			packet_dma_tag;
 	efx_desc_t			*pend_desc;
         vmk_uint64                      pend_desc_size;
@@ -65,7 +88,7 @@ typedef struct sfvmk_txq {
 	/* This field changes more often and is read regularly on both
 	 * the initiation and completion paths
 	 */
-//	int				blocked __aligned(CACHE_LINE_SIZE);
+	int				blocked;//TODO __aligned(CACHE_LINE_SIZE);
 
 	/* The following fields change more often, and are used mostly
 	 * on the initiation path
@@ -104,4 +127,7 @@ typedef struct sfvmk_txq {
 int sfvmk_tx_init(sfvmk_adapter *adapter);
 
 int sfvmk_tx_start(sfvmk_adapter *adapter);
+void sfvmk_tx_qlist_post(struct sfvmk_txq *txq);
+void sfvmk_tx_qcomplete(struct sfvmk_txq *txq, struct sfvmk_evq *evq);
+void sfvmk_queuedPkt(sfvmk_adapter *adapter,  sfvmk_txq *txq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
 #endif

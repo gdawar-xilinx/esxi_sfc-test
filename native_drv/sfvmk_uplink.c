@@ -1,5 +1,6 @@
 #include "sfvmk_uplink.h"
 #include "sfvmk_util.h"
+#include "sfvmk_port.h"
 #include "sfvmk_ev.h"
 #include "sfvmk_rx.h"
 #include "sfvmk_tx.h"
@@ -560,13 +561,40 @@ static VMK_ReturnStatus sfvmk_uplinkStateSet(vmk_AddrCookie var1 ,
 		return VMK_OK;
 	}
 
-static VMK_ReturnStatus sfvmk_uplinkStatsGet(vmk_AddrCookie var1,
-                                              vmk_UplinkStats *var2 )
-	{
-	
-        vmk_LogMessage(" calling  sfvmk_uplinkStatsGet ");
-		return VMK_OK;
-	}
+static VMK_ReturnStatus sfvmk_uplinkStatsGet(vmk_AddrCookie cookie,
+                                              vmk_UplinkStats *stats )
+{
+  sfvmk_adapter *adapter = (sfvmk_adapter *)cookie.ptr;
+  uint64_t *mac_stats;
+  
+  vmk_LogMessage(" calling  sfvmk_uplinkStatsGet >>>>> ");
+  sfvmk_MacStatsUpdate(adapter);
+  vmk_Memset(stats, 0, sizeof(*stats));
+
+  mac_stats = (uint64_t *)adapter->port.mac_stats.decode_buf;
+  
+  stats->rxPkts = mac_stats[EFX_MAC_RX_PKTS];
+  stats->rxErrors = mac_stats[EFX_MAC_RX_ERRORS];
+  stats->txPkts = mac_stats[EFX_MAC_TX_PKTS];
+  stats->txErrors = mac_stats[EFX_MAC_TX_ERRORS];
+  stats->collisions = 
+	    mac_stats[EFX_MAC_TX_SGL_COL_PKTS] +
+	    mac_stats[EFX_MAC_TX_MULT_COL_PKTS] +
+	    mac_stats[EFX_MAC_TX_EX_COL_PKTS] +
+	    mac_stats[EFX_MAC_TX_LATE_COL_PKTS];
+  stats->rxBytes = mac_stats[EFX_MAC_RX_OCTETS]; 
+  stats->txBytes = mac_stats[EFX_MAC_TX_OCTETS]; 
+  stats->rxMulticastPkts = mac_stats[EFX_MAC_RX_MULTICST_PKTS];
+  stats->txMulticastPkts = mac_stats[EFX_MAC_TX_MULTICST_PKTS];
+  stats->rxBroadcastPkts = mac_stats[EFX_MAC_RX_BRDCST_PKTS];
+  stats->txBroadcastPkts = mac_stats[EFX_MAC_TX_BRDCST_PKTS];
+  stats->rxFrameAlignErrors = mac_stats[EFX_MAC_RX_ALIGN_ERRORS];
+  stats->rxDrops = mac_stats[EFX_MAC_RX_NODESC_DROP_CNT];
+
+  /* Update driver copy of stats*/
+  memcpy(adapter->mac_stats, mac_stats, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
+  return VMK_OK;
+}
 
 
 

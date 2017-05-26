@@ -1,4 +1,5 @@
 #include "sfvmk_driver.h"
+#include "sfvmk_util.h"
 #include "efx.h"
 
 const uint64_t sfvmk_link_baudrate[EFX_LINK_NMODES] = {
@@ -45,6 +46,43 @@ sfvmk_mac_link_update(sfvmk_adapter *adapter,efx_link_mode_t link_mode )
 
    return;
 }
+
+int
+sfvmk_MacStatsUpdate(sfvmk_adapter *adapter)
+{
+  sfvmk_port *port = &adapter->port;
+  efsys_mem_t *esmp = &(port->mac_stats.dma_buf);
+  unsigned int count;
+  int rc;
+
+  //SFXGE_PORT_LOCK_ASSERT_OWNED(port);
+
+  vmk_LogMessage("<<<<<< Port stats, UpdateStats");
+  if (port->init_state != SFVMK_PORT_STARTED) {
+      vmk_LogMessage("<<<<<< port_stats, PORT Not STARTED");
+    rc = 0;
+    goto out;
+  }
+
+  /* If we're unlucky enough to read statistics wduring the DMA, wait
+   * up to 10ms for it to finish (typically takes <500us) */
+  for (count = 0; count < 5; ++count) {
+    EFSYS_PROBE1(wait, unsigned int, count);
+
+    /* Try to update the cached counters */
+    if ((rc = efx_mac_stats_update(adapter->enp, esmp,
+       port->mac_stats.decode_buf, NULL)) != EAGAIN)
+        goto out;
+
+      vmk_DelayUsecs(10000);
+  }
+
+  vmk_LogMessage("<<<<<< port_stats, MAC stats timed out");
+  rc = ETIMEDOUT;
+out:
+  return (rc);
+}
+
 static void
 sfvmk_mac_poll_work(void *arg, int npending)
 {
@@ -111,11 +149,10 @@ int sfvmk_port_start(sfvmk_adapter *adapter)
 	//sfvmk_mac_filter_set_locked(adapter);
 
 	/* Update MAC stats by DMA every second */
-        #if 0 
 	if ((rc = efx_mac_stats_periodic(enp, &port->mac_stats.dma_buf,
 					 1000, B_FALSE)) != 0)
-		goto fail6;
-        #endif 
+		goto fail3;
+
 	if ((rc = efx_mac_drain(enp, B_FALSE)) != 0)
 		goto fail8;
 
@@ -140,7 +177,7 @@ int sfvmk_port_start(sfvmk_adapter *adapter)
 //fail9:
 	(void)efx_mac_drain(enp, B_TRUE);
 fail8:
-//	(void)efx_mac_stats_periodic(enp, &port->mac_stats.dma_buf, 0, B_FALSE);
+	(void)efx_mac_stats_periodic(enp, &port->mac_stats.dma_buf, 0, B_FALSE);
 //fail6:
 //fail4:
 fail3:
@@ -155,6 +192,57 @@ fail_filter_init:
 	return (rc);
 }
 
+int
+sfvmk_PortInit(sfvmk_adapter *adapter)
+{
+	sfvmk_port *port;
+	efsys_mem_t *mac_stats_buf;
 
+	port = &adapter->port;
+	mac_stats_buf = &port->mac_stats.dma_buf;
+
+      SFVMK_DBG(adapter,SFVMK_DBG_DRIVER, 2, "sfvmk_port_init >>>>");
+	//KASSERT(port->init_state == SFXGE_PORT_UNINITIALIZED,
+	//    ("Port already initialized"));
+
+	port->sc = adapter;
+
+	//SFXGE_PORT_LOCK_INIT(port, device_get_nameunit(sc->dev));
+
+#ifdef SFXGE_HAVE_PAUSE_MEDIAOPTS
+	/* If flow control cannot be configured or reported through
+	 * ifmedia, provide sysctls for it. */
+	port->wanted_fc = EFX_FCNTL_RESPOND | EFX_FCNTL_GENERATE;
+#endif
+
+	//DBGPRINT(sc->dev, "alloc MAC stats");
+	port->mac_stats.decode_buf = sfvmk_memPoolAlloc(EFX_MAC_NSTATS * sizeof(uint64_t));
+
+	/* Allocate DMA space. */
+	mac_stats_buf->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_MAC_STATS_SIZE, &mac_stats_buf->io_elem.ioAddr);
+	mac_stats_buf->io_elem.length = EFX_MAC_STATS_SIZE;
+        mac_stats_buf->esm_handle = adapter->vmkDmaEngine;
+
+	//TODO
+	//port->stats_update_period_ms = sfxge_port_stats_update_period_ms(sc);
+	//sfxge_mac_stat_init(sc);
+	memset(adapter->mac_stats, 0, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
+	port->init_state = SFVMK_PORT_INITIALIZED;
+      SFVMK_DBG(adapter,SFVMK_DBG_DRIVER, 2, "<<<<<< sfvmk_port_init");
+
+	//DBGPRINT(sc->dev, "success");
+	return (0);
+#if 0
+fail2:
+	free(port->mac_stats.decode_buf, M_SFXGE);
+	sfxge_dma_free(phy_stats_buf);
+fail:
+	free(port->phy_stats.decode_buf, M_SFXGE);
+	SFXGE_PORT_LOCK_DESTROY(port);
+	port->sc = NULL;
+	DBGPRINT(sc->dev, "failed %d", rc);
+	return (rc);
+#endif
+}
 
 

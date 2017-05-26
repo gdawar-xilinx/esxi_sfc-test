@@ -8,6 +8,7 @@
 #include "sfvmk.h"
 #include "efsys.h"
 #include "sfvmk_driver.h"
+#include "sfvmk_port.h"
 #include "sfvmk_tx.h"
 #include "sfvmk_ev.h"
 #include "sfvmk_rx.h"
@@ -695,6 +696,9 @@ sfvmk_AttachDevice(vmk_Device dev)
 	sfvmk_intrInit(sfAdapter);
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_ev_init...");
 	sfvmk_ev_init(sfAdapter);
+
+      SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_port_init...");
+       	status = sfvmk_PortInit(sfAdapter);
        
       SFVMK_DBG(sfAdapter,SFVMK_DBG_DRIVER, 2, "sfvmk_rx_init...");
      vmk_LogMessage("sfvmk_rx_init...");

@@ -151,8 +151,31 @@ typedef struct sfvmk_nic_poll {
    vmk_IntrCookie vector;
 } sfvmk_nicPoll;
 
+struct sfvmk_hw_stats {
+  //clock_t	update_time;
+  efsys_mem_t	dma_buf;
+  void		*decode_buf;
+};
+
+typedef struct sfvmk_port {
+  struct sfvmk_adapter_s  *sc;
+ // struct mtx    lock;
+  enum sfvmk_port_state init_state;
+#ifndef SFXGE_HAVE_PAUSE_MEDIAOPTS
+  unsigned int    wanted_fc;
+#endif
+  struct sfvmk_hw_stats mac_stats;
+  //efx_link_mode_t   link_mode;
+  //uint8_t     mcast_addrs[EFX_MAC_MULTICAST_LIST_MAX *
+  //            EFX_MAC_ADDR_LEN];
+  unsigned int    mcast_count;
+
+  /* Only used in debugging output */
+//  char      lock_name[SFVMK_LOCK_NAME_MAX];
+}sfvmk_port;
+
 /** Adapter data structure **/
-typedef struct {
+typedef struct sfvmk_adapter_s {
 	/* Device handle passed by VMK */
 	vmk_Device		vmkDevice;
 
@@ -211,7 +234,9 @@ typedef struct {
   unsigned int 			max_rss_channels;
 	unsigned int			ev_moderation;
 
-
+	/* Copy of MAC stats */
+	uint64_t mac_stats[EFX_MAC_NSTATS];
+ 
 	/* Uplink Info */
 	vmk_Device 				uplinkDevice;
 	vmk_UplinkRegData regData;

@@ -12,34 +12,22 @@
 #include "sfvmk.h"
 
 extern VMK_ReturnStatus
-sfvmk_CreateLock(const char *lockName,
-                       vmk_LockRank rank,
-                       vmk_Lock *lock);
+sfvmk_createLock(const char *lockName, vmk_LockRank rank, vmk_Lock *lock);
+extern void sfvmk_destroyLock(vmk_Lock lock);
 
-extern void
-sfvmk_DestroyLock(vmk_Lock lock);
+VMK_ReturnStatus
+sfvmk_mutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex);
+void sfvmk_mutexDestroy(vmk_Mutex mutex);
 
 
-VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex);           // OUT: created lock
-
-void sfvmk_MutexDestroy(vmk_Mutex mutex) ;
-void *
-sfvmk_MemPoolAlloc(vmk_uint64 size);
+void sfvmk_memPoolFree(void *va, vmk_uint64 size);
+void *sfvmk_memPoolAlloc(vmk_uint64 size);
 
 void
-sfvmk_MemPoolFree(void *va, vmk_uint64 size);
-
-
+sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
+                                            vmk_IOA ioAddr, vmk_uint32 size);
 void *
-sfvmk_AllocCoherentDMAMapping(sfvmk_adapter *adapter, vmk_uint32 size,          
-                              vmk_IOA *ioAddr) ;         
-void
-sfvmk_FreeCoherentDMAMapping(sfvmk_adapter *adapter,                    // IN: adapter
-                                            void *va,                   // IN: virtual address
-                                            vmk_IOA ioAddr,             // IN: IO address
-                                            vmk_uint32 size);            // IN: size
-VMK_ReturnStatus
-sfvmk_SetupInterrupts(sfvmk_adapter *adapter, vmk_IntrHandler handler , vmk_IntrAcknowledge ack);
-VMK_ReturnStatus
-sfvmk_IntrStop(sfvmk_adapter * devData);
+sfvmk_allocCoherentDMAMapping(vmk_DMAEngine dmaEngine, vmk_uint32 size,
+                                            vmk_IOA *ioAddr);
+
 #endif /*  __SFVMK_UTILS_H__ */

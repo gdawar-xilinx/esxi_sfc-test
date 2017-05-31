@@ -1,5 +1,3 @@
-
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
@@ -7,51 +5,63 @@
  * -- Solarflare Confidential
  ************************************************************************/
 
+
 #ifndef __SFVMK_RX_H__
 #define __SFVMK_RX_H__
 
-#include "sfvmk.h"
 
+#define SFVMK_RX_SCALE_MAX  EFX_MAXRSS
 
-
-typedef struct sfvmk_rx_sw_desc {
-//        vmk_PktHandle pkt;
-	int		flags;
-	int		size;
-}sfvmk_rx_sw_desc;
-
-
-enum sfvmk_rxq_state {
-	SFVMK_RXQ_UNINITIALIZED = 0,
-	SFVMK_RXQ_INITIALIZED,
-	SFVMK_RXQ_STARTED
+enum sfvmk_flushState {
+  SFVMK_FLUSH_DONE = 0,
+  SFVMK_FLUSH_REQUIRED,
+  SFVMK_FLUSH_PENDING,
+  SFVMK_FLUSH_FAILED
 };
 
 
-typedef struct sfvmk_rxq {
-	sfvmk_adapter *adapter;
-	unsigned int			index;
-	efsys_mem_t			mem;
-	enum sfvmk_rxq_state		init_state;
-	unsigned int			entries;
-	unsigned int			ptr_mask;
+typedef struct sfvmk_rxSwDesc_s {
+  vmk_PktHandle     *pPkt;
+  vmk_int32   flags;
+  vmk_int32   size;
+}sfvmk_rxSwDesc_t;
 
-	struct sfvmk_rx_sw_desc		*queue ;
-        unsigned int                    qdescSize;
-	unsigned int			added;
-	unsigned int			pushed;
-	unsigned int			pending;
-	unsigned int			completed;
-	unsigned int			loopback;
 
-	efx_rxq_t			*common ;
-	volatile enum sfvmk_flush_state	flush_state;
-        unsigned int                    size;
-}sfvmk_rxq;
+enum sfvmk_rxqState {
+  SFVMK_RXQ_UNINITIALIZED = 0,
+  SFVMK_RXQ_INITIALIZED,
+  SFVMK_RXQ_STARTED
+};
 
-int sfvmk_RxInit(sfvmk_adapter *adapter);
-void  sfvmk_RxFini(sfvmk_adapter *adapter);
-int sfvmk_RXStart( sfvmk_adapter *adapter);
-void sfvmk_RXStop(sfvmk_adapter *adapter);
 
-#endif 
+typedef struct sfvmk_rxq_s {
+
+  struct sfvmk_adapter_s *pAdapter;
+
+  efsys_mem_t   mem;
+  vmk_uint32    index;
+  vmk_uint32    entries;
+  vmk_uint32    ptrMask;
+  vmk_uint32    qdescSize;
+  vmk_uint32    added;
+  vmk_uint32    pushed;
+  vmk_uint32    pending;
+  vmk_uint32    completed;
+  vmk_uint32    loopback;
+
+  sfvmk_rxSwDesc_t  *pQueue ;
+
+  efx_rxq_t   *pCommonRxq ;
+
+  enum sfvmk_rxqState   initState;
+  volatile enum sfvmk_flushState  flushState;
+}sfvmk_rxq_t;
+
+/* functions */
+int sfvmk_rxInit(struct sfvmk_adapter_s *adapter);
+void  sfvmk_rxFini(struct sfvmk_adapter_s *adapter);
+int sfvmk_rxStart(struct sfvmk_adapter_s *adapter);
+void sfvmk_rxStop(struct sfvmk_adapter_s *adapter);
+
+#endif /* __SFVMK_RX_H__ */
+

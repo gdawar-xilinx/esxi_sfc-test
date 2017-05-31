@@ -6,7 +6,7 @@
  ************************************************************************/
 
 
-//#include "sfvmk.h"
+#include "sfvmk.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
 
@@ -29,6 +29,10 @@ sfvmk_ModInfoCleanup(void)
       vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
       sfvmk_ModInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
    }
+   if (sfvmk_ModInfo.memPoolID != VMK_MEMPOOL_INVALID) {
+      vmk_MemPoolDestroy(sfvmk_ModInfo.memPoolID);
+      sfvmk_ModInfo.memPoolID = VMK_MEMPOOL_INVALID;
+   }
    if (sfvmk_ModInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
       vmk_LogUnregister(sfvmk_ModInfo.logThrottledID);
       sfvmk_ModInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
@@ -41,8 +45,6 @@ sfvmk_ModInfoCleanup(void)
       vmk_HeapDestroy(sfvmk_ModInfo.heapID);
       sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
    }
-   vmk_MemPoolDestroy(sfvmk_ModInfo.memPoolID);
-     
 }
 
 /************************************************************************
@@ -103,7 +105,7 @@ init_module(void)
   vmk_NameCopy(&logProps.name, &sfvmk_ModInfo.driverName);
   logProps.module = vmk_ModuleCurrentID;
   logProps.heap = sfvmk_ModInfo.heapID;
-  logProps.defaultLevel = 0;
+  logProps.defaultLevel = 5;
   logProps.throttle = NULL;
   status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logID);
   if (status != VMK_OK) {
@@ -120,20 +122,6 @@ init_module(void)
      goto err;
   }
 
-  	/* Mempool */
-	vmk_NameCopy(&memPoolProps.name, &sfvmk_ModInfo.driverName);
-	memPoolProps.module = vmk_ModuleCurrentID;
-	memPoolProps.parentMemPool = VMK_MEMPOOL_INVALID;
-	memPoolProps.memPoolType = VMK_MEM_POOL_LEAF;
-	memPoolProps.resourceProps.reservation = 0;
-	memPoolProps.resourceProps.limit = 0;
-	status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_ModInfo.memPoolID);
-	if (status != VMK_OK) {
-		 vmk_WarningMessage("Failed to create mempool (%x)", status);
-		 goto err;
-	}
-
-
   /* 4. Lock Domain */
   status = vmk_LockDomainCreate(vmk_ModuleCurrentID,
                                  sfvmk_ModInfo.heapID,
@@ -146,7 +134,19 @@ init_module(void)
 
   vmk_ModuleSetHeapID(vmk_ModuleCurrentID, sfvmk_ModInfo.heapID);
 
-  /* 5. MemPool - TBD */
+  /* 5. MemPool */
+  vmk_NameCopy(&memPoolProps.name, &sfvmk_ModInfo.driverName);
+  memPoolProps.module = vmk_ModuleCurrentID;
+  memPoolProps.parentMemPool = VMK_MEMPOOL_INVALID;
+  memPoolProps.memPoolType = VMK_MEM_POOL_LEAF;
+  memPoolProps.resourceProps.reservation = 0;
+  memPoolProps.resourceProps.limit = 0;
+
+  status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_ModInfo.memPoolID);
+  if (status != VMK_OK) {
+    vmk_WarningMessage("Failed to create mempool (%x)", status);
+    goto err;
+  }
 
   /* Register Driver with with device layer */
   status = sfvmk_DriverRegister();

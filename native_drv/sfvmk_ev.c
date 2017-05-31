@@ -7,781 +7,459 @@
  ************************************************************************/
 
 #include "sfvmk_driver.h"
-#include "sfvmk_ev.h"
-#include "sfvmk_utils.h"
 
-static boolean_t sfvmk_ev_initialized(void *arg);
-static boolean_t sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
-				      uint16_t flags);
+/* default interrupt moderation value */
+#define SFVMK_MODERATION  30
 
-static boolean_t sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id);
-static boolean_t sfvmk_ev_exception(void *arg, uint32_t code, uint32_t data);
-static boolean_t sfvmk_ev_rxq_flush_done(void *arg, uint32_t rxq_index);
-static boolean_t sfvmk_ev_rxq_flush_failed(void *arg, uint32_t rxq_index);
-static boolean_t sfvmk_ev_txq_flush_done(void *arg, uint32_t txq_index);
-static boolean_t sfvmk_ev_software(void *arg, uint16_t magic);
-static boolean_t sfvmk_ev_sram(void *arg, uint32_t code);
-static boolean_t sfvmk_ev_timer(void *arg, uint32_t index);
-static boolean_t sfvmk_ev_wake_up(void *arg, uint32_t index);
-static boolean_t sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode);
+static void
+sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+static VMK_ReturnStatus
+sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+static void
+sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+static int
+sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 
 
-
-
-static const efx_ev_callbacks_t sfvmk_ev_callbacks = {
-  .eec_initialized  = sfvmk_ev_initialized,
-  .eec_rx     = sfvmk_ev_rx,
-  .eec_tx     = sfvmk_ev_tx,
-  .eec_exception    = sfvmk_ev_exception,
-  .eec_rxq_flush_done = sfvmk_ev_rxq_flush_done,
-  .eec_rxq_flush_failed = sfvmk_ev_rxq_flush_failed,
-  .eec_txq_flush_done = sfvmk_ev_txq_flush_done,
-  .eec_software   = sfvmk_ev_software,
-  .eec_sram   = sfvmk_ev_sram,
-  .eec_wake_up    = sfvmk_ev_wake_up,
-  .eec_timer    = sfvmk_ev_timer,
-  .eec_link_change  = sfvmk_ev_link_change,
-};
-
-
-static boolean_t
-sfvmk_ev_initialized(void *arg)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_roundupPowOfTwo --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param[in]  lockName  brief name for the spinlock
+* @param[in]  rank      lock rank)
+* @param[out] lock      lock pointer to create
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+int sfvmk_roundupPowOfTwo(vmk_uint32 data)
 {
-  struct sfvmk_evq *evq;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  /* Init done events may be duplicated on 7xxx */
-//  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTING ||
-//    evq->init_state == SFVMK_EVQ_STARTED);
-
-  vmk_LogMessage("event queue is initialized\n");
-  evq->init_state = SFVMK_EVQ_STARTED;
-
-  return (0);
+  return (1 << (sizeof(vmk_uint32)*8 - __builtin_clz(data) + 1));
 }
 
-
-static boolean_t
-sfvmk_ev_link_change(void *arg, efx_link_mode_t link_mode)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evqFini --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static void
+sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
+  sfvmk_evq_t *pEvq;
+  efsys_mem_t *pEvqMem;
 
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-  adapter = evq->adapter;
+  pEvq = pAdapter->pEvq[qIndex];
 
-  sfvmk_mac_link_update(adapter, link_mode);
-  #endif
+  VMK_ASSERT_BUG((NULL == pEvq), " null event queue ptr");
 
-  vmk_LogMessage("calling sfvmk_ev_link_change\n");
-  return (0);
+  pEvqMem = &pEvq->mem;
+
+  VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_INITIALIZED,
+                    " event queue not yet initialized");
+
+  //VMK_ASSERT_BUG(pEvq->pTxqs != &pEvq->pTxq, "pEvq->txqs != &pEvq->txq");
+
+  /* freeing up memory allocated for event queue */
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->esm_base,
+                              pEvqMem->io_elem.ioAddr,
+                              EFX_RXQ_SIZE(pAdapter->rxqEntries));
+
+  /* invalidating event queue ptr*/
+  pAdapter->pEvq[qIndex] = NULL;
+
+  sfvmk_mutexDestroy(pEvq->lock);
+
+  /*freeing up memory allocated for event queue object*/
+  sfvmk_memPoolFree(pEvq, sizeof(sfvmk_evq_t));
 }
 
-static boolean_t
-sfvmk_ev_rx(void *arg, uint32_t label, uint32_t id, uint32_t size,
-      uint16_t flags)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evqInit --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+
+static VMK_ReturnStatus
+sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
+  sfvmk_evq_t *pEvq;
+  efsys_mem_t *pEvqMem;
+  VMK_ReturnStatus status;
 
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
-  sfvmk_rxq *rxq;
-  unsigned int stop;
-  unsigned int delta;
-  struct sfvmk_rx_sw_desc *rx_desc;
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-  evq = arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
+  /* qIndex must be less than SFVMK_RX_SCALE_MAX */
+  VMK_ASSERT_BUG(qIndex <  SFVMK_RX_SCALE_MAX, "qIndex >= SFVMK_RX_SCALE_MAX" );
 
-  adapter = evq->adapter;
+  pEvq = (sfvmk_evq_t *)sfvmk_memPoolAlloc(sizeof(sfvmk_evq_t));
+  if(NULL == pEvq) {
+    SFVMK_ERR(pAdapter, "failed to allocate mem for event queue object");
+    goto sfvmk_ev_alloc_failed;
+  }
 
-  if (evq->exception)
-    goto done;
+  vmk_Memset(pEvq, 0 , sizeof(sfvmk_evq_t));
 
-  rxq = sfvmk_get_rxq_by_label(evq, label);
-  if ((rxq->init_state != SFVMK_RXQ_STARTED))
-    goto done;
+  pEvq->pAdapter = pAdapter;
+  pEvq->index = qIndex;
 
-  stop = (id + 1) & rxq->ptr_mask;
-  id = rxq->pending & rxq->ptr_mask;
-  delta = (stop >= id) ? (stop - id) : (rxq->entries - id + stop);
-  rxq->pending += delta;
+  pAdapter->pEvq[qIndex] =pEvq;
+  pEvqMem = &pEvq->mem;
 
-  if (delta != 1) {
-    if ((delta <= 0) ||
-        (delta > efx_nic_cfg_get(adapter->enp)->enc_rx_batch_max)) {
-      evq->exception = B_TRUE;
+  /* Build an event queue with room for one event per tx and rx buffer,
+  * plus some extra for link state events and MCDI completions.
+  * There are three tx queues in the first event queue and one in
+  * other.
+  */
+  if (qIndex == 0)
+   pEvq->entries = sfvmk_roundupPowOfTwo(pAdapter->rxqEntries +
+                                       3 * pAdapter->txqEntries + 128);
+  else
+   pEvq->entries = sfvmk_roundupPowOfTwo(pAdapter->rxqEntries +
+                                       pAdapter->txqEntries + 128);
+  /* Initialise TX completion list */
+  pEvq->pTxqs = &pEvq->pTxq;
 
-      //device_printf(adapter->dev, "RX completion out of order"
-      //        " (id=%#x delta=%u flags=%#x); resetting\n",
-      //        id, delta, flags);
-      //sfvmk_schedule_reset(adapter);
+  /* Allocate DMA space. */
+  pEvqMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+                                                 EFX_EVQ_SIZE(pEvq->entries),
+                                                 &pEvqMem->io_elem.ioAddr);
+  if(NULL == pEvqMem->esm_base) {
+    SFVMK_ERR(pAdapter, "failed to allocate mem for event queue entries");
+    goto sfvmk_dma_alloc_failed;
+  }
 
-      goto done;
+  pEvqMem->io_elem.length = EFX_EVQ_SIZE(pEvq->entries);
+  pEvqMem->esm_handle = pAdapter->dmaEngine;
+
+  // praveen needs to check the name
+  status = sfvmk_mutexInit("pEvq" ,VMK_MUTEX_RANK_HIGHEST - 1, &pEvq->lock);
+  if (status != VMK_OK)
+    goto sfvmk_mutex_failed;
+
+  pEvq->initState = SFVMK_EVQ_INITIALIZED;
+
+  return VMK_OK;
+
+sfvmk_mutex_failed:
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->esm_base ,
+                              pEvqMem->io_elem.ioAddr ,pEvqMem->io_elem.length);
+sfvmk_dma_alloc_failed:
+  sfvmk_memPoolFree(pEvq, sizeof (sfvmk_evq_t));
+sfvmk_ev_alloc_failed:
+
+  return VMK_FAILURE;
+
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evInit --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+VMK_ReturnStatus
+sfvmk_evInit(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_intr_t *pIntr;
+  int qIndex;
+  VMK_ReturnStatus status = VMK_OK;
+
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+
+  pIntr = &pAdapter->intr;
+  pAdapter->evqCount = pIntr->numIntrAlloc;
+
+  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
+                 "pIntr->state != SFVMK_INTR_INITIALIZED");
+
+  /* Set default interrupt moderation; */
+  pAdapter->evModeration = SFVMK_MODERATION;
+
+  /* Initialize the event queue(s) - one per interrupt.*/
+  for (qIndex = 0; qIndex < pAdapter->evqCount; qIndex++) {
+    status = sfvmk_evqInit(pAdapter, qIndex);
+    if (status != VMK_OK)
+    {
+      SFVMK_ERR(pAdapter, "failed creating evq %d\n", qIndex);
+      goto sfvmk_fail;
     }
+    else
+      SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, 3, "creating evq %d\n", qIndex);
   }
 
-  rx_desc = &rxq->queue[id];
+  return status;
 
-  prefetch_read_many(rx_desc->mbuf);
+sfvmk_fail:
+  while (--qIndex >= 0)
+   sfvmk_evqFini(pAdapter, qIndex);
 
-  for (; id != stop; id = (id + 1) & rxq->ptr_mask) {
-    rx_desc = &rxq->queue[id];
-    VMK_ASSERT(rx_desc->flags == EFX_DISCARD,
-        ("rx_desc->flags != EFX_DISCARD"));
-    rx_desc->flags = flags;
+  pAdapter->evqCount = 0;
 
-    VMK_ASSERT(size < (1 << 16), ("size > (1 << 16)"));
-    rx_desc->size = (uint16_t)size;
-  }
-
-  evq->rx_done++;
-
-  if (rxq->pending - rxq->completed >= SFVMK_RX_BATCH)
-    sfvmk_ev_qcomplete(evq, B_FALSE);
-
-done:
-  return (evq->rx_done >= SFVMK_EV_BATCH);
-
-  #endif
-
-   return  B_FALSE ;
+  return status ;
 }
 
-static boolean_t
-sfvmk_ev_exception(void *arg, uint32_t code, uint32_t data)
-{
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-
-#if 0
-  DBGPRINT(adapter->dev, "[%d] %s", evq->index,
-        (code == EFX_EXCEPTION_RX_RECOVERY) ? "RX_RECOVERY" :
-        (code == EFX_EXCEPTION_RX_DSC_ERROR) ? "RX_DSC_ERROR" :
-        (code == EFX_EXCEPTION_TX_DSC_ERROR) ? "TX_DSC_ERROR" :
-        (code == EFX_EXCEPTION_UNKNOWN_SENSOREVT) ? "UNKNOWN_SENSOREVT" :
-        (code == EFX_EXCEPTION_FWALERT_SRAM) ? "FWALERT_SRAM" :
-        (code == EFX_EXCEPTION_UNKNOWN_FWALERT) ? "UNKNOWN_FWALERT" :
-        (code == EFX_EXCEPTION_RX_ERROR) ? "RX_ERROR" :
-        (code == EFX_EXCEPTION_TX_ERROR) ? "TX_ERROR" :
-        (code == EFX_EXCEPTION_EV_ERROR) ? "EV_ERROR" :
-        "UNKNOWN");
-#endif
-
-  evq->exception = B_TRUE;
-
-  if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
-  #if 0
-    device_printf(adapter->dev,
-            "hardware exception (code=%u); resetting\n",
-            code);
-
-    sfvmk_schedule_reset(adapter);
-  #endif
-   vmk_LogMessage ("Got exception ................\n");
-  }
-
-  return (B_FALSE);
-}
-
-static boolean_t
-sfvmk_ev_rxq_flush_done(void *arg, uint32_t rxq_index)
-{
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
-  sfvmk_rxq *rxq;
-  unsigned int index;
-  uint16_t magic;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  rxq = adapter->rxq[rxq_index];
-
-  VMK_ASSERT(rxq != NULL, ("rxq == NULL"));
-
-  /* Resend a software event on the correct queue */
-  index = rxq->index;
-  if (index == evq->index) {
-    sfvmk_rx_qflush_done(rxq);
-    return (B_FALSE);
-  }
-
-  evq = adapter->evq[index];
-  magic = sfvmk_sw_ev_rxq_magic(SFVMK_SW_EV_RX_QFLUSH_DONE, rxq);
-
-  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED,
-      ("evq not started"));
-  efx_ev_qpost(evq->common, magic);
-#endif
-  return (B_FALSE);
-}
-
-static boolean_t
-sfvmk_ev_rxq_flush_failed(void *arg, uint32_t rxq_index)
-{
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
-  sfvmk_rxq *rxq;
-  unsigned int index;
-  uint16_t magic;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  rxq = adapter->rxq[rxq_index];
-
-//  VMK_ASSERT(rxq != NULL);
-
-  /* Resend a software event on the correct queue */
-  index = rxq->index;
-  evq = adapter->evq[index];
-  magic = sfvmk_sw_ev_rxq_magic(SFVMK_SW_EV_RX_QFLUSH_FAILED, rxq);
-
-//  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED);
-
-  efx_ev_qpost(evq->common, magic);
-  #endif
-  return (B_FALSE);
-}
-#if 0
-static struct sfvmk_txq *
-sfvmk_get_txq_by_label(struct sfvmk_evq *evq, enum sfvmk_txq_type label)
-{
-  unsigned int index;
-
-//  VMK_ASSERT((evq->index == 0 && label < SFVMK_TXQ_NTYPES) ||
-//      (label == SFVMK_TXQ_IP_TCP_UDP_CKSUM));
-
-  index = (evq->index == 0) ? label : (evq->index - 1 + SFVMK_TXQ_NTYPES);
-  return (evq->adapter->txq[index]);
-}
-#endif
-static boolean_t
-sfvmk_ev_tx(void *arg, uint32_t label, uint32_t id)
-{
-
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_txq *txq;
-  unsigned int stop;
-  unsigned int delta;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  txq = sfvmk_get_txq_by_label(evq, label);
-
-  VMK_ASSERT(txq != NULL, ("txq == NULL"));
-  VMK_ASSERT(evq->index == txq->evq_index,
-      ("evq->index != txq->evq_index"));
-
-  if ((txq->init_state != SFVMK_TXQ_STARTED))
-    goto done;
-
-  stop = (id + 1) & txq->ptr_mask;
-  id = txq->pending & txq->ptr_mask;
-
-  delta = (stop >= id) ? (stop - id) : (txq->entries - id + stop);
-  txq->pending += delta;
-
-  evq->tx_done++;
-
-  if (txq->next == NULL &&
-      evq->txqs != &(txq->next)) {
-    *(evq->txqs) = txq;
-    evq->txqs = &(txq->next);
-  }
-
-  if (txq->pending - txq->completed >= SFVMK_TX_BATCH)
-    sfvmk_tx_qcomplete(txq, evq);
-
-done:
-  return (evq->tx_done >= SFVMK_EV_BATCH);
-  #endif
-
-  return B_FALSE;
-}
-
-static boolean_t
-sfvmk_ev_txq_flush_done(void *arg, uint32_t txq_index)
-{
-  #if 0
-  sfvmk_evq *evq;
-  sfvmk_adapter *adapter;
-  sfvmk_txq *txq;
-  uint16_t magic;
-
-  evq = (struct sfvmk_evq *)arg;
-  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  txq = adapter->txq[txq_index];
-
-  VMK_ASSERT(txq != NULL, ("txq == NULL"));
-  VMK_ASSERT(txq->init_state == SFVMK_TXQ_INITIALIZED,
-      ("txq not initialized"));
-
-  if (txq->evq_index == evq->index) {
-    sfvmk_txq_flush_done(txq);
-    return (B_FALSE);
-  }
-
-  /* Resend a software event on the correct queue */
-  evq = adapter->evq[txq->evq_index];
-  magic = sfvmk_sw_ev_txq_magic(SFVMK_SW_EV_TX_QFLUSH_DONE, txq);
-
-  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED,
-      ("evq not started"));
-  efx_ev_qpost(evq->common, magic);
-#endif
-  return (B_FALSE);
-}
-
-static boolean_t
-sfvmk_ev_software(void *arg, uint16_t magic)
-{
-
-
-  return (B_FALSE);
-}
-
-
-static boolean_t
-sfvmk_ev_sram(void *arg, uint32_t code)
-{
-
-
-  return (B_FALSE);
-}
-
-
-static boolean_t
-sfvmk_ev_timer(void *arg, uint32_t index)
-{
-  (void)arg;
-  (void)index;
-
-  return (B_FALSE);
-}
-
-static boolean_t
-sfvmk_ev_wake_up(void *arg, uint32_t index)
-{
-  (void)arg;
-  (void)index;
-
-  return (B_FALSE);
-}
-
-
-
-static void
-sfvmk_EVQFini(sfvmk_adapter *adapter, unsigned int index);
-int roundup_pow_of_two(unsigned int _n)	
-{                      
-   unsigned int index=0;
-  _n = _n -1 ;       
-   do{                 
-     _n >>=1;      
-     index++;      
-   }while(_n);      
-  return (1ULL << index);    
-}
-void sfvmk_ev_qcomplete(sfvmk_evq *evq, boolean_t eop)
-{
-
-   #if 0
-  sfvmk_adapter *adapter;
-  unsigned int index;
-  sfvmk_rxq *rxq;
-  sfvmk_txq *txq;
-
-//  SFVMK_EVQ_LOCK_ASSERT_OWNED(evq);
-
-  adapter = evq->adapter;
-  index = evq->index;
-  rxq = (sfvmk_rxq *)adapter->rxq[index];
-
-  if ((txq = evq->txq) != NULL) {
-    evq->txq = NULL;
-    evq->txqs = &(evq->txq);
-
-    do {
-      sfvmk_txq *next;
-
-      next = txq->next;
-      txq->next = NULL;
-
-//      VMK_ASSERT(txq->evq_index == index);
-
-      if (txq->pending != txq->completed)
-               ;
-    //    sfvmk_tx_qcomplete(txq, evq);
-
-      txq = next;
-    } while (txq != NULL);
-  }
-
-  if (rxq->pending != rxq->completed)
-    //sfvmk_rx_qcomplete(rxq, eop);
-    ;
- #endif
-  return ;
-}
-
-
-int
-sfvmk_ev_qpoll(sfvmk_evq *evq)
-{
-
-	int rc;
-
-//	SFVMK_EVQ_LOCK(evq);
-
-        vmk_LogMessage("calling sfvmk_ev_qpoll\n");
-	if ((evq->init_state != SFVMK_EVQ_STARTING &&
-			    evq->init_state != SFVMK_EVQ_STARTED)) {
-        vmk_LogMessage("event queus state is %d\n", evq->init_state );
-		rc = EINVAL;
-		goto fail;
-	}
-
-	/* Synchronize the DMA memory for reading */
-
-       //praveen code for syncing
-	//bus_dmamap_sync(evq->mem.esm_tag, evq->mem.esm_map,
-	//    BUS_DMASYNC_POSTREAD);
-
-//	VMK_ASSERT(evq->rx_done == 0);
-//	VMK_ASSERT(evq->tx_done == 0);
-//	VMK_ASSERT(evq->txq == NULL);
-//	VMK_ASSERT(evq->txqs == &evq->txq);
-
-	/* Poll the queue */
-
-	efx_ev_qpoll(evq->common, &evq->read_ptr, &sfvmk_ev_callbacks, evq);
-
-	evq->rx_done = 0;
-	evq->tx_done = 0;
-
-	/* Perform any pending completion processing */
-	sfvmk_ev_qcomplete(evq, B_TRUE);
-
-	/* Re-prime the event queue for interrupts */
-	if ((rc = efx_ev_qprime(evq->common, evq->read_ptr)) != 0)
-		goto fail;
-
-
-//	SFVMK_EVQ_UNLOCK(evq);
-	return (0);
-
-fail:
-//	SFVMK_EVQ_UNLOCK(evq);
-	return (rc);
-}
-
-
-
-static int
-sfvmk_EVQinit(sfvmk_adapter *adapter, unsigned int index)
-{
-	struct sfvmk_evq *evq;
-	efsys_mem_t *esmp;
-
-	VMK_ASSERT(index < SFVMK_RX_SCALE_MAX);
-
-
-	evq = (struct sfvmk_evq *)sfvmk_MemPoolAlloc(sizeof(sfvmk_evq));
-  vmk_Memset(evq, 0 , sizeof(sfvmk_evq));
-
-	evq->adapter = adapter;
-	evq->index = index;
-
-	adapter->evq[index] = evq;
-	esmp = &evq->mem;
-
-	/* Build an event queue with room for one event per tx and rx buffer,
-	 * plus some extra for link state events and MCDI completions.
-	 * There are three tx queues in the first event queue and one in
-	 * other.
-	 */
-	if (index == 0)
-		evq->entries =
-			roundup_pow_of_two(adapter->rxq_entries +
-					   3 * adapter->txq_entries +
-					   128);
-	else
-		evq->entries =
-			roundup_pow_of_two(adapter->rxq_entries +
-					   adapter->txq_entries +
-					   128);
-
-	/* Initialise TX completion list */
-	evq->txqs = &evq->txq;
-
-	/* Allocate DMA space. */
-  esmp->esm_base = sfvmk_AllocCoherentDMAMapping(adapter, EFX_EVQ_SIZE(evq->entries),&esmp->io_elem.ioAddr);
-  esmp->io_elem.length = EFX_EVQ_SIZE(evq->entries);
-	esmp->esm_handle = adapter->vmkDmaEngine; 
-
-	
-  // praveen needs to check the name 
-  sfvmk_MutexInit("evq" ,VMK_MUTEX_RANK_HIGHEST - 1, &evq->lock);
-
-	evq->init_state = SFVMK_EVQ_INITIALIZED;
-
-	return (0);
-}
-
-
-
-
-int
-sfvmk_EvInit(sfvmk_adapter *adapter)
-{
-
-  // praveen
-	sfvmk_intr *intr;
-	int index;
-	int rc;
-
-	intr = &adapter->intr;
-
-	adapter->evq_count = intr->numIntrAlloc;
-
-	vmk_LogMessage("Number of event queue %d\n" , adapter->evq_count);
-	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
-
-	/* Set default interrupt moderation; add a sysctl to
-	 * read and change it.
-	 */
-	adapter->ev_moderation = SFVMK_MODERATION;
-
-  //praveen needs to check
-  /*
-	SYSCTL_ADD_PROC(sysctl_ctx, SYSCTL_CHILDREN(sysctl_tree),
-			OID_AUTO, "int_mod", CTLTYPE_UINT|CTLFLAG_RW,
-			sc, 0, sfxge_int_mod_handler, "IU",
-			"sfxge interrupt moderation (us)");
- */
-	/*
-	 * Initialize the event queue(s) - one per interrupt.
-	 */
-	for (index = 0; index < adapter->evq_count; index++) {
-		if ((rc = sfvmk_EVQinit(adapter, index)) != 0)
-                 {
-                     vmk_LogMessage(" failed createing evq %d\n", index);
-			goto fail;
-                 }
-		else
-                     vmk_LogMessage(" createing evq %d\n", index);
-	}
-
-	return (0);
-
-fail:
-	while (--index >= 0)
-		sfvmk_EVQFini(adapter, index);
-
-	adapter->evq_count = 0;
-	return (rc);
-}
-
-
-
-static void
-sfvmk_EVQFini(sfvmk_adapter *adapter, unsigned int index)
-{
-	struct sfvmk_evq *evq;
-	efsys_mem_t *esmp;
-
-	evq = adapter->evq[index];
-
-	esmp = &evq->mem;
-	VMK_ASSERT(evq->init_state == SFXGE_EVQ_INITIALIZED);
-	VMK_ASSERT(evq->txqs == &evq->txq);
-        //praveen
-
-        sfvmk_FreeCoherentDMAMapping(adapter,esmp->esm_base, esmp->io_elem.ioAddr, EFX_RXQ_SIZE(adapter->rxq_entries));
-	adapter->evq[index] = NULL;
-
-        sfvmk_MutexDestroy(evq->lock);
-        
-        sfvmk_MemPoolFree(evq, sizeof(sfvmk_evq));
-}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evFini --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 
 void
-sfvmk_EvFini(sfvmk_adapter *adapter)
+sfvmk_evFini(sfvmk_adapter_t *pAdapter)
 {
-	sfvmk_intr *intr;
-	int index;
+  sfvmk_intr_t *pIntr;
+  int qIndex;
 
-	intr = &adapter->intr;
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-	VMK_ASSERT(intr->state == SFVMK_INTR_INITIALIZED);
+  pIntr = &pAdapter->intr;
 
-	adapter->ev_moderation = 0;
+  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
+                 "intr->state != SFVMK_INTR_INITIALIZED");
 
-	/* Tear down the event queue(s). */
-	index = adapter->evq_count;
-	while (--index >= 0)
-		sfvmk_EVQFini(adapter, index);
+  pAdapter->evModeration = 0;
 
-	adapter->evq_count = 0;
+  /* Tear down the event queue(s). */
+  qIndex = pAdapter->evqCount;
+  while (--qIndex >= 0)
+    sfvmk_evqFini(pAdapter, qIndex);
+
+  pAdapter->evqCount = 0;
 }
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evqStop --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static void
-sfvmk_EVQStop(sfvmk_adapter *adapter, unsigned int index)
+sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
-  sfvmk_evq *evq;
+  sfvmk_evq_t *pEvq;
 
-  evq = adapter->evq[index];
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-//  VMK_ASSERT(evq->init_state == SFVMK_EVQ_STARTED)
-
-
-  //SFVMK_EVQ_LOCK(evq);
-  evq->init_state = SFVMK_EVQ_INITIALIZED;
-  evq->read_ptr = 0;
-  evq->exception = B_FALSE;
+  pEvq = pAdapter->pEvq[qIndex];
+  VMK_ASSERT_BUG((NULL == pEvq), " null event queue ptr");
 
 
-  efx_ev_qdestroy(evq->common);
-  //SFVMK_EVQ_UNLOCK(evq);
+  VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
+                       "pEvq->initState != SFVMK_EVQ_STARTED");
+
+  SFVMK_EVQ_LOCK(pEvq);
+
+  pEvq->initState = SFVMK_EVQ_INITIALIZED;
+  pEvq->readPtr = 0;
+  pEvq->exception = B_FALSE;
+  efx_ev_qdestroy(pEvq->pCommonEvq);
+
+  SFVMK_EVQ_UNLOCK(pEvq);
 }
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evStop --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 void
-sfvmk_EVStop(sfvmk_adapter *adapter)
+sfvmk_evStop(sfvmk_adapter_t *pAdapter)
 {
-        sfvmk_intr *intr;
-        efx_nic_t *enp;
-        int index;
+  sfvmk_intr_t *pIntr;
+  efx_nic_t *pNic;
+  int qIndex;
 
-        intr = &adapter->intr;
-        enp = adapter->enp;
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-        //VMK_ASSERT(intr->state == SFVMK_INTR_STARTED);
+  pIntr = &pAdapter->intr;
+  pNic = pAdapter->pNic;
 
-        /* Stop the event queue(s) */
-        index = 2;//adapter->evq_count;
-        while (--index >= 0)
-                sfvmk_EVQStop(adapter, index);
+  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_STARTED,
+                    "Interrupts not started");
 
-        /* Tear down the event module */
-        efx_ev_fini(enp);
+  /* Stop the event queue(s) */
+  qIndex = pAdapter->evqCount;
+
+  while (--qIndex >= 0)
+    sfvmk_evqStop(pAdapter, qIndex);
+
+  /* Tear down the event module */
+  efx_ev_fini(pNic);
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_evqStart --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static int
-sfvmk_EVQStart(sfvmk_adapter *adapter, unsigned int index)
+sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
-  sfvmk_evq *evq;
-  efsys_mem_t *esmp;
+  sfvmk_evq_t *pEvq;
+  efsys_mem_t *pEvqMem;
   int count;
   int rc;
 
-  evq = adapter->evq[index];
-  esmp = &evq->mem;
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-//  VMK_ASSERT(evq->init_state == SFVMK_EVQ_INITIALIZED);
+  pEvq = pAdapter->pEvq[qIndex];
+  pEvqMem = &pEvq->mem;
+
+  VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_INITIALIZED,
+                    "pEvq->initState != SFVMK_EVQ_INITIALIZED");
 
 
   /* Clear all events. */
-  (void)vmk_Memset(esmp->esm_base, 0xff, EFX_EVQ_SIZE(evq->entries));
+  (void)vmk_Memset(pEvqMem->esm_base, 0xff, EFX_EVQ_SIZE(pEvq->entries));
 
   /* Create the common code event queue. */
-  if ((rc = efx_ev_qcreate(adapter->enp, index, esmp, evq->entries,0 , adapter->ev_moderation,
-                           EFX_EVQ_FLAGS_NOTIFY_INTERRUPT, &evq->common)) != 0)
-    goto sfvmk_qcreate_fail;
+  if ((rc = efx_ev_qcreate(pAdapter->pNic, qIndex, pEvqMem, pEvq->entries,0 , pAdapter->evModeration,
+                            EFX_EVQ_FLAGS_NOTIFY_INTERRUPT, &pEvq->pCommonEvq)) != 0) {
 
-//  SFVMK_EVQ_LOCK(evq);
+    SFVMK_ERR(pAdapter, "failed to create event queue status %d", rc);
+    goto sfvmk_qcreate_fail;
+  }
+
+  SFVMK_EVQ_LOCK(pEvq);
 
   /* Prime the event queue for interrupts */
-  if ((rc = efx_ev_qprime(evq->common, evq->read_ptr)) != 0)
+  if ((rc = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr)) != 0) {
+    SFVMK_ERR(pAdapter, "failed in efx_ev_qprime status %d", rc);
     goto sfvmk_qprime_fail;
+  }
 
-  evq->init_state = SFVMK_EVQ_STARTING;
+  pEvq->initState = SFVMK_EVQ_STARTING;
 
-  //SFVMK_EVQ_UNLOCK(evq);
+  SFVMK_EVQ_UNLOCK(pEvq);
 
   /* Wait for the initialization event */
   count = 0;
   do {
+
     vmk_DelayUsecs(100*1000);
 
     /* Check to see if the test event has been processed */
-    if (evq->init_state == SFVMK_EVQ_STARTED)
+    if (pEvq->initState == SFVMK_EVQ_STARTED)
       goto done;
 
   } while (++count < 20);
-  vmk_LogMessage( "event queue is not yet started \n");
 
+  SFVMK_ERR(pAdapter, "Event queue[%d] is not initialized", qIndex);
   rc = ETIMEDOUT;
+
   goto sfvmk_qstart_fail;
 
 done:
 
-  vmk_LogMessage( "event queue is started \n");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_QUEUE, 2, "eventQ[%d] is started " , qIndex);
+
   return (0);
 
 sfvmk_qstart_fail:
-//  SFVMK_EVQ_LOCK(evq);
-  evq->init_state = SFVMK_EVQ_INITIALIZED;
+  SFVMK_EVQ_LOCK(pEvq);
+  pEvq->initState = SFVMK_EVQ_INITIALIZED;
 sfvmk_qprime_fail:
-    efx_ev_qdestroy(evq->common);
+  SFVMK_EVQ_UNLOCK(pEvq);
+  efx_ev_qdestroy(pEvq->pCommonEvq);
 sfvmk_qcreate_fail:
   return (rc);
 }
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_EVStart --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param	adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 
-int
-sfvmk_EVStart(sfvmk_adapter *adapter)
+VMK_ReturnStatus
+sfvmk_evStart(sfvmk_adapter_t *pAdapter)
 {
 
-  sfvmk_intr *intr;
-  int index;
+  sfvmk_intr_t *pIntr;
+  int qIndex;
   int rc;
 
-  intr = &adapter->intr;
+  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
 
-//  VMK_ASSERT(intr->state == SFVMK_INTR_STARTED);
+  pIntr = &pAdapter->intr;
+
+  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_STARTED,
+                    "Interrupts not started");
 
   /* Initialize the event module */
-  if ((rc = efx_ev_init(adapter->enp)) != 0)
-    return (rc);
-
-  /* Start the event queues */
-  // praveen initializing only one event queue
-  for (index = 0; index < 2 /*adapter->evq_count*/; index++) {
-    if ((rc = sfvmk_EVQStart(adapter, index)) != 0)
-      goto sfvmk_qstart_fail;
-    else
-       vmk_NetPollEnable(adapter->evq[index]->netPoll);
+  if ((rc = efx_ev_init(pAdapter->pNic)) != 0) {
+    SFVMK_ERR(pAdapter, "failed to init event queue module" );
+    return VMK_FAILURE;
   }
 
-  return (0);
+  /* Start the event queues */
+  for (qIndex = 0; qIndex < pAdapter->evqCount; qIndex++) {
+    if ((rc = sfvmk_evqStart(pAdapter, qIndex)) != 0)
+    {
+      SFVMK_ERR(pAdapter,"failed to start event queue[%d]", qIndex);
+      goto sfvmk_qstart_fail;
+    }
+    else
+      vmk_NetPollEnable(pAdapter->pEvq[qIndex]->netPoll);  //praveen
+  }
+
+  return VMK_OK;
 
 sfvmk_qstart_fail:
-  vmk_LogMessage("failed to start event queue %d\n", index);
   /* Stop the event queue(s) */
-  while (--index >= 0)
-    sfvmk_EVQStop(adapter, index);
+  while (--qIndex >= 0)
+    sfvmk_evqStop(pAdapter, qIndex);
 
   /* Tear down the event module */
-  efx_ev_fini(adapter->enp);
+  efx_ev_fini(pAdapter->pNic);
 
-  return (rc);
+  return VMK_FAILURE;
 }
+
 
 

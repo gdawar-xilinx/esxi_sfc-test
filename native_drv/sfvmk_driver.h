@@ -159,7 +159,7 @@ struct sfvmk_hw_stats {
 
 typedef struct sfvmk_port {
   struct sfvmk_adapter_s  *sc;
- // struct mtx    lock;
+  efsys_lock_t	  lock;
   enum sfvmk_port_state init_state;
 #ifndef SFXGE_HAVE_PAUSE_MEDIAOPTS
   unsigned int    wanted_fc;
@@ -169,9 +169,6 @@ typedef struct sfvmk_port {
   //uint8_t     mcast_addrs[EFX_MAC_MULTICAST_LIST_MAX *
   //            EFX_MAC_ADDR_LEN];
   unsigned int    mcast_count;
-
-  /* Only used in debugging output */
-//  char      lock_name[SFVMK_LOCK_NAME_MAX];
 }sfvmk_port;
 
 /** Adapter data structure **/

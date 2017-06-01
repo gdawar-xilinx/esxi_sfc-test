@@ -567,32 +567,51 @@ static VMK_ReturnStatus sfvmk_uplinkStatsGet(vmk_AddrCookie cookie,
   sfvmk_adapter *adapter = (sfvmk_adapter *)cookie.ptr;
   uint64_t *mac_stats;
   
-  vmk_LogMessage(" calling  sfvmk_uplinkStatsGet >>>>> ");
+  vmk_LogMessage(" calling  sfvmk_uplinkStatsGet");
+  sfvmk_MacStatsLock(adapter);
   sfvmk_MacStatsUpdate(adapter);
-  vmk_Memset(stats, 0, sizeof(*stats));
-
   mac_stats = (uint64_t *)adapter->port.mac_stats.decode_buf;
   
-  stats->rxPkts = mac_stats[EFX_MAC_RX_PKTS];
-  stats->rxErrors = mac_stats[EFX_MAC_RX_ERRORS];
-  stats->txPkts = mac_stats[EFX_MAC_TX_PKTS];
-  stats->txErrors = mac_stats[EFX_MAC_TX_ERRORS];
-  stats->collisions = 
-	    mac_stats[EFX_MAC_TX_SGL_COL_PKTS] +
-	    mac_stats[EFX_MAC_TX_MULT_COL_PKTS] +
-	    mac_stats[EFX_MAC_TX_EX_COL_PKTS] +
-	    mac_stats[EFX_MAC_TX_LATE_COL_PKTS];
-  stats->rxBytes = mac_stats[EFX_MAC_RX_OCTETS]; 
-  stats->txBytes = mac_stats[EFX_MAC_TX_OCTETS]; 
-  stats->rxMulticastPkts = mac_stats[EFX_MAC_RX_MULTICST_PKTS];
-  stats->txMulticastPkts = mac_stats[EFX_MAC_TX_MULTICST_PKTS];
-  stats->rxBroadcastPkts = mac_stats[EFX_MAC_RX_BRDCST_PKTS];
-  stats->txBroadcastPkts = mac_stats[EFX_MAC_TX_BRDCST_PKTS];
-  stats->rxFrameAlignErrors = mac_stats[EFX_MAC_RX_ALIGN_ERRORS];
-  stats->rxDrops = mac_stats[EFX_MAC_RX_NODESC_DROP_CNT];
-
   /* Update driver copy of stats*/
   memcpy(adapter->mac_stats, mac_stats, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
+  sfvmk_MacStatsUnlock(adapter);
+
+  vmk_Memset(stats, 0, sizeof(*stats));
+
+  stats->rxPkts = mac_stats[EFX_MAC_VADAPTER_RX_UNICAST_PACKETS] +
+		  mac_stats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS] +
+		  mac_stats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
+
+  stats->txPkts = mac_stats[EFX_MAC_VADAPTER_TX_UNICAST_PACKETS] +
+		  mac_stats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS] +
+		  mac_stats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
+
+  stats->rxBytes = mac_stats[EFX_MAC_VADAPTER_RX_UNICAST_BYTES] +
+		   mac_stats[EFX_MAC_VADAPTER_RX_MULTICAST_BYTES] +
+		   mac_stats[EFX_MAC_VADAPTER_RX_BROADCAST_BYTES]; 
+
+  stats->txBytes = mac_stats[EFX_MAC_VADAPTER_TX_UNICAST_BYTES] +
+		   mac_stats[EFX_MAC_VADAPTER_TX_MULTICAST_BYTES] +
+		   mac_stats[EFX_MAC_VADAPTER_TX_BROADCAST_BYTES]; 
+
+  stats->rxMulticastPkts = mac_stats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS];
+  stats->txMulticastPkts = mac_stats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS];
+  stats->rxBroadcastPkts = mac_stats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
+  stats->txBroadcastPkts = mac_stats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
+  stats->rxErrors = mac_stats[EFX_MAC_RX_ERRORS];
+  stats->txErrors = mac_stats[EFX_MAC_TX_ERRORS];
+  stats->collisions = mac_stats[EFX_MAC_TX_SGL_COL_PKTS] +
+		      mac_stats[EFX_MAC_TX_MULT_COL_PKTS] +
+		      mac_stats[EFX_MAC_TX_EX_COL_PKTS] +
+		      mac_stats[EFX_MAC_TX_LATE_COL_PKTS];
+
+  stats->rxFrameAlignErrors = mac_stats[EFX_MAC_RX_ALIGN_ERRORS];
+  stats->rxDrops = mac_stats[EFX_MAC_RX_NODESC_DROP_CNT];
+  stats->rxOverflowErrors = mac_stats[EFX_MAC_VADAPTER_RX_OVERFLOW];
+  stats->rxCRCErrors = mac_stats[EFX_MAC_RX_ALIGN_ERRORS];
+  stats->rxLengthErrors = mac_stats[EFX_MAC_RX_FCS_ERRORS] +
+			  mac_stats[EFX_MAC_RX_JABBER_PKTS];
+
   return VMK_OK;
 }
 

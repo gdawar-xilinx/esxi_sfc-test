@@ -16,6 +16,8 @@
 #include "sfvmk_utils.h"
 #include "sfvmk_port.h"
 #include "sfvmk_mcdi.h"
+#include "sfvmk_uplink.h"
+#include "sfvmk_intr.h"
 
 extern VMK_ReturnStatus sfvmk_DriverRegister(void);
 extern void             sfvmk_DriverUnregister(void);
@@ -51,6 +53,14 @@ typedef struct sfvmk_intr_s {
 }sfvmk_intr_t;
 
 
+enum sfvmk_adapterState {
+  SFVMK_UNINITIALIZED = 0,
+  SFVMK_INITIALIZED,
+  SFVMK_REGISTERED,
+  SFVMK_STARTED
+};
+
+
 /* adapter structure */
 typedef struct sfvmk_adapter_s{
   /* Device handle passed by VMK */
@@ -59,6 +69,7 @@ typedef struct sfvmk_adapter_s{
   /* VMK kernel related information */
   vmk_DMAEngine     dmaEngine;
 
+  enum sfvmk_adapterState  initState; 
   /* PCI device related information */
   vmk_PCIDevice     pciDevice;
   vmk_PCIDeviceID   pciDeviceID;
@@ -105,9 +116,23 @@ typedef struct sfvmk_adapter_s{
   struct sfvmk_phyInfo_s  phy;
   struct sfvmk_port_s     port;
 
+  vmk_DeviceID   deviceID;
 
   /*uplink device inforamtion */
   vmk_Name        uplinkName;
+  vmk_UplinkSupportedMode supportedModes[EFX_PHY_CAP_NTYPES];
+  vmk_uint32 supportedModesArraySz;
+  vmk_UplinkRegData regData;
+  vmk_UplinkSharedData  sharedData;
+  vmk_Uplink uplink;
+  vmk_Device uplinkDevice;
+
+  /* Serializes multiple writers. */
+  vmk_Lock sharedDataWriterLock;
+
+  /* shared queue information */
+  vmk_UplinkSharedQueueInfo queueInfo;
+  vmk_UplinkSharedQueueData queueData[SFVMK_RX_SCALE_MAX + SFVMK_TX_SCALE_MAX];
 
 }sfvmk_adapter_t;
 

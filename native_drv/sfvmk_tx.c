@@ -25,11 +25,11 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_txq_t *pTxq;
   efsys_mem_t *pTxqMem;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   pTxq = pAdapter->pTxq[qIndex];
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
   pTxqMem = &pTxq->mem;
 
   VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_INITIALIZED,
@@ -68,7 +68,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   efsys_mem_t *pTxqMem;
   VMK_ReturnStatus status ;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   pTxq = (sfvmk_txq_t *)sfvmk_memPoolAlloc(sizeof(sfvmk_txq_t));
   if (NULL == pTxq) {
@@ -150,7 +150,7 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
 
   int rc;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   pIntr = &pAdapter->intr;
 
@@ -213,7 +213,7 @@ sfvmk_txFini(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
@@ -272,15 +272,15 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   vmk_uint32 count;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
 
   pTxq = pAdapter->pTxq[qIndex];
   pEvq = pAdapter->pEvq[pTxq->evqIndex];
 
-  SFVMK_EVQ_LOCK(pEvq);
   SFVMK_TXQ_LOCK(pTxq);
+  SFVMK_EVQ_LOCK(pEvq);
 
   VMK_ASSERT(pTxq->initState == SFVMK_TXQ_STARTED);
 
@@ -310,8 +310,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
       } while (++count < 20);
     }
 
-    SFVMK_EVQ_LOCK(pEvq);
     SFVMK_TXQ_LOCK(pTxq);
+    SFVMK_EVQ_LOCK(pEvq);
 
     VMK_ASSERT(pTxq->flushState != SFVMK_FLUSH_FAILED);
 
@@ -361,7 +361,7 @@ void sfvmk_txStop(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
@@ -394,12 +394,12 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   vmk_uint32 descIndex;
   int rc;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
 
   pTxq = pAdapter->pTxq[qIndex];
-  VMK_ASSERT_BUG(NULL == pTxq, " NULL txq ptr");
+  VMK_ASSERT_BUG(NULL != pTxq, " NULL txq ptr");
 
   pTxqMem = &pTxq->mem;
   pEvq = pAdapter->pEvq[pTxq->evqIndex];
@@ -505,7 +505,8 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
   int qIndex;
   int rc;
 
-  VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, 5, "entered sfvmk_txStart");
 
   /* Initialize the common code transmit module. */
   if ((rc = efx_tx_init(pAdapter->pNic)) != 0) {
@@ -513,7 +514,7 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
     return VMK_FAILURE;
   }
 
-  for (qIndex = 0; qIndex < 1/*pAdapter->txq_count*/; qIndex++) {
+  for (qIndex = 0; qIndex < pAdapter->txqCount; qIndex++) {
     if ((rc = sfvmk_txqStart(pAdapter, qIndex)) != 0) {
       SFVMK_ERR(pAdapter,"failed to start txq[%d]", qIndex);
       goto sfvmk_fail;
@@ -527,7 +528,7 @@ sfvmk_fail:
     sfvmk_txqStop(pAdapter, qIndex);
 
   efx_tx_fini(pAdapter->pNic);
-
+  pAdapter->txqCount = 0;
   return VMK_FAILURE;
 }
 

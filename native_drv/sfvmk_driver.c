@@ -28,10 +28,19 @@ static VMK_ReturnStatus sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
 static void sfvmk_freeInterrupts(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus getPciDevice(sfvmk_adapter_t *pAdapter);
+static VMK_ReturnStatus sfvmk_removeUplinkDevice(vmk_Device sfvmk_device);
 
 
+static vmk_DeviceOps sfvmk_uplinkDeviceOps = {
+  .removeDevice = sfvmk_removeUplinkDevice
+};
 
-
+static VMK_ReturnStatus 
+sfvmk_removeUplinkDevice(vmk_Device sfvmk_device)
+{
+  vmk_LogMessage("sfvmk_removeUplinkDevice: device=%p", sfvmk_device);
+  return vmk_DeviceUnregister(sfvmk_device);
+}
 
 
 
@@ -497,6 +506,89 @@ getPciDevice(sfvmk_adapter_t *pAdapter)
 
   return VMK_OK;
 }
+/************************************************************************
+ * getPciDevice --
+ *
+ * @brief  Routine to get pci device information such as vendor id , device ID
+ *
+ *
+ * @param  adapter pointer to sfvmk_adapter_t
+ *
+ * @return: VMK_OK or VMK_FAILURE
+ *
+ ************************************************************************/
+void
+sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
+{
+  efx_phy_cap_type_t capMask = EFX_PHY_CAP_10HDX;
+  vmk_uint32 supportedCaps, index = 0;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 5, "sfvmk_updateSupportedCap Enetered");
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM, &supportedCaps);
+
+  do
+  {
+    while(!(supportedCaps & (1 << capMask))) 
+     capMask++;
+    
+
+    switch(capMask)
+    {
+      case EFX_PHY_CAP_10HDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_HALF;
+        break ;
+
+      case EFX_PHY_CAP_10FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_100HDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_HALF;
+        break ;
+
+      case EFX_PHY_CAP_100FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_1000HDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_HALF;
+        break ;
+
+      case EFX_PHY_CAP_1000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_10000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_40000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      default:
+        break;
+    }
+
+    capMask++;    
+
+  } while (capMask < EFX_PHY_CAP_NTYPES );
+
+  pAdapter->supportedModesArraySz = index ;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 4, " no of supported modes = %d", index);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 5, "sfvmk_updateSupportedCap Enetered");
+}
+
 
 /************************************************************************
  * Device Driver Operations
@@ -663,27 +755,32 @@ sfvmk_AttachDevice(vmk_Device dev)
     SFVMK_ERR(pAdapter, "failed in sfvmk_txInit status %x", status);
     goto sfvmk_tx_init_fail;
   }
+  sfvmk_updateSupportedCap(pAdapter);
 
+  status = sfvmk_initUplinkData(pAdapter);
+  if (status != VMK_OK) {
+    goto sfvmk_init_uplink_data_fail;
+  }
 
-#if 0
-  status = sfvmk_CreateUplinkData(pAdapter);
-  if (status != VMK_OK)
-    goto sfvmk_creat_uplink_data_fail;
-#endif
+  efx_nic_fini(pAdapter->pNic);
+  
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     goto sfvmk_set_drvdata_fail;
   }
+  pAdapter->initState = SFVMK_REGISTERED;
   return VMK_OK;
+
 
 #ifdef SFVMK_WITH_UNIT_TESTS
   sfvmk_run_ut();
 #endif
 
   return VMK_OK;
+
 sfvmk_set_drvdata_fail:
-//  sfvmk_DestroyUplinkData(pAdapter);
-//sfvmk_creat_uplink_data_fail:
+  sfvmk_destroyUplinkData(pAdapter);
+sfvmk_init_uplink_data_fail:
   sfvmk_txFini(pAdapter);
 sfvmk_tx_init_fail:
   sfvmk_rxFini(pAdapter);
@@ -750,9 +847,63 @@ sfvmk_StartDevice(vmk_Device dev)
 static VMK_ReturnStatus
 sfvmk_ScanDevice(vmk_Device device)
 {
+  VMK_ReturnStatus status = 0;
+  sfvmk_adapter_t *pAdapter;
+  vmk_Name busName;
+  vmk_DeviceID *pDeviceID;
+  vmk_DeviceProps deviceProps;
+
+  //SFVMK_DEBUG(SFVMK_DBG_DRIVER, 5, "ScanDevice is invoked!");
   vmk_LogMessage("ScanDevice is invoked!");
+
+  status = vmk_DeviceGetAttachedDriverData(device, (vmk_AddrCookie *) &pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "vmk_DeviceGetAttachedDriverData failed, status %s",
+              vmk_StatusToString(status));
+    return status;
+  }
+
+  VMK_ASSERT_BUG(pAdapter != NULL, "NULL adapter ptr");
+
+  pDeviceID = &pAdapter->deviceID;
+  status = vmk_NameInitialize(&busName, VMK_LOGICAL_BUS_NAME);
+  VMK_ASSERT(status == VMK_OK);
+  status = vmk_BusTypeFind(&busName, &pDeviceID->busType);
+  VMK_ASSERT(status == VMK_OK);
+
+  status = vmk_LogicalCreateBusAddress(sfvmk_ModInfo.driverID,
+                     pAdapter->device,
+                     0,
+                     &pDeviceID->busAddress,
+                     &pDeviceID->busAddressLen);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "vmk_LogicalCreateBusAddress failed, status %s",
+                vmk_StatusToString(status));
+    return status;
+  }
+
+  pDeviceID->busIdentifier = VMK_UPLINK_DEVICE_IDENTIFIER;
+  pDeviceID->busIdentifierLen = sizeof(VMK_UPLINK_DEVICE_IDENTIFIER) - 1;
+
+  deviceProps.registeringDriver = sfvmk_ModInfo.driverID;
+  deviceProps.deviceID = pDeviceID;
+  deviceProps.deviceOps = &sfvmk_uplinkDeviceOps;
+  deviceProps.registeringDriverData.ptr = pAdapter;
+  deviceProps.registrationData.ptr = &pAdapter->regData;
+
+  status = vmk_DeviceRegister(&deviceProps, device, &pAdapter->uplinkDevice);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "Failed to register device: %s", 
+              vmk_StatusToString(status));
+    return status;
+  }
+
+  vmk_LogicalFreeBusAddress(sfvmk_ModInfo.driverID, pDeviceID->busAddress);
+  vmk_BusTypeRelease(pDeviceID->busType);
+
   return VMK_OK;
 }
+
 
 /************************************************************************
  * sfvmk_DetachDevice --
@@ -777,7 +928,7 @@ sfvmk_DetachDevice(vmk_Device dev)
   if (NULL != pAdapter)
   {
 
-    //sfvmk_destroyUplinkData(pAdapter);
+    sfvmk_destroyUplinkData(pAdapter);
     sfvmk_txFini(pAdapter);
     sfvmk_rxFini(pAdapter);
     sfvmk_evFini(pAdapter);
@@ -785,7 +936,7 @@ sfvmk_DetachDevice(vmk_Device dev)
 
     /* Tear down common code subsystems. */
     pNic = pAdapter->pNic;
-    efx_nic_fini(pNic);
+    //efx_nic_fini(pNic);
     efx_vpd_fini(pNic);
     efx_nvram_fini(pNic);
     efx_nic_unprobe(pNic);

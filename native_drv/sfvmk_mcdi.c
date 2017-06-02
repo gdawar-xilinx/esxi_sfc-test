@@ -61,13 +61,13 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
   vmk_uint32 delayUS;
   boolean_t aborted;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   delayTotal = 0;
   delayUS = SFVMK_MCDI_POLL_INTERVAL_MIN;
   pNic = pAdapter->pNic;
 
-  VMK_ASSERT_BUG((NULL == pNic), " null nic ptr");
+  VMK_ASSERT_BUG((NULL != pNic), " null nic ptr");
 
 
   do {
@@ -113,7 +113,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 
   pAdapter = (sfvmk_adapter_t *)arg;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pMcdi = &pAdapter->mcdi;
 
@@ -148,7 +148,7 @@ sfvmk_mcdiEvCpl(void *arg)
   sfvmk_mcdi_t *pMcdi;
 
   pAdapter= (sfvmk_adapter_t *)arg;
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pMcdi = &pAdapter->mcdi;
 
@@ -179,7 +179,7 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
   vmk_Device dev;
 
   pAdapter= (sfvmk_adapter_t *)arg;
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   dev = pAdapter->device;
 
@@ -216,7 +216,7 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   sfvmk_mcdi_t *pMcdi;
   VMK_ReturnStatus status = VMK_OK;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), "null adapter ptr");
 
   pNic = pAdapter->pNic;
   pMcdi = &pAdapter->mcdi;
@@ -285,10 +285,10 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
   efx_mcdi_transport_t *pEmt;
   efsys_mem_t *pEsm;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pNic = pAdapter->pNic;
-  VMK_ASSERT_BUG((NULL == pNic), " null NIC ptr");
+  VMK_ASSERT_BUG((NULL != pNic), " null NIC ptr");
 
   pMcdi = &pAdapter->mcdi;
   pEmt = &pMcdi->transport;

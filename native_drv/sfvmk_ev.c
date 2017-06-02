@@ -21,6 +21,211 @@ static int
 sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 
 
+
+
+static boolean_t sfvmk_evInitialized(void *arg);
+static boolean_t sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
+           uint16_t flags);
+
+static boolean_t sfvmk_evTX(void *arg, uint32_t label, uint32_t id);
+static boolean_t sfvmk_evException(void *arg, uint32_t code, uint32_t data);
+static boolean_t sfvmk_evRxqFlushDone(void *arg, uint32_t rxq_index);
+static boolean_t sfvmk_evRxqFlushFailed(void *arg, uint32_t rxq_index);
+static boolean_t sfvmk_evTxqFlushDone(void *arg, uint32_t txq_index);
+static boolean_t sfvmk_evSoftware(void *arg, uint16_t magic);
+static boolean_t sfvmk_evSram(void *arg, uint32_t code);
+static boolean_t sfvmk_evTimer(void *arg, uint32_t index);
+static boolean_t sfvmk_evWakeup(void *arg, uint32_t index);
+static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t link_mode);
+
+static const efx_ev_callbacks_t sfvmk_evCallbacks = {
+  .eec_initialized  = sfvmk_evInitialized,
+  .eec_rx    = sfvmk_evRX,
+  .eec_tx    = sfvmk_evTX,
+  .eec_exception   = sfvmk_evException,
+  .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
+  .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
+  .eec_txq_flush_done = sfvmk_evTxqFlushDone,
+  .eec_software  = sfvmk_evSoftware,
+  .eec_sram  = sfvmk_evSram,
+  .eec_wake_up   = sfvmk_evWakeup,
+  .eec_timer   = sfvmk_evTimer,
+  .eec_link_change  = sfvmk_evLinkChange,
+};
+
+
+
+
+static boolean_t
+sfvmk_evInitialized(void *arg)
+{
+  sfvmk_evq_t *pEvq;
+
+  pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_EVQ_LOCK_ASSERT_OWNED(pEvq);
+
+  /* Init done events may be duplicated on 7xxx */
+  //  VMK_ASSERT(pEvq->initState == SFVMK_EVQ_STARTING ||
+  //   pEvq->initState == SFVMK_EVQ_STARTED);
+
+  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_QUEUE, 5, "eventQ is initialized");
+  pEvq->initState = SFVMK_EVQ_STARTED;
+
+  return (0);
+}
+
+
+static boolean_t
+sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
+{
+  sfvmk_evq_t *pEvq;
+  sfvmk_adapter_t *pAdapter;
+
+  pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_EVQ_LOCK_ASSERT_OWNED(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, 5, "Link change is detected");
+  sfvmk_macLinkUpdate(pAdapter, linkMode);
+
+  return (0);
+}
+
+static boolean_t
+sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
+   uint16_t flags)
+{
+  return  B_FALSE ;
+}
+
+static boolean_t
+sfvmk_evException(void *arg, uint32_t code, uint32_t data)
+{
+  sfvmk_evq_t *pEvq;
+  sfvmk_adapter_t *pAdapter;
+
+  pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_EVQ_LOCK_ASSERT_OWNED(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+
+  pEvq->exception = B_TRUE;
+
+  if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, 5, "got Exception %x", code);
+  }
+
+  return (B_FALSE);
+}
+
+static boolean_t
+sfvmk_evRxqFlushDone(void *arg, uint32_t rxq_index)
+{
+  return (B_FALSE);
+}
+
+static boolean_t
+sfvmk_evRxqFlushFailed(void *arg, uint32_t rxq_index)
+{
+  return (B_FALSE);
+}
+static boolean_t
+sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
+{
+  return B_FALSE;
+}
+
+static boolean_t
+sfvmk_evTxqFlushDone(void *arg, uint32_t txq_index)
+{
+  return (B_FALSE);
+}
+
+static boolean_t
+sfvmk_evSoftware(void *arg, uint16_t magic)
+{
+  return (B_FALSE);
+}
+
+
+static boolean_t
+sfvmk_evSram(void *arg, uint32_t code)
+{
+  return (B_FALSE);
+}
+static boolean_t
+sfvmk_evTimer(void *arg, uint32_t index)
+{
+  (void)arg;
+  (void)index;
+
+  return (B_FALSE);
+}
+
+static boolean_t
+sfvmk_evWakeup(void *arg, uint32_t index)
+{
+  (void)arg;
+  (void)index;
+
+  return (B_FALSE);
+}
+
+
+void sfvmk_evqComplete(sfvmk_evq_t *pEvq, boolean_t eop)
+{
+  return ;
+}
+
+int
+sfvmk_evqPoll(sfvmk_evq_t *pEvq)
+{
+
+  int rc;
+
+  SFVMK_EVQ_LOCK(pEvq);
+
+  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_QUEUE, 5, "enetered evqPoll");
+
+  if ((pEvq->initState != SFVMK_EVQ_STARTING &&
+        pEvq->initState != SFVMK_EVQ_STARTED)) {
+    rc = EINVAL;
+    goto sfvmk_fail;
+  }
+
+  //  VMK_ASSERT(pEvq->rxDone == 0);
+  //  VMK_ASSERT(pEvq->txDone == 0);
+  //  VMK_ASSERT(pEvq->txq == NULL);
+  //  VMK_ASSERT(pEvq->txqs == &pEvq->txq);
+
+  /* Poll the queue */
+
+  efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
+
+  pEvq->rxDone = 0;
+  pEvq->txDone = 0;
+
+  /* Perform any pending completion processing */
+  sfvmk_evqComplete(pEvq, B_TRUE);
+
+  /* Re-prime the event queue for interrupts */
+  if ((rc = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr)) != 0)
+    goto sfvmk_fail;
+
+
+  SFVMK_EVQ_UNLOCK(pEvq);
+
+  return (0);
+
+sfvmk_fail:
+  SFVMK_EVQ_UNLOCK(pEvq);
+  return (rc);
+}
+
+
+
+
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_roundupPowOfTwo --
@@ -56,11 +261,11 @@ sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   efsys_mem_t *pEvqMem;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pEvq = pAdapter->pEvq[qIndex];
 
-  VMK_ASSERT_BUG((NULL == pEvq), " null event queue ptr");
+  VMK_ASSERT_BUG((NULL != pEvq), " null event queue ptr");
 
   pEvqMem = &pEvq->mem;
 
@@ -102,7 +307,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   efsys_mem_t *pEvqMem;
   VMK_ReturnStatus status;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   /* qIndex must be less than SFVMK_RX_SCALE_MAX */
   VMK_ASSERT_BUG(qIndex <  SFVMK_RX_SCALE_MAX, "qIndex >= SFVMK_RX_SCALE_MAX" );
@@ -184,7 +389,7 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
   int qIndex;
   VMK_ReturnStatus status = VMK_OK;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pIntr = &pAdapter->intr;
   pAdapter->evqCount = pIntr->numIntrAlloc;
@@ -236,7 +441,7 @@ sfvmk_evFini(sfvmk_adapter_t *pAdapter)
   sfvmk_intr_t *pIntr;
   int qIndex;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pIntr = &pAdapter->intr;
 
@@ -268,10 +473,10 @@ sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_evq_t *pEvq;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pEvq = pAdapter->pEvq[qIndex];
-  VMK_ASSERT_BUG((NULL == pEvq), " null event queue ptr");
+  VMK_ASSERT_BUG((NULL != pEvq), " null event queue ptr");
 
 
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
@@ -304,7 +509,7 @@ sfvmk_evStop(sfvmk_adapter_t *pAdapter)
   efx_nic_t *pNic;
   int qIndex;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pIntr = &pAdapter->intr;
   pNic = pAdapter->pNic;
@@ -340,7 +545,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   int count;
   int rc;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
   pEvq = pAdapter->pEvq[qIndex];
   pEvqMem = &pEvq->mem;
@@ -382,7 +587,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     if (pEvq->initState == SFVMK_EVQ_STARTED)
       goto done;
 
-  } while (++count < 20);
+  } while (++count < 60);
 
   SFVMK_ERR(pAdapter, "Event queue[%d] is not initialized", qIndex);
   rc = ETIMEDOUT;
@@ -424,8 +629,9 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
   int qIndex;
   int rc;
 
-  VMK_ASSERT_BUG((NULL == pAdapter), " null adapter ptr");
+  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, 5, "entered sfvmk_evStart");
   pIntr = &pAdapter->intr;
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_STARTED,

@@ -1,4 +1,3 @@
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
@@ -7,7 +6,6 @@
  ************************************************************************/
 
 #include "sfvmk_driver.h"
-#include "sfvmk_ev.h"
 
 #define SFVMK_REFILL_BATCH  64
 
@@ -40,7 +38,7 @@ sfvmk_rxqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   efsys_mem_t *pRxqMem;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   VMK_ASSERT_BUG(qIndex < pAdapter->rxqCount, " invalid qindex");
 
@@ -109,7 +107,7 @@ sfvmk_rxqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_rxq_t *pRxq;
   efsys_mem_t *pRxqMem;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   pRxq = pAdapter->pRxq[qIndex];
 
@@ -144,7 +142,7 @@ int sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
   int qIndex;
   VMK_ReturnStatus status;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
 
   pIntr = &pAdapter->intr;
@@ -191,7 +189,7 @@ sfvmk_rxFini(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   qIndex = pAdapter->rxqCount;
   while (--qIndex >= 0)
@@ -373,7 +371,7 @@ sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   vmk_uint32 count;
   vmk_uint32 retry = 3;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
 
@@ -454,7 +452,8 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
   int qIndex;
   int rc;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, 5, "entered sfvmk_rxStart");
 
   pIntr = &pAdapter->intr;
 
@@ -540,7 +539,7 @@ sfvmk_rxStop(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-	VMK_ASSERT_BUG(NULL == pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
   efx_mac_filter_default_rxq_clear(pAdapter->pNic);
 

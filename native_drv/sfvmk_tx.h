@@ -101,7 +101,7 @@ typedef struct sfvmk_txq {
 
 	/* The last VLAN TCI seen on the queue if FW-assisted tagging is
 	   used */
-//	uint16_t			hw_vlan_tci;
+	uint16_t			hw_vlan_tci;
 
 	/* Statistics */
 //	unsigned long			tso_bursts;
@@ -130,4 +130,5 @@ int sfvmk_tx_start(sfvmk_adapter *adapter);
 void sfvmk_tx_qlist_post(struct sfvmk_txq *txq);
 void sfvmk_tx_qcomplete(struct sfvmk_txq *txq, struct sfvmk_evq *evq);
 void sfvmk_queuedPkt(sfvmk_adapter *adapter,  sfvmk_txq *txq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
+VMK_ReturnStatus sfvmk_insert_vlan_hdr(vmk_PktHandle **ppPkt, vmk_uint16 vlanTag);
 #endif

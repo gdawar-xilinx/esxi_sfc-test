@@ -152,7 +152,7 @@ sfvmk_tx_qinit(sfvmk_adapter *adapter, unsigned int txq_index,
 	txq->evq_index = evq_index;
 	txq->txq_index = txq_index;
 	txq->init_state = SFVMK_TXQ_INITIALIZED;
-//	txq->hw_vlan_tci = 0;
+	txq->hw_vlan_tci = 0;
 
 	return (0);
 
@@ -312,6 +312,7 @@ sfvmk_tx_qstart(sfvmk_adapter *adapter, unsigned int index)
   txq->max_pkt_desc = sfvmk_tx_max_pkt_desc(adapter, txq->type,
               tso_fw_assisted);
   */
+  txq->hw_vlan_tci = 0;
   SFVMK_TXQ_UNLOCK(txq);
 
   return (0);
@@ -441,6 +442,8 @@ sfvmk_next_stmp(struct sfvmk_txq *txq, struct sfvmk_tx_mapping **pstmp)
 		*pstmp = &txq->stmp[0];
 	else
 		(*pstmp)++;
+
+	vmk_LogMessage("stmp id: %ld", *pstmp - &txq->stmp[0]);
 }
 
 
@@ -522,6 +525,100 @@ sfvmk_tx_qcomplete(struct sfvmk_txq *txq, struct sfvmk_evq *evq)
 	}
 }
 
+VMK_ReturnStatus sfvmk_insert_vlan_hdr(vmk_PktHandle **ppPkt, vmk_uint16 vlanTag)
+{
+   VMK_ReturnStatus ret=VMK_OK;
+   vmk_uint8 vlanHdrSize=4;
+   vmk_PktHandle *pkt = *ppPkt;
+   vmk_uint16 *ptr = NULL;
+   vmk_uint8 *frameVA=NULL;
+
+   /*
+    *  See if we have enough headroom in the packet to insert vlan hdr
+    */
+   ret = vmk_PktPullHeadroom(pkt, vlanHdrSize);
+   if (ret != VMK_OK) {
+      vmk_LogMessage("vmk_PktPullHeadroom failed: %d", ret);
+      vmk_PktHandle *pNewPkt = NULL;
+
+      ret = vmk_PktPartialCopyWithHeadroom(pkt, SFVMK_VLAN_HDR_START_OFFSET,
+                                              vlanHdrSize, &pNewPkt);
+      if (VMK_UNLIKELY(ret != VMK_OK)) {
+         vmk_LogMessage("vmk_PktPartialCopyWithHeadroom failed: %d", ret);
+       	 return ret;                 
+      }
+
+      ret = vmk_PktPullHeadroom(pNewPkt, vlanHdrSize);
+      if (VMK_UNLIKELY(ret != VMK_OK)) {
+         vmk_LogMessage("vmk_PktPullHeadroom failed: %d",ret);
+         vmk_PktRelease(pNewPkt);
+	 return ret;
+      }
+
+      /* TODO: We don't release the original packet ?? */
+      *ppPkt = pkt = pNewPkt;
+   }
+
+   frameVA = (vmk_uint8 *) vmk_PktFrameMappedPointerGet(pkt);
+   vmk_LogMessage("pkt VA: %p, frame len: %d", frameVA, vmk_PktFrameLenGet(pkt));
+
+   /* pull the mac headers to create space for vlan hdr */
+   vmk_Memmove(frameVA, (frameVA + vlanHdrSize), SFVMK_VLAN_HDR_START_OFFSET);
+
+   frameVA += SFVMK_VLAN_HDR_START_OFFSET;
+
+   ptr = (vmk_uint16 *)frameVA;
+   *ptr++ = bswap16(VMK_ETH_TYPE_VLAN); 
+   *ptr = bswap16(vlanTag);
+   frameVA += vlanHdrSize;
+
+   /* Invalidate cache entries */
+   vmk_PktHeaderInvalidateAll(pkt);
+
+   return ret;
+}
+
+static int sfvmk_tx_maybe_insert_tag(struct sfvmk_txq *txq, vmk_PktHandle **ppPkt, vmk_ByteCountSmall *pPktLen)
+{
+	uint16_t thisTag=0;
+	vmk_VlanID vlanId;
+	vmk_VlanPriority vlanPrio;
+	vmk_PktHandle *pkt = *ppPkt;
+
+	if(vmk_PktMustVlanTag(pkt)) {
+		const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(txq->adapter->enp);
+		vlanId = vmk_PktVlanIDGet(pkt);
+		vlanPrio = vmk_PktPriorityGet(pkt);
+
+		thisTag = (vlanId & SFVMK_VLAN_VID_MASK) | (vlanPrio << SFVMK_VLAN_PRIO_SHIFT);
+
+		vmk_LogMessage("vlan_id: %d, prio: %d, tci: %d, hw_vlan_tci: %d", 
+				vlanId, vlanPrio, thisTag, txq->hw_vlan_tci);
+
+
+		if(pNicCfg->enc_hw_tx_insert_vlan_enabled) {
+			vmk_LogMessage("FW assisted tag insertion.."); 
+			if (thisTag == txq->hw_vlan_tci)
+				return (0);
+
+			efx_tx_qdesc_vlantci_create(txq->common,
+					bswap16(thisTag),
+					&txq->pend_desc[0]);
+			txq->n_pend_desc = 1;
+			txq->hw_vlan_tci = thisTag;
+			return (1);
+		}
+		else {
+			vmk_LogMessage("software implementation for vlan tag insertion");
+			sfvmk_insert_vlan_hdr(&pkt, thisTag);
+			*ppPkt = pkt;
+			*pPktLen = *pPktLen+4;
+			return 0;
+		}
+	}
+	return 0;
+}
+
 void sfvmk_MakeTxDescriptor(sfvmk_adapter *adapter,sfvmk_txq *txq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
 {
    int i=0;
@@ -534,8 +631,15 @@ void sfvmk_MakeTxDescriptor(sfvmk_adapter *adapter,sfvmk_txq *txq,vmk_PktHandle 
    vmk_SgElem mapper_in, mapper_out;
    vmk_DMAMapErrorInfo dmaMapErr;
    vmk_ByteCountSmall frag_length;
-   struct sfvmk_tx_mapping *stmp=NULL;
-   int start_id = (txq->added) & txq->ptr_mask;
+   int start_id = id = (txq->added) & txq->ptr_mask;
+   struct sfvmk_tx_mapping *stmp = &txq->stmp[id];
+
+   /* VLAN handling */
+   vlan_tagged = sfvmk_tx_maybe_insert_tag(txq, &pkt, &pktLen);
+   if (vlan_tagged) {
+	   sfvmk_next_stmp(txq, &stmp);
+   }
+
 
    num_frags = vmk_PktSgArrayGet(pkt)->numElems;
    vmk_LogMessage("num frags: %d", num_frags);
@@ -573,9 +677,9 @@ void sfvmk_MakeTxDescriptor(sfvmk_adapter *adapter,sfvmk_txq *txq,vmk_PktHandle 
 		mapper_in.addr, mapper_in.length, mapper_out.addr, mapper_out.length);
 
       /* update the list of in-flight packets */
-      id = (txq->added + i) & txq->ptr_mask;
-      vmk_LogMessage("added: %d mask: %x, id: %d", txq->added, txq->ptr_mask, id);
-      stmp = &txq->stmp[id];
+      id = (txq->added + i + vlan_tagged) & txq->ptr_mask;
+      vmk_LogMessage("added: %d stmp: %p, id: %d, &txq->stmp[id]: %p", txq->added, stmp, id, &txq->stmp[id]);
+      //stmp = &txq->stmp[id];
       vmk_Memcpy(&stmp->sgelem, &mapper_out, sizeof(vmk_SgElem));
       stmp->pkt=NULL;
 
@@ -634,9 +738,13 @@ void sfvmk_queuedPkt(sfvmk_adapter *adapter,  sfvmk_txq *txq, vmk_PktHandle *pkt
 	}
    }
 
-   /* TODO: VLAN handling */
    /* TODO: TSO handling */
 
+   if(!txq->common)
+   {
+	   vmk_LogMessage("sfvmk_queuedPkt: txq common not initialized yet"); 
+	   return;
+   }
    sfvmk_MakeTxDescriptor(adapter, txq, pkt, pktLen);
 
    if (txq->blocked)

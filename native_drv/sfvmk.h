@@ -206,6 +206,14 @@ sfvmk_MemFree(void *memPtr)
 #define sfvmk_CPUToLE32(x)      ((uint32_t)(x))
 #define sfvmk_CPUToLE64(x)      ((uint64_t)(x))
 
+/* VLAN handling related macros */
+#define SFVMK_VLAN_HDR_START_OFFSET	12
+#define SFVMK_ETH_TYPE_SIZE		2
+
+#define SFVMK_VLAN_PRIO_SHIFT 13
+#define SFVMK_VLAN_PRIO_MASK  0xe000
+#define SFVMK_VLAN_VID_MASK   0x0fff
+
 //extern VMK_ReturnStatus sfvmk_(const char *lckName, vmk_LockRank rank, vmk_Lock *lock);
 extern VMK_ReturnStatus sfvmk_MutexInit(const char *lckName,vmk_LockRank rank, vmk_Mutex *mutex);
 extern void sfvmk_MutexDestroy(vmk_Mutex mutex);

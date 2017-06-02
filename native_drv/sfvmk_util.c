@@ -628,4 +628,17 @@ sfvmk_setup_Interrupts(sfvmk_adapter *adapter)
 }
 
 
+__inline uint16_t bswap16(uint16_t int16)
+{
+	const unsigned char *from;
+	unsigned char *to;
+	uint16_t t;
 
+	from = (const unsigned char *) &int16;
+	to = (unsigned char *) &t;
+
+	to[0] = from[1];
+	to[1] = from[0];
+
+	return (t);
+}

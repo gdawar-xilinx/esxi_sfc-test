@@ -330,26 +330,89 @@ sfvmk_rx_qfill(sfvmk_rxq *rxq, unsigned int  num_bufs , boolean_t retrying)
   #endif 
    return;
 }
+
+void sfvmk_strip_vlan_hdr(vmk_PktHandle *pkt)
+{
+	uint8_t *ptr=NULL;
+	uint16_t thisTag=0;
+	uint16_t *pTag=NULL;
+	vmk_VlanID vlanId;
+	vmk_VlanPriority vlanPrio;
+        vmk_uint8 *frameVA;
+   	VMK_ReturnStatus ret;
+
+	vmk_LogMessage("Mapped len: %d, frame len: %d", vmk_PktFrameMappedLenGet(pkt), vmk_PktFrameLenGet(pkt));
+
+	frameVA = (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pkt);
+	ptr = frameVA + SFVMK_VLAN_HDR_START_OFFSET;
+	pTag = (uint16_t *)ptr;
+#ifdef DEBUG_VLAN
+	vmk_LogMessage("frameVA: %p, tci: %x", frameVA, bswap16(*pTag));
+
+	if(bswap16(*pTag) == VMK_ETH_TYPE_VLAN)
+		vmk_LogMessage("check passed");
+#endif
+	ptr += SFVMK_ETH_TYPE_SIZE;
+
+	/*fetch the TCI now */
+	thisTag = *(uint16_t *)ptr;
+	vlanId = bswap16(thisTag & SFVMK_VLAN_VID_MASK);
+	vlanPrio = (thisTag & SFVMK_VLAN_PRIO_MASK) >> SFVMK_VLAN_PRIO_SHIFT;
+
+	vmk_LogMessage("vlanid: %d , vlanPrio: %d", vlanId, vlanPrio);
+	ret = vmk_PktVlanIDSet(pkt, vlanId);
+	VMK_ASSERT(ret == VMK_OK);
+	ret = vmk_PktPrioritySet(pkt, vlanPrio);
+	VMK_ASSERT(ret == VMK_OK);
+
+	/* strip off the vlan header */
+	vmk_Memmove(frameVA+4, frameVA, SFVMK_VLAN_HDR_START_OFFSET);
+	ret = vmk_PktPushHeadroom(pkt, 4);
+	if(ret != VMK_OK) {
+		/*TODO: Handle push head room failure */
+		vmk_LogMessage("vmk_PktPushHeadroom failed: %d", ret);
+	}
+
+#ifdef DEBUG_VLAN
+	frameVA = (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pkt);
+	vmk_LogMessage("frameVA: %p", frameVA);
+#endif
+}
+
 void sfvmk_rx_deliver(sfvmk_adapter *adapter, struct sfvmk_rx_sw_desc *rx_desc, unsigned int qindex)
 {
 	vmk_PktHandle *pkt= rx_desc->pkt;
-        vmk_VA frameVA  ; 
+        vmk_uint8 *frameVA  ;
+        vmk_uint8 vlanHdrSize=0;
 	int flags = rx_desc->flags;
 	
 	/* Convert checksum flags */
 	if (flags & EFX_CKSUM_TCPUDP)
 		vmk_PktSetCsumVfd(pkt);
 
-	vmk_PktSetCsumVfd(pkt);
+	if(rx_desc->flags & (EFX_PKT_VLAN_TAGGED  | EFX_CHECK_VLAN)) {
+		/* Initialize the pkt len for vmk_PktPushHeadroom to work */
+		vmk_PktFrameLenSet(pkt, rx_desc->size);//rx_desc->size - adapter->rx_prefix_size);
 
-	/* pad the pkt if it is shorter than 60 bytes */
-	if (rx_desc->size < 60) {
-		frameVA = vmk_PktFrameMappedPointerGet(pkt);
-		vmk_Memset((vmk_uint8 *)frameVA + rx_desc->size, 0, 60-rx_desc->size);
+		sfvmk_strip_vlan_hdr(pkt);
+		vlanHdrSize=4;
 	}
 
-	vmk_PktFrameLenSet(pkt, rx_desc->size);//rx_desc->size - adapter->rx_prefix_size);
-	vmk_LogMessage("packet size %d\n", rx_desc->size);
+	vmk_LogMessage("rx_desc->flags: %x, rx_desc->size: %d , vlanHdrSize: %d", rx_desc->flags, rx_desc->size, vlanHdrSize);
+	/* pad the pkt if it is shorter than 60 bytes */
+	if (rx_desc->size - vlanHdrSize < 60) {
+		frameVA = (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pkt);
+		vmk_LogMessage("frameVA: %p", frameVA);
+		vmk_Memset((vmk_uint8 *)frameVA + rx_desc->size - vlanHdrSize, 0, 
+				60- (rx_desc->size - vlanHdrSize));
+		vmk_LogMessage("short pkt size: %d , ptr: %p\n", rx_desc->flags, frameVA);
+		vmk_PktFrameLenSet(pkt, rx_desc->size);//rx_desc->size - adapter->rx_prefix_size);
+	}
+	else
+		vmk_PktFrameLenSet(pkt, rx_desc->size - vlanHdrSize);//rx_desc->size - adapter->rx_prefix_size);
+
+	vmk_PktSetCsumVfd(pkt);
+
 	vmk_NetPollRxPktQueue(adapter->nicPoll[qindex].netPoll, pkt);
 
 	rx_desc->flags = EFX_DISCARD;
@@ -439,6 +502,7 @@ sfvmk_rx_qcomplete(sfvmk_rxq *rxq, boolean_t eop)
        //   ("Rx descriptor with both IPv4 and IPv6 flags"));
       goto discard;
     }
+
 
     /* Pass packet up the stack or into LRO (pipelined) */
     if (prev != NULL) {

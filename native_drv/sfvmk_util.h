@@ -37,6 +37,8 @@ sfvmk_CreateLock(const char *lockName,
 extern void
 sfvmk_DestroyLock(vmk_Lock lock);
 
+extern uint16_t bswap16(uint16_t int16);
+
 #define KASSERT(expression, msg, ...)	
 #if 0
 //TODO

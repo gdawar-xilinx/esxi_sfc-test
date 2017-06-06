@@ -173,8 +173,25 @@ static vmk_UplinkCoalesceParamsOps sfvmkCoalesceParamsOps = {
  sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
 													vmk_UplinkCoalesceParams *params)
  {
-   vmk_LogMessage( "calling sfvmk_coalesceParamsSet\n");
-   return VMK_NOT_SUPPORTED;
+  
+   sfvmk_adapter *pAdapter = (sfvmk_adapter *)cookie.ptr;
+   vmk_UplinkSharedQueueData *pQueueData;
+  
+   VMK_ASSERT(params != NULL);
+   VMK_ASSERT(pAdapter != NULL);
+  
+   pQueueData = pAdapter->rx_obj[0].qData;
+  
+   VMK_ASSERT(pQueueData != NULL);
+  
+   vmk_LogMessage( "calling sfvmk_coalesceParamsGet\n");
+  
+   vmk_Memset(params, 0, sizeof(vmk_UplinkCoalesceParams));
+  
+   params->txUsecs = params->rxUsecs = pQueueData->coalesceParams.txUsecs;
+  
+  return VMK_OK;
+  
 
 }
 
@@ -183,8 +200,48 @@ static VMK_ReturnStatus
 sfvmk_coalesceParamsGet(vmk_AddrCookie cookie,
 			vmk_UplinkCoalesceParams *params)
 {
-   vmk_LogMessage( "calling sfvmk_coalesceParamsGet\n");
-   return VMK_NOT_SUPPORTED;
+	sfvmk_adapter *pAdapter = (sfvmk_adapter *)cookie.ptr;
+	vmk_UplinkSharedQueueData *pQueueData;
+	vmk_uint32 uSecs=0, i=0;
+	
+	VMK_ASSERT(params != NULL);
+	VMK_ASSERT(pAdapter != NULL);
+	
+	pQueueData = pAdapter->rx_obj[0].qData;
+	
+	VMK_ASSERT(pQueueData != NULL);
+	
+	vmk_LogMessage( "calling sfvmk_coalesceParamsSet\n");
+	
+	if(!(params->rxUsecs) && !(params->txUsecs))
+	 return VMK_BAD_PARAM;
+	else if (params->rxUsecs && !(params->txUsecs))
+	  uSecs = params->rxUsecs;
+	else
+	  uSecs = params->txUsecs;
+	
+	(void)efx_ev_qmoderate(pAdapter->evq[0]->common, uSecs);
+	
+	pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+	
+	/* Once gloabl coalesce params are set, set to every TX/RX queues */
+	SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+	
+	/* RX queues */
+	pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+	for (i=0; i < pAdapter->queueInfo.maxRxQueues; i++) {
+	  vmk_Memcpy(&pQueueData[i].coalesceParams, params, sizeof(*params));
+	}
+	
+	/* TX queues */
+	pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+	for (i=0; i < pAdapter->queueInfo.maxTxQueues; i++) {
+		   vmk_Memcpy(&pQueueData[i].coalesceParams, params, sizeof(*params));
+	}
+	
+	SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+	
+	return VMK_OK;
 
 }
 

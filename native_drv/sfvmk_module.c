@@ -21,30 +21,30 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
 static void
 sfvmk_ModInfoCleanup(void)
 {
-   if (sfvmk_ModInfo.driverID != NULL) {
-      sfvmk_DriverUnregister();
-      sfvmk_ModInfo.driverID = NULL;
-   }
-   if (sfvmk_ModInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
-      vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
-      sfvmk_ModInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
-   }
-   if (sfvmk_ModInfo.memPoolID != VMK_MEMPOOL_INVALID) {
-      vmk_MemPoolDestroy(sfvmk_ModInfo.memPoolID);
-      sfvmk_ModInfo.memPoolID = VMK_MEMPOOL_INVALID;
-   }
-   if (sfvmk_ModInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
-      vmk_LogUnregister(sfvmk_ModInfo.logThrottledID);
-      sfvmk_ModInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
-   }
-   if (sfvmk_ModInfo.logID != VMK_INVALID_LOG_HANDLE) {
-      vmk_LogUnregister(sfvmk_ModInfo.logID);
-      sfvmk_ModInfo.logID = VMK_INVALID_LOG_HANDLE;
-   }
-   if (sfvmk_ModInfo.heapID != VMK_INVALID_HEAP_ID) {
-      vmk_HeapDestroy(sfvmk_ModInfo.heapID);
-      sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
-   }
+  if (sfvmk_ModInfo.driverID != NULL) {
+    sfvmk_driverUnregister();
+    sfvmk_ModInfo.driverID = NULL;
+  }
+  if (sfvmk_ModInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
+    vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
+    sfvmk_ModInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
+  }
+  if (sfvmk_ModInfo.memPoolID != VMK_MEMPOOL_INVALID) {
+    vmk_MemPoolDestroy(sfvmk_ModInfo.memPoolID);
+    sfvmk_ModInfo.memPoolID = VMK_MEMPOOL_INVALID;
+  }
+  if (sfvmk_ModInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
+    vmk_LogUnregister(sfvmk_ModInfo.logThrottledID);
+    sfvmk_ModInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
+  }
+  if (sfvmk_ModInfo.logID != VMK_INVALID_LOG_HANDLE) {
+    vmk_LogUnregister(sfvmk_ModInfo.logID);
+    sfvmk_ModInfo.logID = VMK_INVALID_LOG_HANDLE;
+  }
+  if (sfvmk_ModInfo.heapID != VMK_INVALID_HEAP_ID) {
+    vmk_HeapDestroy(sfvmk_ModInfo.heapID);
+    sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
+  }
 }
 
 /************************************************************************
@@ -86,7 +86,7 @@ init_module(void)
                                      sizeof(allocDesc) / sizeof(allocDesc[0]),
                                      &byteCount);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to determine heap max size (%x)", status);
+     SFVMK_ERROR("Failed to determine heap max size (%x)", status);
      goto err;
   }
   heapProps.type = VMK_HEAP_TYPE_SIMPLE;
@@ -97,7 +97,7 @@ init_module(void)
   heapProps.creationTimeoutMS = VMK_TIMEOUT_UNLIMITED_MS;
   status = vmk_HeapCreate(&heapProps, &sfvmk_ModInfo.heapID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create heap (%x) for sfc_native driver", status);
+     SFVMK_ERROR("Failed to create heap (%x) for sfc_native driver", status);
      goto err;
   }
 
@@ -109,7 +109,7 @@ init_module(void)
   logProps.throttle = NULL;
   status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register log component (%x)", status);
+     SFVMK_ERROR("Failed to register log component (%x)", status);
      goto err;
   }
 
@@ -118,7 +118,7 @@ init_module(void)
   vmk_NameInitialize(&logProps.name, SFC_DRIVER_NAME"_throttled");
   status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logThrottledID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register throttled log component (%x)", status);
+     SFVMK_ERROR("Failed to register throttled log component (%x)", status);
      goto err;
   }
 
@@ -128,7 +128,7 @@ init_module(void)
                                  &sfvmk_ModInfo.driverName,
                                  &sfvmk_ModInfo.lockDomain);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create lock domain (%x)", status);
+     SFVMK_ERROR("Failed to create lock domain (%x)", status);
      goto err;
   }
 
@@ -144,12 +144,12 @@ init_module(void)
 
   status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_ModInfo.memPoolID);
   if (status != VMK_OK) {
-    vmk_WarningMessage("Failed to create mempool (%x)", status);
+    SFVMK_ERROR("Failed to create mempool (%x)", status);
     goto err;
   }
 
   /* Register Driver with with device layer */
-  status = sfvmk_DriverRegister();
+  status = sfvmk_driverRegister();
 
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
@@ -157,7 +157,7 @@ init_module(void)
     vmk_LogMessage("Initialization of SFC driver failed (%x)", status);
   }
 
-  err:
+err:
   if (status != VMK_OK) {
     sfvmk_ModInfoCleanup();
   }
@@ -180,7 +180,8 @@ init_module(void)
 void
 cleanup_module(void)
 {
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+              "Exit: -- Solarflare Native Driver -- ");
   sfvmk_ModInfoCleanup();
 
-  vmk_LogMessage("Exit: -- Solarflare Native Driver -- ");
 }

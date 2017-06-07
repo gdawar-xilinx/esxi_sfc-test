@@ -4,49 +4,81 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
 #include "sfvmk_driver.h"
-/* ring size for TX and RX */
-static const int sfvmk_txRingEntries = SFVMK_NDESCS;
-static const int sfvmk_rxRingEntries = SFVMK_NDESCS;
 
-static VMK_ReturnStatus sfvmk_AttachDevice(vmk_Device device);
-static VMK_ReturnStatus sfvmk_DetachDevice(vmk_Device device);
-static VMK_ReturnStatus sfvmk_ScanDevice(vmk_Device device);
-static VMK_ReturnStatus sfvmk_ShutdownDevice(vmk_Device device);
-static VMK_ReturnStatus sfvmk_StartDevice(vmk_Device device);
-static void sfvmk_ForgetDevice(vmk_Device device);
+/* Initialize default value of module parameters */
+#define PARAMS(param, defval, type1, type2, min, max, desc)     \
+    .param = defval,
+
+sfvmk_modParams_t modParams = {
+  SFVMK_MOD_PARAMS_LIST
+};
+#undef PARAMS
+
+/* Define module parameters with vmkernel */
+#define PARAMS(param, defval, type1, type2, min, max, desc)     \
+  VMK_MODPARAM_NAMED( param,                                    \
+                      modParams.param,                          \
+                      type2,                                    \
+                      desc);
+
+SFVMK_MOD_PARAMS_LIST
+#undef PARAMS
+
+
+/* ring size for TX and RX */
+int sfvmk_txRingEntries = SFVMK_NDESCS;
+int sfvmk_rxRingEntries = SFVMK_NDESCS;
+
+
+#ifdef SFVMK_WITH_UNIT_TESTS
+extern void sfvmk_run_ut();
+#endif
+
+
+/* driver callback functions */
+static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_detachDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_scanDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_shutDownDevice(vmk_Device device);
+static VMK_ReturnStatus sfvmk_startDevice(vmk_Device device);
+static void sfvmk_forgetDevice(vmk_Device device);
 
 /* helper functions*/
 static VMK_ReturnStatus sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_createDMAEngine(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_mapBAR(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter);
-static void sfvmk_destroyDMAEngine(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
-static void sfvmk_freeInterrupts(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus getPciDevice(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_removeUplinkDevice(vmk_Device sfvmk_device);
+static void sfvmk_freeInterrupts(sfvmk_adapter_t *pAdapter);
+static void sfvmk_destroyDMAEngine(sfvmk_adapter_t *pAdapter);
 
 
 static vmk_DeviceOps sfvmk_uplinkDeviceOps = {
   .removeDevice = sfvmk_removeUplinkDevice
 };
 
-static VMK_ReturnStatus 
-sfvmk_removeUplinkDevice(vmk_Device sfvmk_device)
+/************************************************************************
+ * sfvmk_removeUplinkDevice --
+ *
+ * @brief  Routine to unregister the device.
+ *
+ * @param[in]  device handle.
+ *
+ * @return: VMK_OK on success  VMK_FAILURE otherrwise
+ *
+ ************************************************************************/
+static VMK_ReturnStatus
+sfvmk_removeUplinkDevice(vmk_Device device)
 {
-  vmk_LogMessage("sfvmk_removeUplinkDevice: device=%p", sfvmk_device);
-  return vmk_DeviceUnregister(sfvmk_device);
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+               "sfvmk_removeUplinkDevice is entered");
+  return vmk_DeviceUnregister(device);
 }
-
-
-
-#ifdef SFVMK_WITH_UNIT_TESTS
-extern void sfvmk_run_ut();
-#endif
 /************************************************************************
  * sfvmk_verifyDevice --
  *
@@ -55,13 +87,18 @@ extern void sfvmk_run_ut();
  *
  * @param  adapter pointer to sfvmk_adapter_t
  *
- * @return: VMK_OK or VMK_FAILURE
+ * @return: VMK_OK on success  VMK_FAILURE otherrwise
  *
  ************************************************************************/
 static VMK_ReturnStatus
 sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter)
 {
   int rc;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Entered sfvmk_verifyDevice");
 
   /*check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
@@ -72,14 +109,16 @@ sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter)
   }
   /* driver support only Medford Family */
   if (pAdapter->efxFamily == EFX_FAMILY_MEDFORD) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+               "Exited sfvmk_verifyDevice");
     return VMK_OK;
   }
 
   SFVMK_ERR(pAdapter, "impossible controller family %d", pAdapter->efxFamily);
 
+
   return VMK_FAILURE;
 }
-
 /************************************************************************
  * sfvmk_createDMAEngine --
  *
@@ -98,8 +137,10 @@ sfvmk_createDMAEngine(sfvmk_adapter_t *pAdapter)
   vmk_DMAConstraints dmaConstraints;
   vmk_DMAEngineProps dmaProps;
 
-  if (NULL == pAdapter)
-    return VMK_FAILURE;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_createDMAEngine");
 
   vmk_Memset(&dmaConstraints, 0, sizeof(dmaConstraints));
   dmaConstraints.addressMask = VMK_ADDRESS_MASK_64BIT;
@@ -118,9 +159,11 @@ sfvmk_createDMAEngine(sfvmk_adapter_t *pAdapter)
     status = vmk_DMAEngineCreate(&dmaProps, &pAdapter->dmaEngine);
   }
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_createDMAEngine");
+
   return (status);
 }
-
 /************************************************************************
  * sfvmk_mapBAR --
  *
@@ -137,10 +180,12 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status;
   efsys_bar_t *bar;
+  vmk_Name lckName;
 
-  if (NULL == pAdapter)
-      return VMK_FAILURE;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_mapBAR");
   bar = &pAdapter->bar;
 
   status = vmk_PCIMapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
@@ -148,12 +193,13 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to map BAR2 (%x)", status);
   }
-
-  status = sfvmk_createLock("mem-bar", VMK_SPINLOCK_RANK_HIGHEST-2, &bar->esb_lock);
+  vmk_NameFormat(&lckName, "sfvmk_memBarLock");
+  status = sfvmk_createLock(lckName.string, VMK_SPINLOCK_RANK_LOWEST, &bar->esb_lock);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to create lock for BAR2 (%x)", status);
   }
-
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Exited sfvmk_mapBAR");
   return (status);
 }
 
@@ -173,9 +219,10 @@ static VMK_ReturnStatus
 sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_OK;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  if (NULL == pAdapter)
-      return VMK_FAILURE;
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_unmapBAR");
 
   sfvmk_destroyLock(pAdapter->bar.esb_lock);
 
@@ -185,11 +232,14 @@ sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter)
     if (status != VMK_OK)
       SFVMK_ERR(pAdapter, "Failed to unmap memory BAR status %x", status);
 
-    SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2, "Freed Bar %d ", EFX_MEM_BAR);
+    SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+               "Freed Bar %d ", EFX_MEM_BAR);
   }
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Exited sfvmk_unmapBAR");
   return status;
 }
-
 /************************************************************************
  * sfvmk_destroyDMAEngine --
  *
@@ -204,13 +254,9 @@ sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter)
 static void
 sfvmk_destroyDMAEngine(sfvmk_adapter_t *pAdapter)
 {
-
-  if (NULL == pAdapter)
-        return ;
-
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
   vmk_DMAEngineDestroy(pAdapter->dmaEngine);
 }
-
 /************************************************************************
  * sfvmk_setBusMaster --
  *
@@ -228,14 +274,16 @@ sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
   vmk_uint32 cmd;
   VMK_ReturnStatus status = VMK_OK;
 
-  if (NULL == pAdapter)
-      return VMK_FAILURE;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_setBusMaster");
 
   status = vmk_PCIReadConfig(vmk_ModuleCurrentID, pAdapter->pciDevice,
                       VMK_PCI_CONFIG_ACCESS_16, SFVMK_PCI_COMMAND, &cmd);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "failed to read PCI config : %u (%x)",
-                SFVMK_PCI_COMMAND, status);
+               SFVMK_PCI_COMMAND, status);
     return status;
   }
 
@@ -256,11 +304,10 @@ sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
   return VMK_OK;
 
 }
-
 /************************************************************************
  * sfvmk_estimateRsrcLimits --
  *
- * @brief  Routine to check adapter's family, raise the error if proper family
+ * @brief  Routine to estimate resource ( eg number of rxq, txq and evq)
  *
  *
  * @param  adapter pointer to sfvmk_adapter_t
@@ -268,7 +315,7 @@ sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
-static VMK_ReturnStatus
+VMK_ReturnStatus
 sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 {
   efx_drv_limits_t limits;
@@ -278,6 +325,7 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
   uint32_t txqAllocated;
   VMK_ReturnStatus status = VMK_OK;
   int rc;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
   /*
    * Limit the number of event queues to:
@@ -285,6 +333,9 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
    *  - hardwire maximum RSS channels
    *  - administratively specified maximum RSS channels
    */
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Entered sfvmk_estimateRsrcLimits");
 
   vmk_Memset(&limits, 0, sizeof(limits));
 
@@ -333,12 +384,16 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT(pAdapter->evqMax <= evqMax);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 0, "max txq = %d", txqAllocated );
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 0, "max rxq = %d", rxqAllocated );
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 0, "max evq = %d", pAdapter->evqMax );
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+              "max txq = %d\t max rxq = %d\t max evq = %d",
+               txqAllocated, rxqAllocated, pAdapter->evqMax );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Exited sfvmk_estimateRsrcLimits");
 
   return (0);
 }
+
 /************************************************************************
  * sfvmk_intrInit --
  *
@@ -350,13 +405,17 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
-
-static VMK_ReturnStatus
+VMK_ReturnStatus
 sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
 {
   unsigned int numIntReq, numIntrsAlloc;
   unsigned int index =0;
   VMK_ReturnStatus status;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+             "Entered sfvmk_intrInit");
 
   numIntReq = pAdapter->evqMax;
 
@@ -370,8 +429,8 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
                               numIntReq, numIntReq, NULL,
                               pAdapter->intr.intrCookies, &numIntrsAlloc);
   if (status == VMK_OK) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 0, "Allocated %d interrupts",
-              numIntrsAlloc);
+    SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+              "Allocated %d interrupts", numIntrsAlloc);
 
     pAdapter->intr.numIntrAlloc = numIntrsAlloc;
     pAdapter->intr.type = EFX_INTR_MESSAGE;
@@ -399,8 +458,8 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
                                         &numIntrsAlloc);
       if (status == VMK_OK) {
 
-        SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2,"Allocated  %d INTX intr",
-                  numIntrsAlloc);
+        SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                  "Allocated  %d INTX intr", numIntrsAlloc);
         pAdapter->intr.numIntrAlloc = 1;
         pAdapter->intr.type = EFX_INTR_LINE;
       } else {
@@ -411,7 +470,8 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
       }
 
     } else {
-      SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2,  "Allocated 1 MSIx vector for device");
+      SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                 "Allocated 1 MSIx vector for device");
       pAdapter->intr.numIntrAlloc = 1;
       pAdapter->intr.type = EFX_INTR_MESSAGE;
     }
@@ -421,9 +481,9 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
   if(status == VMK_OK)
     pAdapter->intr.state = SFVMK_INTR_INITIALIZED ;
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exit sfvmk_intrInit");
   return (status);
-
-
 }
 
 /************************************************************************
@@ -437,7 +497,7 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
-static void
+void
 sfvmk_freeInterrupts(sfvmk_adapter_t *pAdapter)
 {
    vmk_PCIFreeIntrCookie(vmk_ModuleCurrentID, pAdapter->pciDevice);
@@ -459,8 +519,10 @@ getPciDevice(sfvmk_adapter_t *pAdapter)
   vmk_AddrCookie pciDeviceCookie;
   VMK_ReturnStatus status;
 
-  if (NULL== pAdapter)
-    return VMK_FAILURE;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered getPciDevice");
 
   /* get pci device */
   status = vmk_DeviceGetRegistrationData(pAdapter->device, &pciDeviceCookie);
@@ -502,14 +564,18 @@ getPciDevice(sfvmk_adapter_t *pAdapter)
                     pAdapter->pciDeviceAddr.fn);
 
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2, "Found kernel device");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+            "Found kernel device");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited getPciDevice");
 
   return VMK_OK;
 }
 /************************************************************************
- * getPciDevice --
+ * sfvmk_updateSupportedCap --
  *
- * @brief  Routine to get pci device information such as vendor id , device ID
+ * @brief  Routine to get the supported capability (link speed etc)
  *
  *
  * @param  adapter pointer to sfvmk_adapter_t
@@ -524,14 +590,15 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
   vmk_uint32 supportedCaps, index = 0;
 
   VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 5, "sfvmk_updateSupportedCap Enetered");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_updateSupportedCap");
   efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM, &supportedCaps);
 
   do
   {
-    while(!(supportedCaps & (1 << capMask))) 
+    while(!(supportedCaps & (1 << capMask)))
      capMask++;
-    
 
     switch(capMask)
     {
@@ -579,14 +646,16 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
         break;
     }
 
-    capMask++;    
+    capMask++;
 
   } while (capMask < EFX_PHY_CAP_NTYPES );
 
   pAdapter->supportedModesArraySz = index ;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 4, " no of supported modes = %d", index);
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 5, "sfvmk_updateSupportedCap Enetered");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+            "no of supported modes = %d", index);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_updateSupportedCap");
 }
 
 
@@ -595,12 +664,12 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
  ************************************************************************/
 
 static vmk_DriverOps sfvmk_DriverOps = {
-   .attachDevice  = sfvmk_AttachDevice,
-   .detachDevice  = sfvmk_DetachDevice,
-   .scanDevice    = sfvmk_ScanDevice,
-   .quiesceDevice = sfvmk_ShutdownDevice,
-   .startDevice   = sfvmk_StartDevice,
-   .forgetDevice  = sfvmk_ForgetDevice,
+   .attachDevice  = sfvmk_attachDevice,
+   .detachDevice  = sfvmk_detachDevice,
+   .scanDevice    = sfvmk_scanDevice,
+   .quiesceDevice = sfvmk_shutDownDevice,
+   .startDevice   = sfvmk_startDevice,
+   .forgetDevice  = sfvmk_forgetDevice,
 };
 
 /************************************************************************
@@ -615,7 +684,7 @@ static vmk_DriverOps sfvmk_DriverOps = {
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_AttachDevice(vmk_Device dev)
+sfvmk_attachDevice(vmk_Device dev)
 {
 
   efx_nic_t *pNic;
@@ -624,7 +693,8 @@ sfvmk_AttachDevice(vmk_Device dev)
   sfvmk_adapter_t *pAdapter = NULL;
   unsigned int error;
 
-  //SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2, "AttachDevice is called!");
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "Entered attachDevice");
 
   /* allocation memory for adapter */
   pAdapter = sfvmk_memPoolAlloc(sizeof(sfvmk_adapter_t));
@@ -634,141 +704,153 @@ sfvmk_AttachDevice(vmk_Device dev)
 
   pAdapter->maxRssChannels = 0;
   pAdapter->device = dev;
-  pAdapter->debugMask = -1;
 
   /*Initializing ring enteries */
-  /* these are tunable parameter */
-
   pAdapter->rxqEntries = sfvmk_rxRingEntries;
   pAdapter->txqEntries = sfvmk_txRingEntries;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, 2, "allocated adapter =%p",
-            (void *)pAdapter);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+             "allocated adapter =%p", (void *)pAdapter);
 
   status = getPciDevice(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "could not get PCI device information with"
-        "status %d", status);
+    SFVMK_ERR(pAdapter, "failed to get PCI device information with"
+               "error %s", vmk_StatusToString(status));
     goto sfvmk_get_pci_dev_fail;
   }
 
   status = sfvmk_createDMAEngine(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "DMA Engine create failed with status %d", status);
+    SFVMK_ERR(pAdapter, "DMA Engine create failed with error %s",
+                vmk_StatusToString(status));
     goto sfvmk_DMA_eng_create_fail;
   }
 
   status = sfvmk_mapBAR(pAdapter);
   if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed to map memory bar with error %s",
+               vmk_StatusToString(status));
     goto sfvmk_map_bar_fail;
   }
 
   status = sfvmk_setBusMaster(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "sfvmk_setBusMaster failed status %x", status);
+    SFVMK_ERR(pAdapter, "failed to set bus master with error %s",
+               vmk_StatusToString(status));
     goto sfvmk_bus_master_fail;
   }
 
   pNicLock = &pAdapter->NicLock;
-  sfvmk_createLock("enp", VMK_SPINLOCK_RANK_HIGHEST-1, &pNicLock->lock);
+  sfvmk_createLock("nicLck", VMK_SPINLOCK_RANK_LOWEST, &pNicLock->lock);
   if ((error = efx_nic_create(pAdapter->efxFamily, (efsys_identifier_t *)pAdapter,
       &pAdapter->bar, pNicLock, &pNic)) != 0)
   {
-    SFVMK_ERR(pAdapter, "failed in efx_nic_create status %x", error);
+    SFVMK_ERR(pAdapter, "failed in efx_nic_create with error %x", error);
     goto sfvmk_nic_create_fail;
   }
 
   pAdapter->pNic = pNic;
 
   /* Initialize MCDI to talk to the microcontroller. */
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "mcdi_init...");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "mcdi_init...");
   if ((error = sfvmk_mcdiInit(pAdapter)) != 0) {
-
-    SFVMK_ERR(pAdapter, "failed in sfvmk_mcdiInit status %x", error);
+    SFVMK_ERR(pAdapter, "failed in sfvmk_mcdiInit with err %x", error);
     goto sfvmk_mcdi_init_fail;
-
   }
-  /* Probe  NIC and build the configuration data area. */
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "nic_probe...");
-  if ((error = efx_nic_probe(pNic)) != 0) {
 
-    SFVMK_ERR(pAdapter, "failed in efx_nic_probe status %x", error);
+  /* Probe  NIC and build the configuration data area. */
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "nic_probe...");
+  if ((error = efx_nic_probe(pNic)) != 0) {
+    SFVMK_ERR(pAdapter, "failed in efx_nic_probe with err %x", error);
     goto sfvmk_nic_probe_fail;
   }
   /* Initialize NVRAM. */
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "nvram_init...");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "nvram_init...");
   if ((error = efx_nvram_init(pNic)) != 0) {
 
-    SFVMK_ERR(pAdapter, "failed in efx_nvram_init status %x", error);
+    SFVMK_ERR(pAdapter, "failed in efx_nvram_init with err %x", error);
     goto sfvmk_nvram_init_fail;
   }
 
   /* Initialize VPD. */
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "vpd_init...");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "vpd_init...");
   if ((error = efx_vpd_init(pNic)) != 0) {
-
-    SFVMK_ERR(pAdapter, "failed in efx_vpd_init status %x", error);
+    SFVMK_ERR(pAdapter, "failed in efx_vpd_init with err %x", error);
     goto sfvmk_vpd_init_fail;
   }
 
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "mcdi_new_epoch...");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "mcdi_new_epoch...");
   efx_mcdi_new_epoch(pNic);
 
   /* Reset NIC. */
-  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, 2, "nic_reset...");
+  SFVMK_DBG(pAdapter,SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG, "nic_reset...");
   if ((error = efx_nic_reset(pNic)) != 0) {
-
-    SFVMK_ERR(pAdapter, "failed in efx_nic_reset status %x", error);
+    SFVMK_ERR(pAdapter, "failed in efx_nic_reset with err %x", error);
     goto sfvmk_nic_reset_fail;
   }
 
 
   status = sfvmk_estimateRsrcLimits(pAdapter);
   if (status != VMK_OK) {
-
     SFVMK_ERR(pAdapter, "failed in sfvmk_estimateRsrcLimits status %x", status);
     goto sfvmk_rsrc_info_fail;
   }
 
   status = sfvmk_intrInit(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "failed in sfvmk_intrInit status %x", status);
+    SFVMK_ERR(pAdapter, "failed in sfvmk_intrInit with err  %s",
+              vmk_StatusToString(status));
     goto sfvmk_intr_init_fail;
   }
 
-
   status = sfvmk_evInit(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "failed in sfvmk_evInit status %x", status);
+    SFVMK_ERR(pAdapter, "failed in sfvmk_evInit with err  %s",
+               vmk_StatusToString(status));
     goto sfvmk_ev_init_fail;
   }
 
+  status = sfvmk_portInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed in sfvmk_portInit with err  %s",
+              vmk_StatusToString(status));
+    goto sfvmk_port_init_fail;
+  }
 
   status = sfvmk_rxInit(pAdapter);
   if (status != VMK_OK)  {
-    SFVMK_ERR(pAdapter, "failed in sfvmk_rxInit status %x", status);
+    SFVMK_ERR(pAdapter, "failed in sfvmk_rxInit with err %s",
+              vmk_StatusToString(status));
     goto sfvmk_rx_init_fail;
   }
 
   status = sfvmk_txInit(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "failed in sfvmk_txInit status %x", status);
+    SFVMK_ERR(pAdapter, "failed in sfvmk_txInit with err %s",
+              vmk_StatusToString(status));
     goto sfvmk_tx_init_fail;
   }
   sfvmk_updateSupportedCap(pAdapter);
 
   status = sfvmk_initUplinkData(pAdapter);
   if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed in sfvmk_initUplinkData with err %s",
+              vmk_StatusToString(status));
     goto sfvmk_init_uplink_data_fail;
   }
-
   efx_nic_fini(pAdapter->pNic);
-  
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed in vmk_DeviceSetAttachedDriverData"
+              "with err %s", vmk_StatusToString(status));
     goto sfvmk_set_drvdata_fail;
   }
   pAdapter->initState = SFVMK_REGISTERED;
+
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+               "Exited attachDevice!");
+
   return VMK_OK;
 
 
@@ -776,7 +858,6 @@ sfvmk_AttachDevice(vmk_Device dev)
   sfvmk_run_ut();
 #endif
 
-  return VMK_OK;
 
 sfvmk_set_drvdata_fail:
   sfvmk_destroyUplinkData(pAdapter);
@@ -785,11 +866,13 @@ sfvmk_init_uplink_data_fail:
 sfvmk_tx_init_fail:
   sfvmk_rxFini(pAdapter);
 sfvmk_rx_init_fail:
+  sfvmk_portFini(pAdapter);
+sfvmk_port_init_fail:
   sfvmk_evFini(pAdapter);
 sfvmk_ev_init_fail:
   sfvmk_freeInterrupts(pAdapter);
-sfvmk_rsrc_info_fail:
 sfvmk_intr_init_fail:
+sfvmk_rsrc_info_fail:
   efx_nic_fini(pNic);
 sfvmk_nic_reset_fail:
   efx_vpd_fini(pNic);
@@ -827,9 +910,10 @@ sfvmk_adapter_alloc_fail:
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_StartDevice(vmk_Device dev)
+sfvmk_startDevice(vmk_Device dev)
 {
-  vmk_LogMessage("StartDevice is invoked!");
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+               "sfvmk_StartDevice is invoked");
   return VMK_OK;
 }
 
@@ -845,7 +929,7 @@ sfvmk_StartDevice(vmk_Device dev)
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_ScanDevice(vmk_Device device)
+sfvmk_scanDevice(vmk_Device device)
 {
   VMK_ReturnStatus status = 0;
   sfvmk_adapter_t *pAdapter;
@@ -853,8 +937,8 @@ sfvmk_ScanDevice(vmk_Device device)
   vmk_DeviceID *pDeviceID;
   vmk_DeviceProps deviceProps;
 
-  //SFVMK_DEBUG(SFVMK_DBG_DRIVER, 5, "ScanDevice is invoked!");
-  vmk_LogMessage("ScanDevice is invoked!");
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "Entered sfvmk_scanDevice");
 
   status = vmk_DeviceGetAttachedDriverData(device, (vmk_AddrCookie *) &pAdapter);
   if (status != VMK_OK) {
@@ -862,8 +946,6 @@ sfvmk_ScanDevice(vmk_Device device)
               vmk_StatusToString(status));
     return status;
   }
-
-  VMK_ASSERT_BUG(pAdapter != NULL, "NULL adapter ptr");
 
   pDeviceID = &pAdapter->deviceID;
   status = vmk_NameInitialize(&busName, VMK_LOGICAL_BUS_NAME);
@@ -884,7 +966,6 @@ sfvmk_ScanDevice(vmk_Device device)
 
   pDeviceID->busIdentifier = VMK_UPLINK_DEVICE_IDENTIFIER;
   pDeviceID->busIdentifierLen = sizeof(VMK_UPLINK_DEVICE_IDENTIFIER) - 1;
-
   deviceProps.registeringDriver = sfvmk_ModInfo.driverID;
   deviceProps.deviceID = pDeviceID;
   deviceProps.deviceOps = &sfvmk_uplinkDeviceOps;
@@ -893,13 +974,16 @@ sfvmk_ScanDevice(vmk_Device device)
 
   status = vmk_DeviceRegister(&deviceProps, device, &pAdapter->uplinkDevice);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "Failed to register device: %s", 
+    SFVMK_ERR(pAdapter, "Failed to register uplink device: %s",
               vmk_StatusToString(status));
     return status;
   }
 
   vmk_LogicalFreeBusAddress(sfvmk_ModInfo.driverID, pDeviceID->busAddress);
   vmk_BusTypeRelease(pDeviceID->busType);
+
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "Exited sfvmk_scanDevice");
 
   return VMK_OK;
 }
@@ -916,27 +1000,29 @@ sfvmk_ScanDevice(vmk_Device device)
  * @return: VMK_OK or VMK_FAILURE
  *
  ************************************************************************/
-
 static VMK_ReturnStatus
-sfvmk_DetachDevice(vmk_Device dev)
+sfvmk_detachDevice(vmk_Device dev)
 {
- efx_nic_t *pNic = NULL ;
- sfvmk_adapter_t *pAdapter = NULL;
- return VMK_OK;
- vmk_DeviceGetAttachedDriverData(dev, (vmk_AddrCookie *)&pAdapter);
+  efx_nic_t *pNic = NULL ;
+  sfvmk_adapter_t *pAdapter = NULL;
+
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "Entered sfvmk_detachDevice");
+  vmk_DeviceGetAttachedDriverData(dev, (vmk_AddrCookie *)&pAdapter);
+
+  VMK_ASSERT_BUG(pAdapter != NULL, "NULL adapter ptr");
 
   if (NULL != pAdapter)
   {
-
     sfvmk_destroyUplinkData(pAdapter);
     sfvmk_txFini(pAdapter);
     sfvmk_rxFini(pAdapter);
+    sfvmk_portFini(pAdapter);
     sfvmk_evFini(pAdapter);
-    sfvmk_freeInterrupts(pAdapter);
 
+    sfvmk_freeInterrupts(pAdapter);
     /* Tear down common code subsystems. */
     pNic = pAdapter->pNic;
-    //efx_nic_fini(pNic);
     efx_vpd_fini(pNic);
     efx_nvram_fini(pNic);
     efx_nic_unprobe(pNic);
@@ -955,7 +1041,10 @@ sfvmk_DetachDevice(vmk_Device dev)
     sfvmk_memPoolFree(pAdapter, sizeof(sfvmk_adapter_t));
 
   }
- return VMK_OK;
+
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+                "Exited sfvmk_detachDevice");
+  return VMK_OK;
 
 }
 
@@ -971,9 +1060,11 @@ sfvmk_DetachDevice(vmk_Device dev)
  *
  ************************************************************************/
 static VMK_ReturnStatus
-sfvmk_ShutdownDevice(vmk_Device dev)
+sfvmk_shutDownDevice(vmk_Device dev)
 {
-  vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "sfvmk_shutDownDevice is invoked");
+
   return VMK_OK;
 }
 
@@ -989,9 +1080,11 @@ sfvmk_ShutdownDevice(vmk_Device dev)
  *
  ************************************************************************/
 static void
-sfvmk_ForgetDevice(vmk_Device dev)
+sfvmk_forgetDevice(vmk_Device dev)
 {
-  vmk_LogMessage("ForgetDevice is invoked!");
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "sfvmk_forgetDevice is invoked");
+
   return;
 }
 
@@ -1006,10 +1099,12 @@ sfvmk_ForgetDevice(vmk_Device dev)
  *
  ************************************************************************/
 VMK_ReturnStatus
-sfvmk_DriverRegister(void)
+sfvmk_driverRegister(void)
 {
   VMK_ReturnStatus status;
   vmk_DriverProps driverProps;
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+                "Entered sfvmk_driverRegister");
 
   /* Populate driverProps */
   driverProps.moduleID = vmk_ModuleCurrentID;
@@ -1017,15 +1112,14 @@ sfvmk_DriverRegister(void)
   driverProps.ops = &sfvmk_DriverOps;
   driverProps.privateData = (vmk_AddrCookie)NULL;
 
-
   /* Register Driver with the device layer */
   status = vmk_DriverRegister(&driverProps, &sfvmk_ModInfo.driverID);
 
-  if (status == VMK_OK) {
-    vmk_LogMessage("Initialization of SFC  driver successful");
-  } else {
-    vmk_LogMessage("Initialization of SFC driver failed with status: %d", status);
-  }
+  if (status != VMK_OK)
+    SFVMK_ERROR("Initialization of SFC driver failed with status: %d", status);
+
+  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
+              "Exited sfvmk_driverRegister");
 
   return status;
 }
@@ -1041,7 +1135,7 @@ sfvmk_DriverRegister(void)
  *
  ************************************************************************/
 void
-sfvmk_DriverUnregister(void)
+sfvmk_driverUnregister(void)
 {
   vmk_DriverUnregister(sfvmk_ModInfo.driverID);
 }

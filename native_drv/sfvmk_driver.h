@@ -10,49 +10,43 @@
 
 #include "sfvmk.h"
 #include "efx.h"
+#include "sfvmk_ev.h"
 #include "sfvmk_rx.h"
 #include "sfvmk_tx.h"
-#include "sfvmk_ev.h"
 #include "sfvmk_utils.h"
 #include "sfvmk_port.h"
 #include "sfvmk_mcdi.h"
 #include "sfvmk_uplink.h"
 #include "sfvmk_intr.h"
 
-extern VMK_ReturnStatus sfvmk_DriverRegister(void);
-extern void             sfvmk_DriverUnregister(void);
+
+extern VMK_ReturnStatus sfvmk_driverRegister(void);
+extern void             sfvmk_driverUnregister(void);
 
 #define SFVMK_PCI_COMMAND             0x04
 #define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
 
-#define SFVMK_MAX_MSIX_VECTORS        EFX_MAXRSS
 #define SFVMK_NDESCS                  1024
-
-
-//praveen needs to define
-#define SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdater)
 
 #define SFVMK_FATSOV1 (1 << 0)
 #define SFVMK_FATSOV2 (1 << 1)
 
-/* interrupt related DS */
+/* ring size for TX and RX */
+extern int sfvmk_txRingEntries;
+extern int sfvmk_rxRingEntries;
 
-enum sfvmk_intrState {
-  SFVMK_INTR_UNINITIALIZED = 0,
-  SFVMK_INTR_INITIALIZED,
-  SFVMK_INTR_TESTING,
-  SFVMK_INTR_STARTED
+
+
+/* rank for mutex lock in different module */
+enum sfvmk_LckRank {
+  SFVMK_PORT_LOCK_RANK = VMK_MUTEX_RANK_LOWEST,
+  SFVMK_TXQ_LOCK_RANK,
+  SFVMK_EVQ_LOCK_RANK,
+  SFVMK_MCDI_LOCK_RANK
 };
 
 
-typedef struct sfvmk_intr_s {
-  enum sfvmk_intrState  state;
-  vmk_IntrCookie        intrCookies[SFVMK_MAX_MSIX_VECTORS] ;
-  int                   numIntrAlloc;
-  efx_intr_type_t       type;
-}sfvmk_intr_t;
-
-
+/* adapter states */
 enum sfvmk_adapterState {
   SFVMK_UNINITIALIZED = 0,
   SFVMK_INITIALIZED,
@@ -69,7 +63,7 @@ typedef struct sfvmk_adapter_s{
   /* VMK kernel related information */
   vmk_DMAEngine     dmaEngine;
 
-  enum sfvmk_adapterState  initState; 
+  enum sfvmk_adapterState  initState;
   /* PCI device related information */
   vmk_PCIDevice     pciDevice;
   vmk_PCIDeviceID   pciDeviceID;
@@ -85,7 +79,7 @@ typedef struct sfvmk_adapter_s{
   sfvmk_mcdi_t      mcdi;
 
   /*Interrupt */
-  sfvmk_intr_t        intr;
+  sfvmk_intr_t      intr;
 
   /*queues relater DS */
   struct sfvmk_evq_s    *pEvq[SFVMK_RX_SCALE_MAX];
@@ -108,10 +102,7 @@ typedef struct sfvmk_adapter_s{
   size_t        rxBufferSize;
   size_t        rxBufferAlign;
 
-
   vmk_uint32    maxRssChannels;
-  vmk_uint32    debugMask;
-
 
   struct sfvmk_phyInfo_s  phy;
   struct sfvmk_port_s     port;
@@ -128,7 +119,7 @@ typedef struct sfvmk_adapter_s{
   vmk_Device uplinkDevice;
 
   /* Serializes multiple writers. */
-  vmk_Lock sharedDataWriterLock;
+  vmk_Lock shareDataLock;
 
   /* shared queue information */
   vmk_UplinkSharedQueueInfo queueInfo;

@@ -11,6 +11,14 @@
 
 #include "sfvmk.h"
 
+/* lock apis */
+#define SFVMK_PORT_LOCK(pPort) {   \
+  vmk_MutexLock(pPort->lock);     \
+}
+
+#define SFVMK_PORT_UNLOCK(pPort) { \
+  vmk_MutexUnlock(pPort->lock);   \
+}
 
 typedef struct sfvmk_phyInfo_s {
 
@@ -35,32 +43,29 @@ enum sfvmk_port_state {
 
 typedef struct sfvmk_port_s {
 
-	struct sfvmk_adapter_s  *pAdapter;
-	enum sfvmk_port_state 	initState;
+  struct sfvmk_adapter_s  *pAdapter;
+  enum sfvmk_port_state   initState;
 
-	efx_link_mode_t   link_mode;
+  efx_link_mode_t   linkMode;
 
-#ifndef SFVMK_HAVE_PAUSE_MEDIAOPTS
-	vmk_uint32    wanted_fc;
-#endif
+  vmk_uint32    fcRequested;
 
-	//struct sfvmk_hw_stats phy_stats;
-	//struct sfvmk_hw_stats mac_stats;
-
-
-	vmk_Mutex 		lock;
-	vmk_uint8 		mcast_addrs[EFX_MAC_MULTICAST_LIST_MAX * EFX_MAC_ADDR_LEN];
-	vmk_uint32		mcast_count;
+  vmk_Mutex     lock;
+  vmk_uint8     mcast_addrs[EFX_MAC_MULTICAST_LIST_MAX * EFX_MAC_ADDR_LEN];
+  vmk_uint32    mcast_count;
 
 
-	/* Only used in debugging output */
-	char      lock_name[SFVMK_LOCK_NAME_MAX];
 }sfvmk_port_t;
+
 
 void sfvmk_portStop(struct sfvmk_adapter_s *pAdapter);
 int sfvmk_portStart(struct sfvmk_adapter_s *pAdapter);
-void
-sfvmk_macLinkUpdate(struct sfvmk_adapter_s *pAdapter, 
-			efx_link_mode_t linkMode);
+
+void sfvmk_macLinkUpdate(struct sfvmk_adapter_s *pAdapter,
+                                    efx_link_mode_t linkMode);
+
+int sfvmk_portInit(struct sfvmk_adapter_s *pAdapter);
+void sfvmk_portFini(struct sfvmk_adapter_s *pAdapter);
+
 #endif
 

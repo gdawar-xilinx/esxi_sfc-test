@@ -157,6 +157,8 @@ typedef vmk_IOA  efsys_dma_addr_t;
         do {                                                            \
             SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esip);                   \
             (_p) = sfvmk_MemAlloc(_size);                               \
+		if (NULL != _p)						\
+                  vmk_Memset(_p, 0 , _size);				\
         } while (B_FALSE)
 
 #define EFSYS_KMEM_FREE(_esip, _size, _p)                               \
@@ -172,7 +174,7 @@ typedef unsigned int efsys_lock_state_t;
 
 typedef struct efsys_lock_s {
         vmk_Lock        lock;
-        vmk_Name        lock_name;
+        vmk_Name        lockName;
 } efsys_lock_t;
 
 #define SFVMK_LOCK_NAME_MAX 32
@@ -196,18 +198,18 @@ typedef struct efsys_lock_s {
 /* DMA SYNC */
 #define EFSYS_DMA_SYNC_FOR_KERNEL(_esmp, _offset, _size)                \
         do {                                                            \
-            vmk_DMAFlushElem((_esmp)->esm_handle,                       \
+            vmk_DMAFlushElem((_esmp)->esmHandle,                       \
             VMK_DMA_DIRECTION_TO_MEMORY, &(_esmp)->io_elem);             \
         } while (B_FALSE)
 
 #define EFSYS_DMA_SYNC_FOR_DEVICE(_esmp, _offset, _size)                \
         do {                                                            \
-            vmk_DMAFlushElem((_esmp)->esm_handle,                       \
+            vmk_DMAFlushElem((_esmp)->esmHandle,                       \
             VMK_DMA_DIRECTION_FROM_MEMORY, &(_esmp)->io_elem);           \
         } while (B_FALSE)
 
 typedef struct efsys_mem_s {
-        vmk_DMAEngine       esm_handle;  // This is actually a pointer to vmk_DMAEngineInt
+        vmk_DMAEngine       esmHandle;  // This is actually a pointer to vmk_DMAEngineInt
         uint8_t             *esm_base;   // virtual address
         vmk_SgElem          io_elem;    // addr and size
 } efsys_mem_t;

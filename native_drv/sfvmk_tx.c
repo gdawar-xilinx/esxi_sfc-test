@@ -8,13 +8,17 @@
 
 #include "sfvmk_driver.h"
 
+#define SFVMK_TXQ_STOP_POLL_WAIT 100*SFVMK_ONE_MILISEC
+#define SFVMK_TXQ_STOP_POLL_TIMEOUT 20
+
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txqFini --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief It releases the resource required for txQ module.
 *
-* @param  adapter pointer to sfvmk_adapter_t
+* @param[in]  adapter pointer to sfvmk_adapter_t
+* @param[in]  tx queue index
 *
 * @result: VMK_OK on success, and lock created. Error code if otherwise.
 *
@@ -26,6 +30,9 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   efsys_mem_t *pTxqMem;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+             "Entered sfvmk_txqFini");
 
   pTxq = pAdapter->pTxq[qIndex];
 
@@ -46,15 +53,21 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   sfvmk_memPoolFree(pTxq,  sizeof(sfvmk_txq_t));
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_txqFini");
+
 }
 
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txqInit --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief It allocate resources required for a particular tx queue.
 *
 * @param  adapter pointer to sfvmk_adapter_t
+* @param[in]  tx queue index
+* @param[in]  tx queue type
+* @param[in]  associated event queue index
 *
 * @result: VMK_OK on success, and lock created. Error code if otherwise.
 *
@@ -70,6 +83,9 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+             "Entered sfvmk_txqInit");
+
   pTxq = (sfvmk_txq_t *)sfvmk_memPoolAlloc(sizeof(sfvmk_txq_t));
   if (NULL == pTxq) {
     SFVMK_ERR(pAdapter,"failed to allocate memory for txq obj");
@@ -83,7 +99,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   pAdapter->pTxq[txqIndex] = pTxq;
 
   pTxqMem = &pTxq->mem;
-  pTxqMem->esm_handle  = pAdapter->dmaEngine;
+  pTxqMem->esmHandle  = pAdapter->dmaEngine;
 
   pEvq = pAdapter->pEvq[evqIndex];
 
@@ -106,7 +122,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   }
   pTxq->pendDescSize = sizeof(efx_desc_t) * pAdapter->txqEntries;
 
-  status = sfvmk_mutexInit("pTxq" ,VMK_MUTEX_RANK_HIGHEST - 2, &pTxq->lock);
+  status = sfvmk_mutexInit("txq" ,SFVMK_TXQ_LOCK_RANK, &pTxq->lock);
   if(status != VMK_OK)
     goto sfvmk_mutex_fail;
 
@@ -114,6 +130,12 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   pTxq->evqIndex = evqIndex;
   pTxq->txqIndex = txqIndex;
   pTxq->initState = SFVMK_TXQ_INITIALIZED;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "txq[%d] is "
+            "initialized associated evq index is %d", txqIndex, evqIndex);
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_txqInit");
 
   return VMK_OK;
 
@@ -134,7 +156,7 @@ sfvmk_alloc_fail:
 *
 * sfvmk_txInit --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief It allocate resource required for all the tx queues.
 *
 * @param  adapter pointer to sfvmk_adapter_t
 *
@@ -147,11 +169,12 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   sfvmk_intr_t *pIntr;
   vmk_uint32    qIndex;
   vmk_uint32    evqIndex = 0;
-
   int rc;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+              "Entered sfvmk_txInit");
   pIntr = &pAdapter->intr;
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
@@ -162,13 +185,15 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   /* Initialize transmit queues */
   rc = sfvmk_txqInit(pAdapter, SFVMK_TXQ_NON_CKSUM, SFVMK_TXQ_NON_CKSUM, 0);
   if(rc) {
-    SFVMK_ERR(pAdapter, "failed to init txq[SFVMK_TXQ_NON_CKSUM]");
+    SFVMK_ERR(pAdapter, "failed to init txq[SFVMK_TXQ_NON_CKSUM] with err %d",
+                rc);
     goto sfvmk_fail;
   }
 
   rc = sfvmk_txqInit(pAdapter, SFVMK_TXQ_IP_CKSUM,  SFVMK_TXQ_IP_CKSUM, 0);
   if(rc) {
-    SFVMK_ERR(pAdapter,"failed to init txq[SFVMK_TXQ_IP_CKSUM]");
+    SFVMK_ERR(pAdapter,"failed to init txq[SFVMK_TXQ_IP_CKSUM] with err %d",
+                rc);
     goto sfvmk_fail2;
   }
 
@@ -180,6 +205,9 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
       goto sfvmk_fail3;
     }
   }
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+              "Exited sfvmk_txInit");
 
   return (0);
 
@@ -193,7 +221,6 @@ sfvmk_fail2:
   sfvmk_txqFini(pAdapter, SFVMK_TXQ_NON_CKSUM);
 
 sfvmk_fail:
-  pAdapter->txqCount = 0;
 
   return (rc);
 }
@@ -201,7 +228,7 @@ sfvmk_fail:
 *
 * sfvmk_txFini --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief It releases resource required for all allocated tx queues
 *
 * @param  adapter pointer to sfvmk_adapter_t
 *
@@ -215,52 +242,60 @@ sfvmk_txFini(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_txFini");
+
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
     sfvmk_txqFini(pAdapter, qIndex);
 
   pAdapter->txqCount = 0;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_txFini");
 }
 
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txqComplete --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief called when a tx comletion event comes from the fw.
 *
-* @param  adapter pointer to sfvmk_adapter_t
+* @param  tx queue ptr
+* @param  event queue ptr
 *
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
+* @result: void
 *
 *-----------------------------------------------------------------------------*/
 void
 sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
 {
+
 }
 /**-----------------------------------------------------------------------------
 *
-* sfvmk_txqReap --
+* sfvmk_txqReap
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief
 *
-* @param  adapter pointer to sfvmk_adapter_t
+* @param  tx queue ptr
 *
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
+* @result: void
 *
 *-----------------------------------------------------------------------------*/
 static void
 sfvmk_txqReap(sfvmk_txq_t *pTxq)
 {
-  SFVMK_TXQ_LOCK_ASSERT_OWNED(pTxq);
   pTxq->reaped = pTxq->completed;
 }
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txqStop --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief flush txq and destroy txq module for a particular txq
 *
 * @param  adapter pointer to sfvmk_adapter_t
+* @param[in]  tx queue index
 *
 * @result: VMK_OK on success, and lock created. Error code if otherwise.
 *
@@ -274,7 +309,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
-  SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_txqStop");
 
   pTxq = pAdapter->pTxq[qIndex];
   pEvq = pAdapter->pEvq[pTxq->evqIndex];
@@ -282,7 +318,7 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   SFVMK_TXQ_LOCK(pTxq);
   SFVMK_EVQ_LOCK(pEvq);
 
-  VMK_ASSERT(pTxq->initState == SFVMK_TXQ_STARTED);
+  VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_STARTED);
 
   pTxq->initState = SFVMK_TXQ_INITIALIZED;
 
@@ -302,12 +338,12 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
         count = 0;
         do {
           /* Spin for 100ms. */
-          vmk_DelayUsecs(100*1000);
+           vmk_WorldSleep(SFVMK_TXQ_STOP_POLL_WAIT);
 
           if (pTxq->flushState != SFVMK_FLUSH_PENDING)
             break;
 
-      } while (++count < 20);
+      } while (++count < SFVMK_TXQ_STOP_POLL_TIMEOUT);
     }
 
     SFVMK_TXQ_LOCK(pTxq);
@@ -343,13 +379,17 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   SFVMK_EVQ_UNLOCK(pEvq);
   SFVMK_TXQ_UNLOCK(pTxq);
+
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exit sfvmk_txqStop");
 }
 
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txStop --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief flush txq and destroy txq module for all allocated txq.
 *
 * @param  adapter pointer to sfvmk_adapter_t
 *
@@ -363,21 +403,29 @@ void sfvmk_txStop(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_txStop");
+
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
     sfvmk_txqStop(pAdapter, qIndex);
 
   /* Tear down the transmit module */
   efx_tx_fini(pAdapter->pNic);
+
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_txStop");
 }
 
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txqStart --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief creates txq module for a particular txq.
 *
 * @param  adapter pointer to sfvmk_adapter_t
+* @param[in]  tx queue index
 *
 * @result: VMK_OK on success, and lock created. Error code if otherwise.
 *
@@ -395,8 +443,9 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   int rc;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Entered sfvmk_txqStart");
 
-  SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
 
   pTxq = pAdapter->pTxq[qIndex];
   VMK_ASSERT_BUG(NULL != pTxq, " NULL txq ptr");
@@ -438,9 +487,6 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   }
 
-  //praveen
-  //  pAdapter->tsoFwAssisted needs to be initialized
-
   /* Create the common code transmit queue. */
   if ((rc = efx_tx_qcreate(pAdapter->pNic, qIndex, pTxq->type, pTxqMem,
                             pAdapter->txqEntries, 0, flags, pEvq->pCommonEvq,
@@ -474,25 +520,22 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;
 
-  // will see later
-  /*
-  pTxq->max_pkt_desc = sfvmk_tx_max_pkt_desc(pAdapter, pTxq->type,
-  tsoFwAssisted);
-  */
 
   SFVMK_TXQ_UNLOCK(pTxq);
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "Exited sfvmk_txqStart");
 
   return (0);
 
   fail:
     return (rc);
 }
-
 /**-----------------------------------------------------------------------------
 *
 * sfvmk_txStart --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief creates txq module for all allocated txqs.
 *
 * @param  adapter pointer to sfvmk_adapter_t
 *
@@ -506,7 +549,8 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
   int rc;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, 5, "entered sfvmk_txStart");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_txStart");
 
   /* Initialize the common code transmit module. */
   if ((rc = efx_tx_init(pAdapter->pNic)) != 0) {
@@ -521,6 +565,10 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
     }
   }
 
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_txStart");
+
   return VMK_OK;
 
 sfvmk_fail:
@@ -530,5 +578,21 @@ sfvmk_fail:
   efx_tx_fini(pAdapter->pNic);
   pAdapter->txqCount = 0;
   return VMK_FAILURE;
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_txStart --
+*
+* @brief change the flush state to done. to bec called by event module.
+*
+* @param  pTxq    pointer to txq
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+void
+sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq)
+{
+  pTxq->flushState = SFVMK_FLUSH_DONE;
 }
 

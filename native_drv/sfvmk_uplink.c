@@ -7,40 +7,41 @@
 
 #include "sfvmk_driver.h"
 
+/* default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
+/* hardcoded max filter needs to revisit when implement multiQ*/
 #define SFVMK_MAX_FILTER_PER_QUEUE 10;
+
 
 /****************************************************************************
 *                Local Functions                                            *
 ****************************************************************************/
+static VMK_ReturnStatus sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter);
+
+static VMK_ReturnStatus sfvmk_updateRxqData(sfvmk_adapter_t *pAdapter,
+                           vmk_uint32 qIndex, vmk_ServiceAcctID serviceID);
+
+static VMK_ReturnStatus sfvmk_updateTxqData(sfvmk_adapter_t *pAdapter,
+                                            vmk_uint32 qIndex);
+
+static VMK_ReturnStatus sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
+                                    vmk_UplinkQueueFeature feat,
+                                    vmk_UplinkQueueID *pQid,
+                                    vmk_UplinkQueueType qType,
+                                    vmk_NetPoll *pNetpoll);
+
+static int sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter);
 static void sfvmk_updateCableType(sfvmk_adapter_t *adapter);
 
-static VMK_ReturnStatus 
-sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter);
-
-static VMK_ReturnStatus 
-sfvmk_updateRxqData(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex, vmk_ServiceAcctID serviceID);
-
-static VMK_ReturnStatus
-sfvmk_updateTxqData(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex);
-
-
-static VMK_ReturnStatus
-sfvmk_allocQ(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueFeature feat, vmk_UplinkQueueID *pQid,
-                    vmk_UplinkQueueType qType, vmk_NetPoll *pNetpoll);
-
-
-static int
-sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter);
 
 /****************************************************************************
-*                vmk_UplinkMessageLevelOps Handler                         *
+*                vmk_UplinkMessageLevelOps Handler                          *
 ****************************************************************************/
-static VMK_ReturnStatus
-sfvmk_messageLevelGet(vmk_AddrCookie cookie, vmk_uint32 *level);
+static VMK_ReturnStatus sfvmk_messageLevelGet(vmk_AddrCookie cookie,
+                                              vmk_uint32 *level);
 
-static VMK_ReturnStatus
-sfvmk_messageLevelSet(vmk_AddrCookie cookie, vmk_uint32 level);
+static VMK_ReturnStatus sfvmk_messageLevelSet(vmk_AddrCookie cookie,
+                                                  vmk_uint32 level);
 
 static vmk_UplinkMessageLevelOps sfvmkMessageLevelOps = {
   .getMessageLevel = sfvmk_messageLevelGet,
@@ -48,15 +49,13 @@ static vmk_UplinkMessageLevelOps sfvmkMessageLevelOps = {
 };
 
 /****************************************************************************
-*              vmk_UplinkRingParamsOps Handler                             *
+*              vmk_UplinkRingParamsOps Handler                              *
 ****************************************************************************/
-static VMK_ReturnStatus
-sfvmk_ringParamsGet(vmk_AddrCookie cookie,
-                              vmk_UplinkRingParams *params);
+static VMK_ReturnStatus sfvmk_ringParamsGet(vmk_AddrCookie cookie,
+                                          vmk_UplinkRingParams *params);
 
-static VMK_ReturnStatus
-sfvmk_ringParamsSet(vmk_AddrCookie cookie,
-                              vmk_UplinkRingParams *params);
+static VMK_ReturnStatus sfvmk_ringParamsSet(vmk_AddrCookie cookie,
+                                           vmk_UplinkRingParams *params);
 
 struct vmk_UplinkRingParamsOps sfvmkRingParamsOps = {
   .ringParamsGet = sfvmk_ringParamsGet,
@@ -65,7 +64,26 @@ struct vmk_UplinkRingParamsOps sfvmkRingParamsOps = {
 
 
 /****************************************************************************
- *               vmk_UplinkOps Handlers                       *
+*                vmk_UplinkCableTypeOps Handler                             *
+****************************************************************************/
+static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
+                                         vmk_UplinkCableType *cableType);
+
+static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
+                                           vmk_UplinkCableType *cableType);
+
+static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
+                                         vmk_UplinkCableType cableType);
+
+struct vmk_UplinkCableTypeOps sfvmkCableTypeOps = {
+  .getCableType = sfvmk_getCableType,
+  .getSupportedCableTypes = sfvmk_getSupportedCableTypes,
+  .setCableType = sfvmk_setCableType,
+};
+
+
+/****************************************************************************
+ *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
 static VMK_ReturnStatus sfvmk_uplinkMTUSet(vmk_AddrCookie, vmk_uint32);
@@ -73,7 +91,6 @@ static VMK_ReturnStatus sfvmk_uplinkStateSet(vmk_AddrCookie, vmk_UplinkState);
 static VMK_ReturnStatus sfvmk_uplinkStatsGet(vmk_AddrCookie, vmk_UplinkStats *);
 static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie, vmk_Uplink);
 static VMK_ReturnStatus sfvmk_uplinkDisassociate(vmk_AddrCookie);
-static VMK_ReturnStatus sfvmk_uplinkCapsRegister(vmk_AddrCookie);
 static VMK_ReturnStatus sfvmk_uplinkCapEnable(vmk_AddrCookie, vmk_UplinkCap);
 static VMK_ReturnStatus sfvmk_uplinkCapDisable(vmk_AddrCookie, vmk_UplinkCap);
 static VMK_ReturnStatus sfvmk_uplinkStartIO(vmk_AddrCookie);
@@ -94,71 +111,80 @@ static vmk_UplinkOps sfvmkUplinkOps = {
   .uplinkQuiesceIO = sfvmk_uplinkQuiesceIO,
   .uplinkReset = sfvmk_uplinkReset,
 };
-
-
-/****************************************************************************
-*                vmk_UplinkMessageLevelOps 		                    *
-****************************************************************************/
-static VMK_ReturnStatus
-sfvmk_messageLevelGet(vmk_AddrCookie cookie, vmk_uint32 *level)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_messageLevelGet --
+*
+* @brief uplink callback function to retrieve log level.
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  level    log level
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_messageLevelGet(vmk_AddrCookie cookie,
+                                              vmk_uint32 *level)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
 
-  VMK_ASSERT(adapter != NULL);
+  VMK_ASSERT_BUG(pAdapter != NULL);
 
   *level = vmk_LogGetCurrentLogLevel(sfvmk_ModInfo.logID);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 2, "level: 0x%x", *level);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG, "level: 0x%x", *level);
 
   return VMK_OK;
 }
-
-
-static VMK_ReturnStatus
-sfvmk_messageLevelSet(vmk_AddrCookie cookie, vmk_uint32 level)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_messageLevelSet --
+*
+* @brief uplink callback function to set log level.
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[in]  level    log level
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_messageLevelSet(vmk_AddrCookie cookie,
+                                              vmk_uint32 level)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
 
-  VMK_ASSERT(adapter != NULL);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 2,
-                "Seting level to 0x%x (Current level : 0x%x)",
-                level, vmk_LogGetCurrentLogLevel(sfvmk_ModInfo.logID));
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+      "Seting level to 0x%x ",vmk_LogGetCurrentLogLevel(sfvmk_ModInfo.logID));
 
   vmk_LogSetCurrentLogLevel(sfvmk_ModInfo.logID , level);
 
   return VMK_OK;
 }
 
-
-/****************************************************************************
-*              vmk_UplinkRingParamsOps                                      *
-****************************************************************************/
-static VMK_ReturnStatus
-sfvmk_ringParamsGet(vmk_AddrCookie cookie,
-                     vmk_UplinkRingParams *params)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_ringParamsGet --
+*
+* @brief uplink callback function to get ring params
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  params   ring params
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_ringParamsGet(vmk_AddrCookie cookie,
+                                          vmk_UplinkRingParams *params)
 {
 
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  VMK_ASSERT(pAdapter != NULL);
+  params->txPending = params->txMaxPending = sfvmk_txRingEntries;
+  params->rxMaxPending = params->rxPending = sfvmk_rxRingEntries;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 3, "Entry ... ");
-
-  /*
-  * txMaxPending & rxMaxPending are maximum num of entries
-  * supported by Hardware
-  *
-  * txPending & rxPending are currently configured
-  * num of entries
-  *
-  */
-  params->txPending = params->txMaxPending = SFVMK_RX_SCALE_MAX;
-  params->rxMaxPending = params->rxPending = SFVMK_RX_SCALE_MAX;
-
-  /*
-  * Ignoring Mini & Jumbo params, since firmware don't support
-  */
   params->rxMiniMaxPending = 0;
   params->rxJumboMaxPending = 0;
   params->rxMiniPending = 0;
@@ -167,112 +193,210 @@ sfvmk_ringParamsGet(vmk_AddrCookie cookie,
   return VMK_OK;
 }
 
-
-static VMK_ReturnStatus
-sfvmk_ringParamsSet(vmk_AddrCookie cookie,
-                   vmk_UplinkRingParams *params)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_ringParamsSet --
+*
+* @brief uplink callback function to set ring params
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  params   ring params
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_ringParamsSet(vmk_AddrCookie cookie,
+                                           vmk_UplinkRingParams *params)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-
-  VMK_ASSERT_BUG(pAdapter != NULL);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
   SFVMK_ERR(pAdapter, "RingParamsSet is not supported");
 
   return VMK_NOT_SUPPORTED;
 }
-#if 0 
-static VMK_ReturnStatus
-sfvmk_getCableType(vmk_AddrCookie cookie,
-                            vmk_UplinkCableType *cableType)
+
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_getCableType --
+*
+* @brief uplink callback function to get the cabel type
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  cableType  ptr to cable type
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
+                                          vmk_UplinkCableType *cableType)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 3, "Entry ...");
 
-  *cableType = pAdapter->phy.cable_type;
+  *cableType = pAdapter->phy.cableType;
 
   return VMK_OK;
 }
-
-static VMK_ReturnStatus
-sfvmk_setCableType(vmk_AddrCookie cookie,
-                            vmk_UplinkCableType cableType)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_setCableType --
+*
+* @brief uplink callback function to set the cabel type
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  cableType  cable type
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
+                                            vmk_UplinkCableType cableType)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
   SFVMK_ERR(pAdapter, "setCableType is not supported");
 
   return VMK_NOT_SUPPORTED;
 }
-#endif
-/****************************************************************************
- *               vmk_UplinkOps Handlers                       *
- ****************************************************************************/
-static VMK_ReturnStatus
-sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_getSupportedCableTypes --
+*
+* @brief uplink callback function to get the cabel type
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  cableType  ptr to cable type
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
+                                              vmk_UplinkCableType *cableType)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  *cableType = pAdapter->phy.cableType;
+
+  return VMK_OK;
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_linkStatusSet --
+*
+* @brief uplink callback function to set the link status
+*
+* @param[in]  cookie    pointer to sfvmk_adapter_t
+* @param[out]  linkstatus  ptr to link status
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
+                                          vmk_LinkStatus *linkStatus)
+{
+  vmk_LogMessage("calling sfvmk_linkStatusSet\n");
+  return VMK_OK;
+}
+
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_registerIOCaps --
+*
+* @brief function to register driver cap with uplink device.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_registerIOCaps");
+
+  /* Driver supports scatter-gather transmit*/
   status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_SG_TX, NULL);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "SG_TX cap register failed with error 0x%x",status);
     VMK_ASSERT(0);
   }
 
+  /*Driver supports scatter-gather entries spanning multiple pages*/
   status = vmk_UplinkCapRegister(pAdapter->uplink,
-                                  VMK_UPLINK_CAP_MULTI_PAGE_SG, NULL);
+                                VMK_UPLINK_CAP_MULTI_PAGE_SG, NULL);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"MULTI_PAGE_SG cap register failed with error 0x%x",
                 status);
     VMK_ASSERT(0);
   }
 
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_IPV4_CSO, NULL);
+  /*Driver supports IPv4 TCP and UDP checksum offload*/
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                VMK_UPLINK_CAP_IPV4_CSO, NULL);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"IPv4_CSO cap register failed with error 0x%x", status);
     VMK_ASSERT(0);
   }
 
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_IPV4_TSO, NULL);
-  if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
-    SFVMK_ERR(pAdapter, "IPv4_TSO cap register failed with error 0x%x", status);
-    VMK_ASSERT(0);
-  }
-
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_IPV6_CSO, NULL);
+  /* Driver supports IPv6 TCP and UDP checksum offload*/
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                VMK_UPLINK_CAP_IPV6_CSO, NULL);
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
     SFVMK_ERR(pAdapter, "IPv6_CSO cap register failed with error 0x%x", status);
     VMK_ASSERT(0);
   }
 
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_IPV6_TSO, NULL);
+  /*Driver supports IPv4 TCP segmentation offload (TSO) */
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                VMK_UPLINK_CAP_IPV4_TSO, NULL);
+  if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
+    SFVMK_ERR(pAdapter, "IPv4_TSO cap register failed with error 0x%x", status);
+    VMK_ASSERT(0);
+  }
+
+  /*Driver supports IPv6 TCP segmentation offload (TSO) */
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                  VMK_UPLINK_CAP_IPV6_TSO, NULL);
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
     SFVMK_ERR(pAdapter,"IPv6_TSO cap register failed with error 0x%x", status);
     VMK_ASSERT(0);
   }
 
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_VLAN_TX_INSERT, NULL);
-  if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "VLAN_TX_INSERT cap register failed with error 0x%x",
-              status);
-    VMK_ASSERT(0);
-  }
-
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_VLAN_RX_STRIP,  NULL);
+  /* Driver supports VLAN RX offload (tag stripping)*/
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                  VMK_UPLINK_CAP_VLAN_RX_STRIP,  NULL);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"VLAN_RX_STRIP cap register failed with error 0x%x",
               status);
     VMK_ASSERT(0);
   }
 
-  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_MESSAGE_LEVEL,
-                                  &sfvmkMessageLevelOps);
+  /*Driver supports VLAN TX Offload (tag insertion) */
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                VMK_UPLINK_CAP_VLAN_TX_INSERT, NULL);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "VLAN_TX_INSERT cap register failed with error 0x%x",
+              status);
+    VMK_ASSERT(0);
+  }
+  /*Driver supports getting and setting message level*/
+  status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                VMK_UPLINK_CAP_MESSAGE_LEVEL,
+                                &sfvmkMessageLevelOps);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Message Level cap register failed with error 0x%x ",
              status);
     VMK_ASSERT(0);
   }
 
+  /* Driver supports getting and setting RX/TX ring params*/
   status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_RING_PARAMS,
                                   &sfvmkRingParamsOps);
   if (status != VMK_OK) {
@@ -281,135 +405,253 @@ sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     VMK_ASSERT(0);
   }
 
+  /*Driver supports changing link status*/
+  status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_LINK_STATUS_SET,
+                                &sfvmk_linkStatusSet);
+   if (status != VMK_OK) {
+     SFVMK_ERR(pAdapter, "link status cap register failed with error 0x%x",
+               status);
+     VMK_ASSERT(0);
+   }
+
+  /* Driver supports getting and setting cable type */
+   status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_CABLE_TYPE,
+                                  &sfvmkCableTypeOps);
+   if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter,"Cable Type cap register failed with error 0x%x",
+                status);
+      VMK_ASSERT(0);
+   }
+
+   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+             "exited sfvmk_registerIOCaps");
+
   return (status);
 }
 
-
-
-
-
-
-static VMK_ReturnStatus
-sfvmk_uplinkCapsRegister(vmk_AddrCookie cookie)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkAssociate --
+*
+* @brief  uplink callback function to associate uplink device with driver and
+*         driver register its cap with uplink device.
+*
+* @param[in]  adapter   pointer to sfvmk_adapter_t
+* @param[in]  uplink    uplink device
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
+                                               vmk_Uplink uplink)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_OK;
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkCapsRegister entered");
-
-  VMK_ASSERT(pAdapter->uplink != NULL);
-
-  status = sfvmk_registerIOCaps(pAdapter);
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkCapsRegister exit");
-
-  return status;
-}
-
-
-
-
-static VMK_ReturnStatus
-sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplink)
-{
-  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  //VMK_ASSERT_BUG(uplink != NULL);
-  //VMK_ASSERT_BUG(adapter->uplink == NULL);
+  VMK_ASSERT(uplink != NULL);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  VMK_ASSERT(pAdapter->uplink == NULL);
 
   pAdapter->uplink = uplink;
   pAdapter->uplinkName = vmk_UplinkNameGet(pAdapter->uplink);
 
-  return sfvmk_uplinkCapsRegister(cookie);
+  return sfvmk_registerIOCaps(pAdapter);
 }
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkDisassociate --
+*
+* @brief uplink call back function to disassociate uplink device from driver.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  //VMK_ASSERT_BUG(pAdapter->uplink != NULL);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
   pAdapter->uplink = NULL;
 
   return VMK_OK;
 }
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkTx --
+*
+* @brief uplink callback function to transmit pkt
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkTx entered ");
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkTx entered ");
   return VMK_OK;
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkMTUSet --
+*
+* @brief uplink callback function to set MTU
+*
+* @param  adapter pointer to sfvmk_adapter_t
+* @param[in] mtu
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkMTUSet entered ");
-  return VMK_OK;
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkMTUSet entered ");
+ return VMK_OK;
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkStateSet --
+*
+* @brief uplink callback function to set the link status.
+*
+* @param[in]  adapter   pointer to sfvmk_adapter_t
+* @param[in]  admnState linkstate.
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkStateSet entered ");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+             "sfvmk_uplinkStateSet entered ");
   return VMK_OK;
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkStatsGet --
+*
+* @brief uplink callback function to get the link state
+*
+* @param      adapter     pointer to sfvmk_adapter_t
+* @param[out] admnState   ptr to linkstate
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
-sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *amnState )
+sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *admnState )
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkStatsGet entered ");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+           "sfvmk_uplinkStatsGet entered ");
 
   return VMK_OK;
 }
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkCapEnable --
+*
+* @brief uplink callback function to enable cap
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  uplinkCap
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkCapEnable entered ");
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkCapEnable entered ");
   return VMK_OK;
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkCapDisable --
+*
+* @brief uplink callback function to disable cap
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  uplinkCap
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkCapDisable entered ");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkCapDisable entered ");
 
   return VMK_OK;
 }
-
-static VMK_ReturnStatus 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkReset --
+*
+* @brief uplink callback function to reset the adapter.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus
 sfvmk_uplinkReset(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkReset entered ");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkReset entered ");
 
   return VMK_OK;
 }
-
-static VMK_ReturnStatus 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkStartIO --
+*
+* @brief uplink callback function to start the IO operations.
+*
+* @param  cookie  pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus
 sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 {
-
   VMK_ReturnStatus status ;
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *) cookie.ptr;
   int rc;
 
-  VMK_ASSERT(pAdapter != NULL);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkStartIO entered ");
+
   if (pAdapter->initState == SFVMK_STARTED)
     return VMK_OK;
 
@@ -417,7 +659,8 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     return VMK_FAILURE;
 
   pAdapter->uplinkName = vmk_UplinkNameGet(pAdapter->uplink);
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 0, "Received Uplink Start I/O");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "Received Uplink Start I/O");
 
   /* Set required resource limits */
   if ((rc = sfvmk_setDrvLimits(pAdapter)) != 0) {
@@ -426,7 +669,8 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto sfvmk_fail;
   }
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 0, "caliing nic init");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "caliing nic init");
   if ((rc = efx_nic_init(pAdapter->pNic)) != 0) {
     SFVMK_ERR(pAdapter, "Failed to init nic");
     goto sfvmk_fail;
@@ -456,7 +700,7 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     SFVMK_ERR(pAdapter, "Failed to start rx module");
     goto sfvmk_rx_start_fail;
   }
- 
+
   status =  sfvmk_txStart(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to start tx module");
@@ -464,6 +708,9 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
   }
 
   pAdapter->initState = SFVMK_STARTED;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkStartIO exited");
   return status;
 
 sfvmk_tx_start_fail:
@@ -473,32 +720,40 @@ sfvmk_rx_start_fail:
 sfvmk_port_start_fail:
   sfvmk_evStop(pAdapter);
 sfvmk_ev_start_fail:
-  /* intr clean up should have come here */
-  //sfvmk_EvStop(pAdapter);
+  sfvmk_intrStop(pAdapter);
 sfvmk_intr_start_fail:
   efx_nic_fini(pAdapter->pNic);
 sfvmk_fail:
 
   return VMK_FAILURE;
 
-
-
-
 }
-
-static VMK_ReturnStatus 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_uplinkQuiesceIO --
+*
+* @brief uplink callback function to  Quiesce IO operations.
+*
+* @param  cookie  pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus
 sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 5, "sfvmk_uplinkQuiesceIO entered ");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_uplinkQuiesceIO entered ");
 
 
   if (pAdapter->initState != SFVMK_STARTED)
     return VMK_FAILURE;
 
   pAdapter->initState = SFVMK_REGISTERED;
- 
+
   /* Stop the transmitter. */
   sfvmk_txStop(pAdapter);
 
@@ -514,28 +769,45 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   /* Stop processing interrupts. */
   sfvmk_intrStop(pAdapter);
 
-
+  efx_nic_fini(pAdapter->pNic);
 
   return VMK_OK;
 }
-vmk_Bool
-sfvmk_netPollCB(void *pEvq, vmk_uint32 budget)
-{
 
-  vmk_LogMessage("*************************************************\n");
-  vmk_LogMessage("calling net poll callback \n");
-  vmk_LogMessage("*************************************************\n");
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_EVStart --
+*
+* @brief It creates a spin lock with specified name and lock rank.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success, and lock created. Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+vmk_Bool sfvmk_netPollCB(void *pEvq, vmk_uint32 budget)
+{
   sfvmk_evqPoll(pEvq);
   return 0 ;
 }
-
-
-static void
-sfvmk_updateCableType(sfvmk_adapter_t *adapter)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_updateCableType --
+*
+* @brief  update cable type
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static void sfvmk_updateCableType(sfvmk_adapter_t *pAdapter)
 {
-  sfvmk_phyInfo_t *phy = &adapter->phy;
 
-  efx_phy_media_type_get(adapter->pNic, &phy->interfaceType);
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  sfvmk_phyInfo_t *phy = &pAdapter->phy;
+
+  efx_phy_media_type_get(pAdapter->pNic, &phy->interfaceType);
 
   switch (phy->interfaceType) {
     case EFX_PHY_MEDIA_BASE_T:
@@ -554,24 +826,43 @@ sfvmk_updateCableType(sfvmk_adapter_t *adapter)
   }
   return;
 }
-
-static VMK_ReturnStatus
-sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
-                    vmk_UplinkQueueFeature feat,
-                    vmk_UplinkQueueID *pQid,
-                    vmk_UplinkQueueType qType,
-                    vmk_NetPoll *pNetpoll)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_allocQ --
+*
+* @brief  allocate  queues for uplink device
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  feat      Q feature
+* @param[in]  pQid      ptr to uplink Q ID
+* @param[in]  qType     q type (rx or tx)
+* @param[in]  pNetPoll  ptr to netpoll registered with this Q
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
+                                    vmk_UplinkQueueFeature feat,
+                                    vmk_UplinkQueueID *pQid,
+                                    vmk_UplinkQueueType qType,
+                                    vmk_NetPoll *pNetpoll)
 {
   vmk_UplinkSharedQueueData *qData;
   vmk_uint32 qIndex, flags, qStartIndex, maxQueue;
   void *pDefQueue, *pQueue ;
   vmk_UplinkSharedQueueInfo *pQueueInfo;
 
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_allocQ entered");
 
   pQueueInfo = &pAdapter->queueInfo;
 
+  /* tx queue is just after the rx queue in qdata*/
   if (qType == VMK_UPLINK_QUEUE_TYPE_TX) {
     qStartIndex = pAdapter->queueInfo.maxRxQueues;
+    /*first queue is default queue */
     pDefQueue = (void *)pAdapter->pTxq[0];
     maxQueue = qStartIndex + pAdapter->queueInfo.maxTxQueues;
   }
@@ -585,12 +876,13 @@ sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
 
   qData = &pAdapter->queueData[qStartIndex];
 
-
+  /* check if queue is free*/
   for (qIndex = qStartIndex ; qIndex < maxQueue; qIndex++)
     if ((qData[qIndex].flags & VMK_UPLINK_QUEUE_FLAG_IN_USE) == 0)
       break;
 
 
+  /* make queue with uplink device */
   if (qType == VMK_UPLINK_QUEUE_TYPE_TX)
     vmk_UplinkQueueMkTxQueueID(pQid, qIndex, qIndex);
   else if (qType == VMK_UPLINK_QUEUE_TYPE_RX) {
@@ -610,6 +902,7 @@ sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
 
   flags = VMK_UPLINK_QUEUE_FLAG_IN_USE;
 
+  /* set the default flag if the queue is default Q */
   if (pQueue == pDefQueue)
     flags |= VMK_UPLINK_QUEUE_FLAG_DEFAULT;
 
@@ -621,11 +914,25 @@ sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
 
   SFVMK_SHARED_AREA_END_WRITE(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 2,"sfvmk_allocQ %u alloced", qIndex);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_allocQ[%d] exited", qIndex);
 
   return VMK_OK;
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_allocRxQueue --
+*
+* @brief  allocate rx queue for uplink device
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  feat      Q feature
+* @param[in]  pQid      ptr to uplink rxQ ID
+* @param[in]  pNetPoll  ptr to netpoll registered with this Q
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_allocRxQueue(sfvmk_adapter_t *pAdapter,
                    vmk_UplinkQueueFeature feat,
@@ -634,7 +941,18 @@ sfvmk_allocRxQueue(sfvmk_adapter_t *pAdapter,
 {
   return sfvmk_allocQ(pAdapter, 0, pQid, VMK_UPLINK_QUEUE_TYPE_RX, pNetpoll);
 }
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_allocTxQueue --
+*
+* @brief  allocate tx queue for uplink device
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  pQid      uplink txQ ID
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_allocTxQueue(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID *pQid)
 
@@ -642,6 +960,20 @@ sfvmk_allocTxQueue(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID *pQid)
   return sfvmk_allocQ(pAdapter, 0, pQid, VMK_UPLINK_QUEUE_TYPE_TX, NULL);
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_updateQData --
+*
+* @brief update qData for a queue (tx or rx)
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  qIndex    rx queue Index
+* @param[in]  qType     queue type (tx or rx)
+* @param[in]  serviceID
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 
 static VMK_ReturnStatus
 sfvmk_updateQData(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueType qType,
@@ -653,7 +985,10 @@ sfvmk_updateQData(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueType qType,
   VMK_ReturnStatus status = VMK_OK;
 
   VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_updateQData[%d] entered", qIndex);
 
+  /* populate qInfo information */
   pQueueInfo = &pAdapter->queueInfo;
   pQueueData = &pAdapter->queueData[qIndex];
   pQueueData->type =  qType;
@@ -675,8 +1010,9 @@ sfvmk_updateQData(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueType qType,
     else
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR;
 
-      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 3, " uplink Txq =%d init", qIndex);
-    }
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                "uplink Txq =%d init", qIndex);
+  }
   else if (qType == VMK_UPLINK_QUEUE_TYPE_RX) {
     if (qIndex == 0) {
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
@@ -687,7 +1023,6 @@ sfvmk_updateQData(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueType qType,
 
     /* poll properties for crreting netPoll*/
     pollProp.poll = sfvmk_netPollCB;
-    //assert for qIndex
     pollProp.priv.ptr = pAdapter->pEvq[qIndex];
     pollProp.deliveryCallback = NULL;
     pollProp.features = VMK_NETPOLL_NONE;
@@ -704,35 +1039,67 @@ sfvmk_updateQData(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueType qType,
     pQueueData->poll = pAdapter->pEvq[qIndex]->netPoll;
     pAdapter->pEvq[qIndex]->vector = pAdapter->intr.intrCookies[qIndex];
 
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 3, "uplink Rxq =%d init, poll=0x%p",
-                qIndex, pQueueData->poll);
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              "uplink Rxq =%d init, poll=0x%p", qIndex, pQueueData->poll);
   }
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_updateQData[%d] exited", qIndex);
+
 
   return status;
 
 }
 
-
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_updateRxqData --
+*
+* @brief update qData for a rx queue
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  qIndex    rx queue Index
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
-sfvmk_updateRxqData(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex,  vmk_ServiceAcctID serviceID)
+sfvmk_updateRxqData(sfvmk_adapter_t *pAdapter,
+                      vmk_uint32 qIndex, vmk_ServiceAcctID serviceID)
 {
-
   return sfvmk_updateQData(pAdapter, VMK_UPLINK_QUEUE_TYPE_RX, qIndex,
                            serviceID);
-
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_updateTxqData --
+*
+* @brief update qData for a tx queue
+*
+* @param      adapter   pointer to sfvmk_adapter_t
+* @param[in]  qIndex    tx queue Index
+*
+* @result: VMK_OK on success  Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_updateTxqData(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 {
   return sfvmk_updateQData(pAdapter, VMK_UPLINK_QUEUE_TYPE_TX, qIndex, 0);
 
 }
-
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_updateSharedQueueInfo --
+*
+* @brief update the shared queue info which will be used by uplink device.
+*
+* @param  adapter   pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success Error code if otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static VMK_ReturnStatus
 sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter)
 {
@@ -742,29 +1109,30 @@ sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter)
   VMK_ReturnStatus status = VMK_OK;
   int qIndex;
 
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+            "sfvmk_updateSharedQueueInfo entered");
+
   /*populating shared queue information */
   pQueueInfo = &pAdapter->queueInfo;
-
   pQueueInfo->supportedQueueTypes = VMK_UPLINK_QUEUE_TYPE_TX |
                                     VMK_UPLINK_QUEUE_TYPE_RX;
   pQueueInfo->supportedRxQueueFilterClasses =
                               VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY;
-
 
   /* update max tx and rx queue*/
   /* needs modification when RSS and dynamic queue support is added */
   pQueueInfo->maxTxQueues =  pAdapter->txqCount;
   pQueueInfo->maxRxQueues =  pAdapter->rxqCount;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 2, "maxTxQs: %d maxRxQs: %d ",
-                    pQueueInfo->maxTxQueues, pQueueInfo->maxRxQueues);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "maxTxQs: %d maxRxQs: %d ", pQueueInfo->maxTxQueues,
+            pQueueInfo->maxRxQueues);
 
   pQueueInfo->activeRxQueues = 0;
   pQueueInfo->activeTxQueues = 0;
-
   pQueueInfo->queueData = pAdapter->queueData;
-
-
   pQueueInfo->defaultRxQueueID = 0;
   pQueueInfo->defaultTxQueueID = 0;
 
@@ -775,7 +1143,7 @@ sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter)
   }
 
   /* updating rxqData */
-  for (qIndex=0; qIndex < pQueueInfo->maxRxQueues; qIndex++) {
+  for (qIndex = 0; qIndex < pQueueInfo->maxRxQueues; qIndex++) {
 
     status = sfvmk_updateRxqData(pAdapter, qIndex, serviceID);
     if (status != VMK_OK) {
@@ -783,8 +1151,8 @@ sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter)
       goto sfvmk_fail;
     }
     else
-      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, 2, "updated uplink rxq[%d] data",
-                    qIndex);
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                "updated uplink rxq[%d] data", qIndex);
 
   }
 
@@ -812,15 +1180,27 @@ sfvmk_updateSharedQueueInfo(sfvmk_adapter_t *pAdapter)
       goto sfvmk_fail;
   }
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+              "sfvmk_updateSharedQueueInfo exited");
+
   return status;
 
 sfvmk_fail:
   return status;
 
 }
-
-
-
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_initUplinkData --
+*
+* @brief  allocate the resource required for uplink device and initalize all
+*         required information.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK on success otherwise VMK_FAILURE
+*
+*-----------------------------------------------------------------------------*/
 
 VMK_ReturnStatus
 sfvmk_initUplinkData(sfvmk_adapter_t * pAdapter)
@@ -839,7 +1219,7 @@ sfvmk_initUplinkData(sfvmk_adapter_t * pAdapter)
   sfvmk_updateCableType(pAdapter);
 
   status = sfvmk_createLock(sfvmk_ModInfo.driverName.string, VMK_SPINLOCK_RANK_HIGHEST-1,
-                            &pAdapter->sharedDataWriterLock);
+                            &pAdapter->shareDataLock);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to create writer lock for shared data");
     goto sfvmk_create_data_lock_fail;
@@ -882,27 +1262,51 @@ sfvmk_initUplinkData(sfvmk_adapter_t * pAdapter)
   return (VMK_OK);
 
 sfvmk_create_data_fail:
-  sfvmk_destroyLock(pAdapter->sharedDataWriterLock);
+  sfvmk_destroyLock(pAdapter->shareDataLock);
 sfvmk_create_data_lock_fail:
   return (status);
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_destroyUplinkData --
+*
+* @brief function to destroy resource created for uplink device.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: VMK_OK success, Error code  otherwise.
+*
+*-----------------------------------------------------------------------------*/
 VMK_ReturnStatus
 sfvmk_destroyUplinkData(sfvmk_adapter_t *pAdapter)
 {
   vmk_int16 qIndex;
   sfvmk_evq_t *pEVQ;
 
+  VMK_ASSERT_BUG(NULL != pAdapter, "NULL adapter ptr" );
+
   for (qIndex = 0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
     pEVQ = pAdapter->pEvq[qIndex];
     vmk_NetPollDestroy(pEVQ->netPoll);
   }
 
-  vmk_SpinlockDestroy(pAdapter->sharedDataWriterLock);
+  vmk_SpinlockDestroy(pAdapter->shareDataLock);
 
   return (VMK_OK);
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_setDrvLimits --
+*
+* @brief function to set the driver limit in fw.
+*
+* @param  adapter pointer to sfvmk_adapter_t
+*
+* @result: 0 success, Error code otherwise.
+*
+*-----------------------------------------------------------------------------*/
 static int
 sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter)
 {

@@ -42,7 +42,7 @@ sfvmk_createLock(const char *lockName,
    lockProps.rank = rank;
    status = vmk_SpinlockCreate(&lockProps, lock);
    if (status != VMK_OK) {
-      vmk_LogMessage("Failed to create spinlock (%x)", status);
+      SFVMK_ERROR("Failed to create spinlock (%x)", status);
    }
    return status;
 }
@@ -70,12 +70,12 @@ sfvmk_destroyLock(vmk_Lock lock)
  *
  * sfvmk_memPoolAlloc --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief create contiguous memory from memory pool
  *
- * @param[in]  lockName  brief name for the spinlock
+ * @param[in]   size of the memory to be allocated.
+ *              memory is allocated always in pages
  *
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
+ * @result: kernel virtual address of the memory allocated.
  *
  *-----------------------------------------------------------------------------*/
 
@@ -138,11 +138,10 @@ sfvmk_allocation_err:
  *
  * @brief It creates a spin lock with specified name and lock rank.
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  va     virtual address of the mem needs to get freed
+ * @param[in]  size   size of the memory
  *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
+ * @result: void
  *
  *-----------------------------------------------------------------------------*/
 void
@@ -180,13 +179,15 @@ sfvmk_memPoolFree(void *va, vmk_uint64 size)
 }
 /**-----------------------------------------------------------------------------
  *
- * sfvmk_createLock --
+ * sfvmk_DMAMapMA --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief function to map machine address to DMA address
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  ma       machine address
+ * @param[in]  size     size of the memory
+ * @param[in] direction DMADirection
+ * @param[in]  engine   dma engine to be used
+ * @param[out]  ioa     dma address
  *
  * @result: VMK_OK on success, and lock created. Error code if otherwise.
  *
@@ -228,13 +229,13 @@ sfvmk_DMAMapMA(vmk_MA ma,
  *
  * sfvmk_allocCoherentDMAMapping --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief this function allocate dmaable memory
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  dmaEngine  dma engine to be used
+ * @param[in]  size       size of the memory
+ * @param[out] ioAddr     dma addressable memory
  *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
+ * @result: kernel virtual address of the dmaable memory
  *
  *-----------------------------------------------------------------------------*/
 
@@ -270,13 +271,14 @@ sfvmk_mempool_alloc_fail:
  *
  * sfvmk_freeCoherentDMAMapping --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief unmap dma mapping and free memory
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  engine   dma engine to be used
+ * @param[in]  pVA      kernel virtual address of the memory needs to be freed.
+ * @param[in]  ioAddr   dma address of the memory
+ * @param[out] size     size of the memory.
  *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
+ * @result: void
  *
  *-----------------------------------------------------------------------------*/
 
@@ -303,17 +305,17 @@ sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
  *
  * sfvmk_mutexInit --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief It creates a mutex lock with specified name and lock rank.
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  lckName    brief name for the mutexLock
+ * @param[in]  rank       lock rank
+ * @param[out] mutex      mutex lock pointer to create
  *
  * @result: VMK_OK on success, and lock created. Error code if otherwise.
  *
  *-----------------------------------------------------------------------------*/
 VMK_ReturnStatus
-sfvmk_mutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex)           // OUT: created lock
+sfvmk_mutexInit(const char *lckName, vmk_LockRank rank, vmk_Mutex *mutex)           // OUT: created lock
 {
    vmk_MutexCreateProps lockProps;
    VMK_ReturnStatus status;
@@ -336,13 +338,11 @@ sfvmk_mutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex)         
  *
  * sfvmk_mutexDestroy --
  *
- * @brief It creates a spin lock with specified name and lock rank.
+ * @brief It destroy mutex.
  *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
+ * @param[in]  mutex  mutex handle
  *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
+ * @result: void
  *
  *-----------------------------------------------------------------------------*/
 void sfvmk_mutexDestroy(vmk_Mutex mutex)
@@ -350,3 +350,6 @@ void sfvmk_mutexDestroy(vmk_Mutex mutex)
   if(mutex)
     vmk_MutexDestroy(mutex);
 }
+
+
+

@@ -19,7 +19,6 @@
 #define SFVMK_MCDI_LOCK(mcdi)     vmk_MutexLock(mcdi->lock);
 #define SFVMK_MCDI_UNLOCK(mcdi)   vmk_MutexUnlock(mcdi->lock);
 
-
 /**-----------------------------------------------------------------------------
  *
  * sfvmk_mcdiTimeout --
@@ -39,7 +38,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
   EFSYS_PROBE(mcdi_timeout);
 
   //praveen  call reset functinality will do it later
-  //sfvmk_schedule_reset(sc);
+  //sfvmk_scheduleReset(pAdapter);
 }
 
 /**-----------------------------------------------------------------------------
@@ -190,7 +189,7 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
   EFSYS_PROBE(mcdi_exception);
 
   // praveen needs reset functinality
-  //sfvmk_schedule_reset(sc);
+  //sfvmk_scheduleReset(pAdapter);
 }
 
 /**-----------------------------------------------------------------------------
@@ -210,7 +209,7 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
 {
   efx_nic_t *pNic;
   efx_mcdi_transport_t *pEmt;
-  efsys_mem_t *pEsm;
+  efsys_mem_t *pMcdiMem;
   vmk_uint32 maxMsgSize;
   vmk_int32 rc = -1;
   sfvmk_mcdi_t *pMcdi;
@@ -221,30 +220,31 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   pNic = pAdapter->pNic;
   pMcdi = &pAdapter->mcdi;
   pEmt = &pMcdi->transport;
-  pEsm = &pMcdi->mem;
+  pMcdiMem = &pMcdi->mem;
 
   maxMsgSize = sizeof ( vmk_uint32 ) + MCDI_CTL_SDU_LEN_MAX_V2;
 
   VMK_ASSERT_BUG(pMcdi->state != SFVMK_MCDI_INITIALIZED,
                   "MCDI already initialized");
 
-  status = sfvmk_mutexInit("mcdi" ,VMK_MUTEX_RANK_HIGHEST, &pMcdi->lock);
+  status = sfvmk_mutexInit("mcdi" ,SFVMK_MCDI_LOCK_RANK, &pMcdi->lock);
   if (status != VMK_OK)
     goto lock_create_fail;
 
   pMcdi->state = SFVMK_MCDI_INITIALIZED;
 
-  pEsm->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, maxMsgSize, &pEsm->io_elem.ioAddr);
-  if (NULL== pEsm->esm_base) {
+  pMcdiMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+                                        maxMsgSize, &pMcdiMem->io_elem.ioAddr);
+  if (NULL== pMcdiMem->esm_base) {
     SFVMK_ERR(pAdapter,"failed to allocate memory for mcdi module");
     goto sfvmk_mem_alloc_fail;
   }
 
-  pEsm->io_elem.length = maxMsgSize;
-  pEsm->esm_handle = pAdapter->dmaEngine;
+  pMcdiMem->io_elem.length = maxMsgSize;
+  pMcdiMem->esmHandle = pAdapter->dmaEngine;
 
   pEmt->emt_context = pAdapter;
-  pEmt->emt_dma_mem = pEsm;
+  pEmt->emt_dma_mem = pMcdiMem;
   pEmt->emt_execute = sfvmk_mcdiExecute;
   pEmt->emt_ev_cpl =  sfvmk_mcdiEvCpl;
   pEmt->emt_exception = sfvmk_mcdiException;
@@ -257,8 +257,8 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   return rc;
 
 sfvmk_mcdi_init_fail:
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEsm->esm_base ,
-                              pEsm->io_elem.ioAddr, pEsm->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->esm_base ,
+                              pMcdiMem->io_elem.ioAddr, pMcdiMem->io_elem.length);
 sfvmk_mem_alloc_fail:
   sfvmk_mutexDestroy(pMcdi->lock);
 lock_create_fail:
@@ -268,9 +268,9 @@ lock_create_fail:
 }
 /**-----------------------------------------------------------------------------
  *
- * sfvmk_mcdiExecute --
+ * sfvmk_mcdiFini --
  *
- * @brief Routine for polling mcdi response.
+ * @brief Routine for destroying mcdi module.
  *
  * @param  adapter pointer to sfvmk_adapter_t
  *
@@ -283,7 +283,7 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
   sfvmk_mcdi_t *pMcdi;
   efx_nic_t *pNic;
   efx_mcdi_transport_t *pEmt;
-  efsys_mem_t *pEsm;
+  efsys_mem_t *pMcdiMem;
 
   VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
 
@@ -292,7 +292,7 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
 
   pMcdi = &pAdapter->mcdi;
   pEmt = &pMcdi->transport;
-  pEsm = &pMcdi->mem;
+  pMcdiMem = &pMcdi->mem;
 
 
   SFVMK_MCDI_LOCK(pMcdi);
@@ -304,8 +304,9 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
 
   SFVMK_MCDI_UNLOCK(pMcdi);
 
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEsm->esm_base , pEsm->io_elem.ioAddr,
-                                pEsm->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->esm_base,
+                                pMcdiMem->io_elem.ioAddr,
+                                pMcdiMem->io_elem.length);
 
   sfvmk_mutexDestroy(pMcdi->lock);
 

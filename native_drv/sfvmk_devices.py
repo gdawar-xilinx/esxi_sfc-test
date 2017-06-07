@@ -9,7 +9,7 @@ DEV = {
             "devices" : [
                {
                   "device id"         : "0a03",
-                  "description"       : "Solarflare Ethernet Controller",
+                  "description"       : "SFC9200 family",
                },
 
             ],

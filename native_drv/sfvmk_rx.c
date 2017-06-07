@@ -7,8 +7,15 @@
 
 #include "sfvmk_driver.h"
 
+/* value for batch processing */
 #define SFVMK_REFILL_BATCH  64
 
+/* polling time for flush to be completed */
+#define SFVMK_RXQ_STOP_POLL_WAIT 100*SFVMK_ONE_MILISEC
+#define SFVMK_RXQ_STOP_POLL_TIMEOUT 20
+
+
+/* hash key */
 static uint8_t sfvmk_toepKey[] = {
   0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
   0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
@@ -18,203 +25,136 @@ static uint8_t sfvmk_toepKey[] = {
 };
 
 
+void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
+                            sfvmk_rxSwDesc_s *pRxDesc, unsigned int qIndex);
+void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop);
+void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
+                          boolean_t retrying);
+static VMK_ReturnStatus sfvmk_rxqInit(sfvmk_adapter_t *pAdapter,
+                                              unsigned int qIndex);
+static void sfvmk_rxqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+static int sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex);
+
+
+
 /**-----------------------------------------------------------------------------
 *
-* sfvmk_createLock --
+* sfvmk_rxDeliver --
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @brief      function to deliver rx pkt to uplink layer
 *
-* @param[in]  lockName  brief name for the spinlock
-* @param[in]  rank      lock rank)
-* @param[out] lock      lock pointer to create
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+* @param[in]  rxDesc      rx buffer desc
+* @param[in]  qIndex      rxq Index
 *
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
+* @result: void
 *
 *-----------------------------------------------------------------------------*/
-static VMK_ReturnStatus
-sfvmk_rxqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
+void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
+                            sfvmk_rxSwDesc_s *pRxDesc, unsigned int qIndex)
 {
-  sfvmk_rxq_t *pRxq;
-  sfvmk_evq_t *pEvq;
-  efsys_mem_t *pRxqMem;
-
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-
-  VMK_ASSERT_BUG(qIndex < pAdapter->rxqCount, " invalid qindex");
-
-  pRxq = sfvmk_memPoolAlloc(sizeof(sfvmk_rxq_t));
-  if(NULL == pRxq) {
-		SFVMK_ERR(pAdapter,"failed to allocate memory for rxq object");
-    goto sfvmk_rx_alloc_fail;
-  }
-
-  pRxq->pAdapter = pAdapter;
-  pRxq->index = qIndex;
-  pRxq->entries = pAdapter->rxqEntries;
-  pRxq->ptrMask = pRxq->entries - 1;
-  //pRxq->refill_threshold = RX_REFILL_THRESHOLD(pRxq->entries);
-
-  pAdapter->pRxq[qIndex] = pRxq;
-
-  pRxqMem = &pRxq->mem;
-
-  pEvq = pAdapter->pEvq[qIndex];
-
-  /* Allocate and zero DMA space. */
-  pRxqMem->io_elem.length = EFX_RXQ_SIZE(pAdapter->rxqEntries);
-  pRxqMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->io_elem.length                        ,&pRxqMem->io_elem.ioAddr);
-  if (pRxqMem->esm_base == NULL) {
-  	SFVMK_ERR(pAdapter,"failed to allocate memory for rxq enteries");
-    goto sfvmk_dma_alloc_fail;
-  }
-  pRxqMem->esm_handle  = pAdapter->dmaEngine;
-
-  /* Allocate the context array and the flow table. */
-  pRxq->pQueue = sfvmk_memPoolAlloc(sizeof( sfvmk_rxSwDesc_t) * pAdapter->rxqEntries);
-  if (NULL == pRxq->pQueue)
-    goto sfvmk_desc_alloc_fail;
-
-  pRxq->qdescSize = sizeof(sfvmk_rxSwDesc_t) * pAdapter->rxqEntries;
-  pRxq->initState = SFVMK_RXQ_INITIALIZED;
-
-  return VMK_OK;
-sfvmk_desc_alloc_fail:
-    sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->esm_base,
-                                pRxqMem->io_elem.ioAddr, pRxqMem->io_elem.length);
-sfvmk_dma_alloc_fail:
-    sfvmk_memPoolFree(pRxq, sizeof(sfvmk_rxq_t));
-sfvmk_rx_alloc_fail:
-  return VMK_FAILURE;
-
-
+  return ;
 }
 /**-----------------------------------------------------------------------------
+* sfvmk_rxqComplete --
 *
-* sfvmk_createLock --
+* @brief      read the pkt from the queue and pass it to uplink layer
+*             or discard it
 *
-* @brief It creates a spin lock with specified name and lock rank.
+* @param[in]  pRxq     pointer to rxQ
+* @param[in]  eop
 *
-* @param[in]  lockName  brief name for the spinlock
-* @param[in]  rank      lock rank)
-* @param[out] lock      lock pointer to create
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
-static void
-sfvmk_rxqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
-{
-  sfvmk_rxq_t *pRxq;
-  efsys_mem_t *pRxqMem;
-
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-
-  pRxq = pAdapter->pRxq[qIndex];
-
-  pRxqMem = &pRxq->mem;
-  VMK_ASSERT_BUG(pRxq->initState == SFVMK_RXQ_INITIALIZED,
-                    "rxq->initState != SFVMK_RXQ_INITIALIZED");
-
-  sfvmk_memPoolFree(pRxq->pQueue, pRxq->qdescSize);
-  /* Release DMA memory. */
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->esm_base,
-                              pRxqMem->io_elem.ioAddr, pRxqMem->io_elem.length);
-  pAdapter->pRxq[qIndex] = NULL;
-
-  sfvmk_memPoolFree(pRxq, sizeof(sfvmk_rxq_t));
-}
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_createLock --
-*
-* @brief It creates a spin lock with specified name and lock rank.
-*
-* @param[in]  lockName  brief name for the spinlock
-* @param[in]  rank      lock rank)
-* @param[out] lock      lock pointer to create
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
+* @result: void
 *
 *-----------------------------------------------------------------------------*/
-int sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
-{
-  sfvmk_intr_t *pIntr;
-  int qIndex;
-  VMK_ReturnStatus status;
-
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-
-
-  pIntr = &pAdapter->intr;
-
-  pAdapter->rxqCount = pIntr->numIntrAlloc;
-
-  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
-                  "intr->state != SFXGE_INTR_INITIALIZED");
-
-  /* Initialize the receive queue(s) - one per interrupt. */
-  for (qIndex = 0; qIndex < pAdapter->rxqCount; qIndex++) {
-    if ((status = sfvmk_rxqInit(pAdapter, qIndex)) != VMK_OK) {
-			SFVMK_ERR(pAdapter,"failed to init rxq[%d]", qIndex);
-      goto sfvmk_fail;
-    }
-  }
-
-  return status;
-
-sfvmk_fail:
-/* Tear down the receive queue(s). */
-  while (--qIndex >= 0)
-    sfvmk_rxqFini(pAdapter, qIndex);
-
-  pAdapter->rxqCount = 0;
-
-  return status;
-}
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_createLock --
-*
-* @brief It creates a spin lock with specified name and lock rank.
-*
-* @param[in]  lockName  brief name for the spinlock
-* @param[in]  rank      lock rank)
-* @param[out] lock      lock pointer to create
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
-void
-sfvmk_rxFini(sfvmk_adapter_t *pAdapter)
-{
-  int qIndex;
-
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-
-  qIndex = pAdapter->rxqCount;
-  while (--qIndex >= 0)
-    sfvmk_rxqFini(pAdapter, qIndex);
-
-  pAdapter->rxqCount = 0;
-}
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_createLock --
-*
-* @brief It creates a spin lock with specified name and lock rank.
-*
-* @param[in]  lockName  brief name for the spinlock
-* @param[in]  rank      lock rank)
-* @param[out] lock      lock pointer to create
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
-
-void
-sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
+void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
 {
   sfvmk_adapter_t *pAdapter = pRxq->pAdapter;
+  unsigned int index;
+  struct sfvmk_evq_s *pEvq;
+  unsigned int completed;
+  unsigned int level;
+  vmk_PktHandle *pPkt ;
+  struct sfvmk_rxSwDesc_s *prev = NULL;
+
+  VMK_ASSERT_BUG(NULL != pRxq, " NULL rxQ ptr");
+
+  index = pRxq->index;
+  pEvq = pAdapter->pEvq[index];
+
+  completed = pRxq->completed;
+  while (completed != pRxq->pending) {
+    unsigned int id;
+    struct sfvmk_rxSwDesc_s *rxDesc;
+
+    id = completed++ & pRxq->ptrMask;
+    rxDesc = &pRxq->pQueue[id];
+    pPkt = rxDesc->pPkt;
+
+    if (VMK_UNLIKELY(pRxq->initState != SFVMK_RXQ_STARTED))
+      goto sfvmk_discard;
+
+    if (rxDesc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
+      goto sfvmk_discard;
+
+    switch (rxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
+      case EFX_PKT_IPV4:
+        rxDesc->flags &=
+        ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
+        break;
+      case EFX_PKT_IPV6:
+        rxDesc->flags &= ~EFX_CKSUM_TCPUDP;
+        break;
+      case 0:
+        /* Check for loopback packets */
+        break;
+
+      default:
+        SFVMK_ERR(pAdapter, "Rx Desc with both ipv4 and ipv6 flags");
+        goto sfvmk_discard;
+    }
+
+    /* Pass packet up the stack  */
+    if (prev != NULL) {
+      sfvmk_rxDeliver(pAdapter, prev, pRxq->index);
+    }
+
+    prev = rxDesc;
+    continue;
+
+sfvmk_discard:
+    /* Return the packet to the pool */
+    vmk_PktRelease(pPkt);
+    rxDesc->pPkt = NULL;
+    SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG, "completed = %d"
+              "pending = %d", completed, pRxq->pending);
+  }
+
+  pRxq->completed = completed;
+  level = pRxq->added - pRxq->completed;
+
+  /* Pass last packet up the stack or into LRO */
+  if (prev != NULL) {
+    sfvmk_rxDeliver(pAdapter, prev, pRxq->index);
+  }
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqFill --
+*
+* @brief      fill RX buffer desc with pkt information.
+*
+* @param[in]  pRxq      pointer to rxQ
+* @param[in]  numBuf    number of buf desc to be filled in
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
+                          boolean_t retrying)
+{
+  sfvmk_adapter_t *pAdapter = NULL;
   struct sfvmk_rxSwDesc_s *rxDesc;
   efsys_dma_addr_t addr[SFVMK_REFILL_BATCH];
   vmk_PktHandle *pNewpkt = NULL;
@@ -229,34 +169,31 @@ sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
   vmk_uint32 id;
   vmk_uint32 oldAdded;
 
+  VMK_ASSERT_BUG(NULL != pRxq, " NULL Rxq ptr");
+  pAdapter = pRxq->pAdapter;
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
-  batch =0;
+
+  batch = 0;
   rxfill = pRxq->added - pRxq->completed;
   oldAdded = pRxq->added;
 
-  // VMK_ASSERT(rxfill <= EFX_RXQ_LIMIT(pRxq->entries));
-
   maxBuf = MIN(EFX_RXQ_LIMIT(pRxq->entries) - rxfill, numBufs);
-
-  //VMK_ASSERT(ntodo <= EFX_RXQ_LIMIT(pRxq->entries));
-
   mblkSize = pAdapter->rxBufferSize - pAdapter->rxBufferAlign;
 
   for (posted = 0; posted < maxBuf ; posted++) {
 
     status = vmk_PktAllocForDMAEngine(mblkSize, pAdapter->dmaEngine, &pNewpkt);
-
     if (VMK_UNLIKELY(status != VMK_OK)) {
-      //praveen
+      SFVMK_ERR(pAdapter, "failed to allocate pkt. err: %d", status);
       break;
     }
-
     pFrag = vmk_PktSgElemGet(pNewpkt, 0);
     if (pFrag == NULL) {
       vmk_PktRelease(pNewpkt);
       break;
     }
-
+    /* map it io dma address*/
     mapperIN.addr = pFrag->addr;
     mapperIN.length = pFrag->length;
     status = vmk_DMAMapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY,
@@ -264,7 +201,6 @@ sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
     if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "Failed to map %p size %d to IO address, %s.",
                 pNewpkt, mblkSize,vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
-      //praveen
       vmk_PktRelease(pNewpkt);
       break;
     }
@@ -275,19 +211,21 @@ sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
     rxDesc->flags = EFX_DISCARD;
     rxDesc->pPkt = pNewpkt;
     rxDesc->size = mblkSize;
-
     addr[batch++] = mapperOut.ioAddr;
 
 
     if (batch == SFVMK_REFILL_BATCH) {
-
+      /* post buffer to rxq module */
       efx_rx_qpost(pRxq->pCommonRxq, addr, mblkSize, batch,
-      pRxq->completed, pRxq->added);
+                    pRxq->completed, pRxq->added);
       pRxq->added += batch;
       batch = 0;
     }
   }
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
+            " No of allocated buffer = %d", posted);
 
+  /*release the buffer which did not reach to rxq module */
   if (posted != maxBuf)
   {
     posted = posted % SFVMK_REFILL_BATCH;
@@ -306,7 +244,8 @@ sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
                                 VMK_DMA_DIRECTION_TO_MEMORY, &elem);
       if (status != VMK_OK) {
         SFVMK_ERR(pAdapter, "Failed to unmap %p size %d to IO address, %s.",
-                  rxDesc->pPkt, mblkSize,vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+                  rxDesc->pPkt, mblkSize,
+                  vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
       }
       else
         vmk_PktRelease(rxDesc->pPkt);
@@ -319,9 +258,208 @@ sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs , boolean_t retrying)
   return;
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqInit --
+*
+* @brief     initialize all the resource required for a rxQ module
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+* @param[in]  qIndex      rxq Index
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+static VMK_ReturnStatus sfvmk_rxqInit(sfvmk_adapter_t *pAdapter,
+                                              unsigned int qIndex)
+{
+  sfvmk_rxq_t *pRxq;
+  sfvmk_evq_t *pEvq;
+  efsys_mem_t *pRxqMem;
 
-static int
-sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  VMK_ASSERT_BUG(qIndex < pAdapter->rxqCount, " invalid qindex");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxqInit[%u]", qIndex);
+
+  pRxq = sfvmk_memPoolAlloc(sizeof(sfvmk_rxq_t));
+  if(NULL == pRxq) {
+    SFVMK_ERR(pAdapter,"failed to allocate memory for rxq object");
+    goto sfvmk_rx_alloc_fail;
+  }
+
+  pRxq->pAdapter = pAdapter;
+  pRxq->index = qIndex;
+  pRxq->entries = pAdapter->rxqEntries;
+  pRxq->ptrMask = pRxq->entries - 1;
+
+  pAdapter->pRxq[qIndex] = pRxq;
+
+  pRxqMem = &pRxq->mem;
+
+  pEvq = pAdapter->pEvq[qIndex];
+
+  /* Allocate and zero DMA space. */
+  pRxqMem->io_elem.length = EFX_RXQ_SIZE(pAdapter->rxqEntries);
+  pRxqMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->io_elem.length                        ,&pRxqMem->io_elem.ioAddr);
+  if (pRxqMem->esm_base == NULL) {
+    SFVMK_ERR(pAdapter,"failed to allocate memory for rxq enteries");
+    goto sfvmk_dma_alloc_fail;
+  }
+  pRxqMem->esmHandle  = pAdapter->dmaEngine;
+
+  /* Allocate the context array and the flow table. */
+  pRxq->pQueue = sfvmk_memPoolAlloc(sizeof( sfvmk_rxSwDesc_t) * pAdapter->rxqEntries);
+  if (NULL == pRxq->pQueue)
+    goto sfvmk_desc_alloc_fail;
+
+  pRxq->qdescSize = sizeof(sfvmk_rxSwDesc_t) * pAdapter->rxqEntries;
+  pRxq->initState = SFVMK_RXQ_INITIALIZED;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxqInit[%u]", qIndex);
+
+  return VMK_OK;
+sfvmk_desc_alloc_fail:
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->esm_base,
+                                pRxqMem->io_elem.ioAddr, pRxqMem->io_elem.length);
+sfvmk_dma_alloc_fail:
+  sfvmk_memPoolFree(pRxq, sizeof(sfvmk_rxq_t));
+sfvmk_rx_alloc_fail:
+  return VMK_FAILURE;
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqFini --
+*
+* @brief     destroy all the resources required for a rxQ module
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+* @param[in]  qIndex      rxq Index
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+static void sfvmk_rxqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
+{
+  sfvmk_rxq_t *pRxq;
+  efsys_mem_t *pRxqMem;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxqFini[%d]", qIndex);
+
+  pRxq = pAdapter->pRxq[qIndex];
+
+  pRxqMem = &pRxq->mem;
+  VMK_ASSERT_BUG(pRxq->initState == SFVMK_RXQ_INITIALIZED,
+                    "rxq->initState != SFVMK_RXQ_INITIALIZED");
+
+  sfvmk_memPoolFree(pRxq->pQueue, pRxq->qdescSize);
+  /* Release DMA memory. */
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pRxqMem->esm_base,
+                              pRxqMem->io_elem.ioAddr, pRxqMem->io_elem.length);
+  pAdapter->pRxq[qIndex] = NULL;
+
+  sfvmk_memPoolFree(pRxq, sizeof(sfvmk_rxq_t));
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxqFini[%u]", qIndex);
+
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxInit --
+*
+* @brief      initialize all the resource required for all rxQ module
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+int sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_intr_t *pIntr;
+  int qIndex;
+  VMK_ReturnStatus status;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxInit");
+
+  pIntr = &pAdapter->intr;
+
+  pAdapter->rxqCount = pIntr->numIntrAlloc;
+
+  VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
+                  "intr->state != SFXGE_INTR_INITIALIZED");
+
+  /* Initialize the receive queue(s) - one per interrupt. */
+  for (qIndex = 0; qIndex < pAdapter->rxqCount; qIndex++) {
+    if ((status = sfvmk_rxqInit(pAdapter, qIndex)) != VMK_OK) {
+      SFVMK_ERR(pAdapter,"failed to init rxq[%d]", qIndex);
+      goto sfvmk_fail;
+    }
+  }
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxInit");
+
+  return status;
+
+sfvmk_fail:
+/* Tear down the receive queue(s). */
+  while (--qIndex >= 0)
+    sfvmk_rxqFini(pAdapter, qIndex);
+
+  pAdapter->rxqCount = 0;
+
+  return status;
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxFini --
+*
+* @brief      destroy all the resources required for all rxQ module
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+void sfvmk_rxFini(sfvmk_adapter_t *pAdapter)
+{
+  int qIndex;
+
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxFini");
+
+  qIndex = pAdapter->rxqCount;
+  while (--qIndex >= 0)
+    sfvmk_rxqFini(pAdapter, qIndex);
+
+  pAdapter->rxqCount = 0;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxFini");
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqStart --
+*
+* @brief     create rxQ module and fill the rxdesc for a given queue.
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+* @param[in]  qIndex      rxq Index
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+static int sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
 
   sfvmk_rxq_t *pRxq;
@@ -329,18 +467,19 @@ sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   int rc;
 
+  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxqStart[%u]", qIndex);
+
   pRxq = pAdapter->pRxq[qIndex];
   pRxqMem = &pRxq->mem;
   pEvq = pAdapter->pEvq[qIndex];
-
-  //VMK_ASSERT(pRxq->initState == SFVMK_RXQ_INITIALIZED,
-  //VMK_ASSERT(pEvq->initState == SFVMK_EVQ_STARTED,
 
   /* Create the common code receive queue. */
   if ((rc = efx_rx_qcreate(pAdapter->pNic, qIndex, 0, EFX_RXQ_TYPE_DEFAULT,
                             pRxqMem, pAdapter->rxqEntries, 0, pEvq->pCommonEvq,
                             &pRxq->pCommonRxq)) != 0) {
-    //err log
+    SFVMK_ERR(pAdapter, "Failed to create rxQ %u", qIndex);
     goto sfvmk_rxq_create_fail;
   }
 
@@ -356,15 +495,27 @@ sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_rxqFill(pRxq, EFX_RXQ_LIMIT(pAdapter->rxqEntries), B_FALSE);
 
   SFVMK_EVQ_UNLOCK(pEvq);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxqStart[%u]", qIndex);
 
   return VMK_OK;
 
 sfvmk_rxq_create_fail:
   return VMK_FAILURE;
 }
-
-static void
-sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqStop --
+*
+* @brief     flush and destroy rxq Module for a given queue.
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+* @param[in]  qIndex      rxq Index
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_rxq_t *pRxq;
   sfvmk_evq_t *pEvq;
@@ -373,14 +524,13 @@ sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
 
-  SFVMK_ADAPTER_LOCK_ASSERT_OWNED(pAdapter);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxqStop[%u]", qIndex);
 
   pRxq = pAdapter->pRxq[qIndex];
   pEvq = pAdapter->pEvq[qIndex];
 
   SFVMK_EVQ_LOCK(pEvq);
-
-  //VMK_ASSERT(pRxq->initState == SFVMK_RXQ_STARTED);
 
   pRxq->initState = SFVMK_RXQ_INITIALIZED;
 
@@ -399,36 +549,30 @@ sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     count = 0;
     do {
       /* Spin for 100 ms */
-      vmk_DelayUsecs(100*1000);
+      vmk_WorldSleep(SFVMK_RXQ_STOP_POLL_WAIT);
 
       if (pRxq->flushState != SFVMK_FLUSH_PENDING)
         break;
 
-    } while (++count < 20);
+    } while (++count < SFVMK_RXQ_STOP_POLL_TIMEOUT);
 
     SFVMK_EVQ_LOCK(pEvq);
 
     if (pRxq->flushState == SFVMK_FLUSH_PENDING) {
-      /* Flush timeout - neither done nor failed */
-      /*      log(LOG_ERR, "%s: Cannot flush Rx queue %u\n",
-      device_get_nameunit(pAdapter->dev), qIndex);*/
+      SFVMK_ERR(pAdapter, "Could not flush RxQ %u", qIndex);
       pRxq->flushState = SFVMK_FLUSH_DONE;
     }
     retry--;
   }
 
   if (pRxq->flushState == SFVMK_FLUSH_FAILED) {
-    /*    log(LOG_ERR, "%s: Flushing Rx queue %u failed\n",
-    device_get_nameunit(pAdapter->dev), qIndex);*/
+    SFVMK_ERR(pAdapter, "Flushing Rxq Failed RxQ %u", qIndex);
     pRxq->flushState = SFVMK_FLUSH_DONE;
   }
 
   pRxq->pending = pRxq->added;
 
-  //praveen will call later
-  //  sfvmk_rx_qcomplete(pRxq, B_TRUE);
-
-  //VMK_ASSERT(pRxq->completed == pRxq->pending,
+  sfvmk_rxqComplete(pRxq, B_TRUE);
 
   pRxq->added = 0;
   pRxq->pushed = 0;
@@ -441,8 +585,22 @@ sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
 
   SFVMK_EVQ_UNLOCK(pEvq);
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxqStop[%u]", qIndex);
 }
 
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxStart --
+*
+* @brief      initialize rxq module and set the RSS params.
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
 
 int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
 {
@@ -453,7 +611,8 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
   int rc;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, 5, "entered sfvmk_rxStart");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxStart");
 
   pIntr = &pAdapter->intr;
 
@@ -491,7 +650,7 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
 
   if ((rc = efx_rx_scale_tbl_set(pAdapter->pNic, pAdapter->rxIndirTable,
                                   SFVMK_RX_SCALE_MAX)) != 0) {
-    //err log
+    SFVMK_ERR(pAdapter, "failed to RSS Indirection table");
     goto sfvmk_fail;
   }
   (void)efx_rx_scale_mode_set(pAdapter->pNic, EFX_RX_HASHALG_TOEPLITZ,
@@ -499,16 +658,16 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
                 (1 << EFX_RX_HASH_IPV6) | (1 << EFX_RX_HASH_TCPIPV6), B_TRUE);
 
   rc = efx_rx_scale_key_set(pAdapter->pNic, sfvmk_toepKey,
-          sizeof(sfvmk_toepKey));
+                            sizeof(sfvmk_toepKey));
   if (rc) {
-    //err log
+    SFVMK_ERR(pAdapter, "failed to set RSS Key");
     goto sfvmk_fail;
   }
 
   /* Start the receive queue(s). */
   for (qIndex = 0; qIndex < pAdapter->rxqCount ; qIndex++) {
     if ((rc = sfvmk_rxqStart(pAdapter, qIndex)) != 0) {
-      //err log
+      SFVMK_ERR(pAdapter, "failed to start RxQ[%u]", qIndex);
       goto sfvmk_rxq_start_fail;
     }
   }
@@ -517,9 +676,11 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
                                       pAdapter->intr.numIntrAlloc > 1);
 
   if (rc != 0) {
-    // err log
+    SFVMK_ERR(pAdapter, "failed to set default rxq filter");
     goto sfvmk_default_rxq_set_fail;
   }
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxStart");
   return (0);
 
 sfvmk_default_rxq_set_fail:
@@ -533,13 +694,24 @@ sfvmk_fail:
 }
 
 
-
-void
-sfvmk_rxStop(sfvmk_adapter_t *pAdapter)
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxStop --
+*
+* @brief      destroy rxq module
+*
+* @param[in]  adapter     pointer to sfvmk_adapter_t
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+void sfvmk_rxStop(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
   VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "entered sfvmk_rxStop");
 
   efx_mac_filter_default_rxq_clear(pAdapter->pNic);
 
@@ -552,6 +724,40 @@ sfvmk_rxStop(sfvmk_adapter_t *pAdapter)
   pAdapter->rxBufferSize = 0;
 
   efx_rx_fini(pAdapter->pNic);
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_FUNCTION,
+            "exited sfvmk_rxStop");
 }
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqFlushDone --
+*
+* @brief     change flush state to done
+*
+* @param[in]  pRxq     pointer to rxQ
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
 
-
+void
+sfvmk_rxqFlushDone(struct sfvmk_rxq_s *pRxq)
+{
+  pRxq->flushState = SFVMK_FLUSH_DONE;
+}
+/**-----------------------------------------------------------------------------
+*
+* sfvmk_rxqFlushFailed --
+*
+* @brief     change flush state to failed
+*
+* @param[in]  pRxq     pointer to rxQ
+*
+* @result: void
+*
+*-----------------------------------------------------------------------------*/
+void
+sfvmk_rxqFlushFailed(struct sfvmk_rxq_s *pRxq)
+{
+  pRxq->flushState = SFVMK_FLUSH_FAILED;
+}

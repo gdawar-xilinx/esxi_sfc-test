@@ -220,40 +220,17 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
       batch = 0;
     }
   }
+
+  if (batch == SFVMK_REFILL_BATCH) {
+    /* post buffer to rxq module */
+    efx_rx_qpost(pRxq->pCommonRxq, addr, mblkSize, batch,
+                  pRxq->completed, pRxq->added);
+    pRxq->added += batch;
+    batch = 0;
+  }
+
   SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
             " No of allocated buffer = %d", posted);
-
-  /*release the buffer which did not reach to rxq module */
-  if (posted && (posted != maxBuf))
-  {
-    posted = posted % SFVMK_REFILL_BATCH;
-
-    for (posted--; posted>=0 ; posted--)
-    {
-      vmk_SgElem elem;
-      VMK_ReturnStatus status;
-
-      id = (pRxq->added + posted) & pRxq->ptrMask;
-      rxDesc = &pRxq->pQueue[id];
-      if(NULL != rxDesc->pPkt)
-      {
-        elem.ioAddr = addr[posted];
-        elem.length = mblkSize;
-
-        status = vmk_DMAUnmapElem(pAdapter->dmaEngine,
-                                VMK_DMA_DIRECTION_TO_MEMORY, &elem);
-        if (status != VMK_OK) {
-          SFVMK_ERR(pAdapter, "Failed to unmap %p size %d to IO address, %s.",
-                    rxDesc->pPkt, mblkSize,
-                    vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
-        }
-        else {
-          vmk_PktRelease(rxDesc->pPkt);
-          rxDesc->pPkt = NULL;
-        }
-      }
-    }
-  }
 
   /* push entries in queue*/
   efx_rx_qpush(pRxq->pCommonRxq, pRxq->added, &pRxq->pushed);

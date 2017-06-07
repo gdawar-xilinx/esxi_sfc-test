@@ -221,7 +221,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
     }
   }
 
-  if (batch == SFVMK_REFILL_BATCH) {
+  if (batch !=0) {
     /* post buffer to rxq module */
     efx_rx_qpost(pRxq->pCommonRxq, addr, mblkSize, batch,
                   pRxq->completed, pRxq->added);

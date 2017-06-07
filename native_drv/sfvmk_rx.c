@@ -167,7 +167,6 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
   vmk_uint32 rxfill;
   vmk_uint32 mblkSize;
   vmk_uint32 id;
-  vmk_uint32 oldAdded;
 
   VMK_ASSERT_BUG(NULL != pRxq, " NULL Rxq ptr");
   pAdapter = pRxq->pAdapter;
@@ -176,7 +175,6 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
 
   batch = 0;
   rxfill = pRxq->added - pRxq->completed;
-  oldAdded = pRxq->added;
 
   maxBuf = MIN(EFX_RXQ_LIMIT(pRxq->entries) - rxfill, numBufs);
   mblkSize = pAdapter->rxBufferSize - pAdapter->rxBufferAlign;
@@ -226,7 +224,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
             " No of allocated buffer = %d", posted);
 
   /*release the buffer which did not reach to rxq module */
-  if (posted != maxBuf)
+  if (posted && (posted != maxBuf))
   {
     posted = posted % SFVMK_REFILL_BATCH;
 
@@ -237,18 +235,23 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs,
 
       id = (pRxq->added + posted) & pRxq->ptrMask;
       rxDesc = &pRxq->pQueue[id];
-      elem.ioAddr = addr[posted];
-      elem.length = mblkSize;
+      if(NULL != rxDesc->pPkt)
+      {
+        elem.ioAddr = addr[posted];
+        elem.length = mblkSize;
 
-      status = vmk_DMAUnmapElem(pAdapter->dmaEngine,
+        status = vmk_DMAUnmapElem(pAdapter->dmaEngine,
                                 VMK_DMA_DIRECTION_TO_MEMORY, &elem);
-      if (status != VMK_OK) {
-        SFVMK_ERR(pAdapter, "Failed to unmap %p size %d to IO address, %s.",
-                  rxDesc->pPkt, mblkSize,
-                  vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+        if (status != VMK_OK) {
+          SFVMK_ERR(pAdapter, "Failed to unmap %p size %d to IO address, %s.",
+                    rxDesc->pPkt, mblkSize,
+                    vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+        }
+        else {
+          vmk_PktRelease(rxDesc->pPkt);
+          rxDesc->pPkt = NULL;
+        }
       }
-      else
-        vmk_PktRelease(rxDesc->pPkt);
     }
   }
 

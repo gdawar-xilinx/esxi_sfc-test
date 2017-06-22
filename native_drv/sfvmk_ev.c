@@ -1,20 +1,21 @@
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
 #include "sfvmk_driver.h"
 
 /* default interrupt moderation value */
-#define SFVMK_MODERATION  30
+#define SFVMK_MODERATION_USEC   30
 
+#define NUM_TX_QUEUES_FOR_EVQ0  3
+/* space required in for link state event and mcdi completion */
+#define EVQ_EXTRA_SPACE         128
+
+/* Poll time to start the queue */
 #define SFVMK_EVQ_START_POLL_WAIT 100*SFVMK_ONE_MILISEC
 #define SFVMK_EVQ_START_POLL_TIMEOUT 20
-
-
 
 /* helper functions */
 static void sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
@@ -23,8 +24,6 @@ static VMK_ReturnStatus sfvmk_evqInit(sfvmk_adapter_t *pAdapter,
 
 static void sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 static int sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
-
-
 
 /* call back functions which needs to be registered with common evq module */
 static boolean_t sfvmk_evInitialized(void *arg);
@@ -45,60 +44,53 @@ static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t link_mode);
 /*common evq  module call them apropriatly */
 
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
+  .eec_rx = sfvmk_evRX,
+  .eec_tx = sfvmk_evTX,
+  .eec_sram = sfvmk_evSram,
+  .eec_timer = sfvmk_evTimer,
+  .eec_wake_up = sfvmk_evWakeup,
+  .eec_software = sfvmk_evSoftware,
+  .eec_exception = sfvmk_evException,
+  .eec_link_change = sfvmk_evLinkChange,
   .eec_initialized  = sfvmk_evInitialized,
-  .eec_rx    = sfvmk_evRX,
-  .eec_tx    = sfvmk_evTX,
-  .eec_exception   = sfvmk_evException,
+  .eec_txq_flush_done = sfvmk_evTxqFlushDone,
   .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
   .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
-  .eec_txq_flush_done = sfvmk_evTxqFlushDone,
-  .eec_software  = sfvmk_evSoftware,
-  .eec_sram  = sfvmk_evSram,
-  .eec_wake_up   = sfvmk_evWakeup,
-  .eec_timer   = sfvmk_evTimer,
-  .eec_link_change  = sfvmk_evLinkChange,
 };
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evInitialized --
-*
-* @brief gets called when initilized event comes for an eventQ
-*
-* @param[in] arg        pointer to eventQ
-*
-* @result: 0
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief gets called when initilized event comes for an eventQ
+**
+** \param[in] arg        pointer to eventQ
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evInitialized(void *arg)
 {
   sfvmk_evq_t *pEvq;
   pEvq = (sfvmk_evq_t *)arg;
 
+  SFVMK_NULL_PTR_CHECK(pEvq);
+
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTING ||
                   pEvq->initState == SFVMK_EVQ_STARTED,
                   "eventQ is not yet started");
 
-  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_QUEUE, SFVMK_LOG_LEVEL_INFO,
-                "eventQ is initialized");
+  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO,
+            "eventQ is initialized");
 
   pEvq->initState = SFVMK_EVQ_STARTED;
 
-  return (0);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evLinkChange --
-*
-* @brief gets called when a link change event comes
-*
-* @param[in] arg        ptr to event queue
-* @param[in] linkMode   specify link mode properties (up/down , speed)
-*
-* @result: 0
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief gets called when a link change event comes
+**
+** \param[in] arg        ptr to event queue
+** \param[in] linkMode   specify link mode properties (up/down , speed)
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
 {
@@ -107,29 +99,26 @@ sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
 
   pEvq = (sfvmk_evq_t *)arg;
 
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, SFVMK_LOG_LEVEL_INFO,
+  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO,
             "Link change is detected");
 
   sfvmk_macLinkUpdate(pAdapter, linkMode);
 
-  return (0);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evException --
-*
-* @brief called when an exception received on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in] code     exception code
-* @param[in] data
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
 
+/*! \brief called when an exception received on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in] code     exception code
+** \param[in] data
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evException(void *arg, uint32_t code, uint32_t data)
 {
@@ -137,11 +126,11 @@ sfvmk_evException(void *arg, uint32_t code, uint32_t data)
   sfvmk_adapter_t *pAdapter;
 
   pEvq = (sfvmk_evq_t *)arg;
-
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-
-  SFVMK_DBG(pAdapter,SFVMK_DBG_QUEUE, SFVMK_LOG_LEVEL_INFO, "[%d] %s", pEvq->index,
+  SFVMK_DBG(pAdapter,SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO, "[%d] %s", pEvq->index,
         (code == EFX_EXCEPTION_RX_RECOVERY) ? "RX_RECOVERY" :
         (code == EFX_EXCEPTION_RX_DSC_ERROR) ? "RX_DSC_ERROR" :
         (code == EFX_EXCEPTION_TX_DSC_ERROR) ? "TX_DSC_ERROR" :
@@ -156,47 +145,40 @@ sfvmk_evException(void *arg, uint32_t code, uint32_t data)
   pEvq->exception = B_TRUE;
 
   if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, SFVMK_LOG_LEVEL_INFO,
-                  "got Exception %x", code);
-  //  sfvmk_scheduleReset(sc);
+    SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO,
+              "got Exception %x", code);
+    /* TODO: sfvmk_scheduleReset(sc);*/
   }
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evRX --
-*
-* @brief called when a RX event received on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in[ label    queue label
-* @param[in] id       queue ID
-* @param[in] size
-* @param[in] flags
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief called when a RX event received on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in[ label    queue label
+** \param[in] id       queue ID
+** \param[in] size     pkt size
+** \param[in] flags    pkt metadeta info
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
    uint16_t flags)
 {
-  return  B_FALSE ;
+  /* TODO : implementation will be added later */
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evRxqFlushDone --
-*
-* @brief  called when commond module finshed flushing rxq and send the event
-*         on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in] rxqIndex rxq Index
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  called when commond module finshed flushing rxq and send the event
+**         on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in] rxqIndex rxq Index
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
 {
@@ -208,12 +190,13 @@ sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
   uint16_t magic;
 
   pEvq = (sfvmk_evq_t *)arg;
-
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pRxq = pAdapter->pRxq[rxqIndex];
 
-  VMK_ASSERT_BUG(pRxq != NULL, "rxq == NULL");
+  SFVMK_NULL_PTR_CHECK(pRxq);
 
   /* Resend a software event on the correct queue */
   qIndex = pRxq->index;
@@ -229,23 +212,17 @@ sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
                   "evq not started");
   efx_ev_qpost(pEvq->pCommonEvq, magic);
 
-
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evRxqFlushFailed --
-*
-* @brief called when commond module failed in flushing rxq and send the event
-*         on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in] rxqIndex rxq Index
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
 
+/*! \brief called when commond module failed in flushing rxq and send the event
+**        on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in] rxqIndex rxq Index
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 {
@@ -256,12 +233,13 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
   uint16_t magic;
 
   pEvq = (sfvmk_evq_t *)arg;
-
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pRxq = pAdapter->pRxq[rxqIndex];
 
-  VMK_ASSERT_BUG(pRxq != NULL, "rxq == NULL");
+  SFVMK_NULL_PTR_CHECK(pRxq);
 
   /* Resend a software event on the correct queue */
   qIndex = pRxq->index;
@@ -273,20 +251,17 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
                 "evq not started");
   efx_ev_qpost(pEvq->pCommonEvq, magic);
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_getTxqByLabel --
-*
-* @brief
-*
-* @param[in] pEvq     pointer to eventQ
-* @param[in] label    txq type
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief   Local function to get txq attached to a given evq.
+**
+** \param[in] pEvq     pointer to eventQ
+** \param[in] label    txq type
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
 static struct sfvmk_txq_s *
 sfvmk_getTxqByLabel(struct sfvmk_evq_s *pEvq, enum sfvmk_txqType label)
 {
@@ -295,52 +270,46 @@ sfvmk_getTxqByLabel(struct sfvmk_evq_s *pEvq, enum sfvmk_txqType label)
   VMK_ASSERT_BUG((pEvq->index == 0 && label < SFVMK_TXQ_NTYPES) ||
         (label == SFVMK_TXQ_IP_TCP_UDP_CKSUM), "unexpected txq label");
   index = (pEvq->index == 0) ? label : (pEvq->index - 1 + SFVMK_TXQ_NTYPES);
+
   return (pEvq->pAdapter->pTxq[index]);
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evTX --
-*
-* @brief called when a TX event received on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in[ label    queue label
-* @param[in] id       queue ID
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief called when a TX event received on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in[ label    queue label
+** \param[in] id       queue ID
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 {
   return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evTxqFlushDone --
-*
-* @brief  called when commond module finshed flushing txq and send the event
-*         on eventQ
-*
-* @param[in] arg      ptr to event queue
-* @param[in] txqIndex txq Index
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  called when commond module finshed flushing txq and send the event
+**         on eventQ
+**
+** \param[in] arg      ptr to event queue
+** \param[in] txqIndex txq Index
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
 {
-
   sfvmk_evq_t *pEvq;
   sfvmk_txq_t *pTxq;
   sfvmk_adapter_t *pAdapter;
   vmk_uint16 magic;
 
   pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
   pTxq = pAdapter->pTxq[txqIndex];
+  SFVMK_NULL_PTR_CHECK(pTxq);
 
   VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_INITIALIZED,
                   "txq not initialized");
@@ -357,20 +326,16 @@ sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
                   "evq not started");
   efx_ev_qpost(pEvq->pCommonEvq, magic);
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evSoftware --
-*
-* @brief
-*
-* @param[in] arg      ptr to event queue
-* @param[in] magic
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief    function to handle event raised by driver
+**
+** \param[in] arg      ptr to event queue
+** \param[in] magic    to differentiate different sw events.
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evSoftware(void *arg, uint16_t magic)
 {
@@ -381,8 +346,11 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
   struct sfvmk_rxq_s *pRxq ;
 
   pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_NULL_PTR_CHECK(pEvq);
   pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
   pRxq = pEvq->pAdapter->pRxq[pEvq->index];
+  SFVMK_NULL_PTR_CHECK(pRxq);
 
   label = magic & SFVMK_MAGIC_DMAQ_LABEL_MASK;
   magic &= ~SFVMK_MAGIC_DMAQ_LABEL_MASK;
@@ -399,7 +367,7 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
     case SFVMK_SW_EV_MAGIC(SFVMK_SW_EV_TX_QFLUSH_DONE): {
       struct sfvmk_txq_s *pTxq = sfvmk_getTxqByLabel(pEvq, label);
 
-      VMK_ASSERT_BUG(pTxq != NULL, "txq == NULL");
+      SFVMK_NULL_PTR_CHECK(pTxq);
       VMK_ASSERT_BUG(pEvq->index == pTxq->evqIndex,
                         "evq->index != txq->evq_index");
 
@@ -410,92 +378,73 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
       break;
   }
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evSram --
-*
-* @brief
-*
-* @param[in] arg      ptr to event queue
-* @param[in] code
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief   TBD :
+**
+** \param[in] arg      ptr to event queue
+** \param[in] code
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evSram(void *arg, uint32_t code)
 {
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evTimer --
-*
-* @brief
-*
-* @param[in] arg      ptr to event queue
-* @param[in] index
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief    TBD:
+**
+** \param[in] arg      ptr to event queue
+** \param[in] index
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evTimer(void *arg, uint32_t index)
 {
   (void)arg;
   (void)index;
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evWakeup --
-*
-* @brief
-*
-* @param[in] arg      ptr to event queue
-* @param[in] index
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief          TBD:
+**
+** \param[in] arg      ptr to event queue
+** \param[in] index
+**
+** \return: B_FALSE <success>
+*/
 static boolean_t
 sfvmk_evWakeup(void *arg, uint32_t index)
 {
   (void)arg;
   (void)index;
 
-  return (B_FALSE);
+  return B_FALSE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqComplete --
-*
-* @brief
-*
-* @param[in] arg      ptr to event queue
-* @param[in] eop
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief      function to Perform any pending completion processing
+**
+** \param[in] arg      ptr to event queue
+** \param[in] eop      end of pkt
+**
+** \return: void
+*/
 void sfvmk_evqComplete(sfvmk_evq_t *pEvq, boolean_t eop)
 {
+  /* TODO : will be implemented for data path */
   return ;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqPoll --
-*
-* @brief  poll event from eventQ and process it. function should be called in thread
-*         context only.
-* @param[in] arg      ptr to event queue
-*
-* @result: B_FALSE
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  poll event from eventQ and process it. function should be called in thread
+**        context only.
+** \param[in] arg      ptr to event queue
+**
+** \return: B_FALSE
+*/
 int
 sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 {
@@ -503,8 +452,7 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 
   SFVMK_EVQ_LOCK(pEvq);
 
-  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_QUEUE, SFVMK_LOG_LEVEL_INFO,
-            "enetered evqPoll");
+  SFVMK_DBG_FUNC_ENTRY(pEvq->pAdapter, SFVMK_DBG_EVQ);
 
   if ((pEvq->initState != SFVMK_EVQ_STARTING &&
         pEvq->initState != SFVMK_EVQ_STARTED)) {
@@ -528,71 +476,57 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 
   /* Re-prime the event queue for interrupts */
   if ((rc = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr)) != 0)
-  goto sfvmk_fail;
+    goto sfvmk_fail;
 
   SFVMK_EVQ_UNLOCK(pEvq);
 
-  return (0);
+  return rc;
 
-  sfvmk_fail:
+sfvmk_fail:
   SFVMK_EVQ_UNLOCK(pEvq);
   return (rc);
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_roundupPowOfTwo --
-*
-* @brief ceil the input data to the next power of two value.
-*
-* @param[in]  data
-*
-* @result: upscale value.
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief ceil the input data to the next power of two value.
+**
+** \param[in]  data
+**
+** \return: upscale value.
+*/
 int sfvmk_roundupPowOfTwo(vmk_uint32 data)
 {
   return (1 << (sizeof(vmk_uint32)*8 - __builtin_clz(data) + 1));
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqFini --
-*
-* @brief  releases resource allocated for a particular evq
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-* @param[in]  qIndex      eventQ index
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief  releases resource allocated for a particular evq
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex      eventQ index
+**
+** \return: void
+*/
 static void
 sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_evq_t *pEvq;
   efsys_mem_t *pEvqMem;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-            "Entered sfvmk_evqFini[%d]", qIndex);
-
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
   pEvq = pAdapter->pEvq[qIndex];
 
-  VMK_ASSERT_BUG((NULL != pEvq), " null event queue ptr");
+  SFVMK_NULL_PTR_CHECK(pEvq);
 
   pEvqMem = &pEvq->mem;
 
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_INITIALIZED,
                     " event queue not yet initialized");
 
-  //VMK_ASSERT_BUG(pEvq->pTxqs != &pEvq->pTxq, "pEvq->txqs != &pEvq->txq");
-
   /* freeing up memory allocated for event queue */
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->esm_base,
-                              pEvqMem->io_elem.ioAddr,
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->pEsmBase,
+                              pEvqMem->ioElem.ioAddr,
                               EFX_RXQ_SIZE(pAdapter->rxqEntries));
 
   /* invalidating event queue ptr*/
@@ -603,22 +537,16 @@ sfvmk_evqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   /*freeing up memory allocated for event queue object*/
   sfvmk_memPoolFree(pEvq, sizeof(sfvmk_evq_t));
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Exited sfvmk_evqFini[%d]", qIndex);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqInit --
-*
-* @brief  allocate resources for a particular evq
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-* @param[in]  qIndex      eventQ index
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief  allocate resources for a particular evq
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex      eventQ index
+**
+** \return:   VMK_OK <success> VMK_FAILURE < failure>
+*/
 static VMK_ReturnStatus
 sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
@@ -626,10 +554,8 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   efsys_mem_t *pEvqMem;
   VMK_ReturnStatus status;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Entered sfvmk_evqInit[%d]", qIndex);
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
   /* qIndex must be less than SFVMK_RX_SCALE_MAX */
   VMK_ASSERT_BUG(qIndex <  SFVMK_RX_SCALE_MAX, "qIndex >= SFVMK_RX_SCALE_MAX" );
@@ -650,45 +576,46 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   /* Build an event queue with room for one event per tx and rx buffer,
   * plus some extra for link state events and MCDI completions.
-  * There are three tx queues in the first event queue and one in
-  * other.*/
+  * There are three tx queues of type (NON_CKSUM, IP_CKSUM, IP_TCP_UDP_CKSUM)
+  * in the first event queue and one in other. */
 
   if (qIndex == 0)
    pEvq->entries = sfvmk_roundupPowOfTwo(pAdapter->rxqEntries +
-                                       3 * pAdapter->txqEntries + 128);
+                                         NUM_TX_QUEUES_FOR_EVQ0 *
+                                         pAdapter->txqEntries +
+                                         EVQ_EXTRA_SPACE);
   else
    pEvq->entries = sfvmk_roundupPowOfTwo(pAdapter->rxqEntries +
-                                       pAdapter->txqEntries + 128);
+                                         pAdapter->txqEntries +
+                                         EVQ_EXTRA_SPACE);
   /* Initialise TX completion list */
   pEvq->pTxqs = &pEvq->pTxq;
 
   /* Allocate DMA space. */
-  pEvqMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+  pEvqMem->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
                                                  EFX_EVQ_SIZE(pEvq->entries),
-                                                 &pEvqMem->io_elem.ioAddr);
-  if(NULL == pEvqMem->esm_base) {
+                                                 &pEvqMem->ioElem.ioAddr);
+  if(NULL == pEvqMem->pEsmBase) {
     SFVMK_ERR(pAdapter, "failed to allocate mem for event queue entries");
     goto sfvmk_dma_alloc_failed;
   }
 
-  pEvqMem->io_elem.length = EFX_EVQ_SIZE(pEvq->entries);
+  pEvqMem->ioElem.length = EFX_EVQ_SIZE(pEvq->entries);
   pEvqMem->esmHandle = pAdapter->dmaEngine;
 
   status = sfvmk_mutexInit("evq", SFVMK_EVQ_LOCK_RANK, &pEvq->lock);
   if (status != VMK_OK)
     goto sfvmk_mutex_failed;
 
-
   pEvq->initState = SFVMK_EVQ_INITIALIZED;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Exited sfvmk_evqInit[%d]", qIndex);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
   return VMK_OK;
 
 sfvmk_mutex_failed:
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->esm_base ,
-                              pEvqMem->io_elem.ioAddr ,pEvqMem->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pEvqMem->pEsmBase ,
+                              pEvqMem->ioElem.ioAddr ,pEvqMem->ioElem.length);
 sfvmk_dma_alloc_failed:
   sfvmk_memPoolFree(pEvq, sizeof (sfvmk_evq_t));
 sfvmk_ev_alloc_failed:
@@ -696,17 +623,13 @@ sfvmk_ev_alloc_failed:
   return VMK_FAILURE;
 
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evInit --
-*
-* @brief  allocate resources for all evq
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  allocate resources for all evq
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
 VMK_ReturnStatus
 sfvmk_evInit(sfvmk_adapter_t *pAdapter)
 {
@@ -714,10 +637,9 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
   int qIndex;
   VMK_ReturnStatus status = VMK_OK;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Entered sfvmk_evInit");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
   pIntr = &pAdapter->intr;
   pAdapter->evqCount = pIntr->numIntrAlloc;
@@ -726,7 +648,7 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
                  "pIntr->state != SFVMK_INTR_INITIALIZED");
 
   /* Set default interrupt moderation; */
-  pAdapter->evModeration = SFVMK_MODERATION;
+  pAdapter->evModeration = SFVMK_MODERATION_USEC;
 
   /* Initialize the event queue(s) - one per interrupt.*/
   for (qIndex = 0; qIndex < pAdapter->evqCount; qIndex++) {
@@ -737,11 +659,11 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
       goto sfvmk_fail;
     }
     else
-      SFVMK_DBG(pAdapter, SFVMK_DBG_QUEUE, 3, "creating evq %d\n", qIndex);
+      SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_DBG,
+                "creating evq %d\n", qIndex);
   }
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Exited sfvmk_evInit");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ);
 
   return status;
 
@@ -754,28 +676,20 @@ sfvmk_fail:
   return status ;
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evFini --
-*
-* @brief  releases resources for all evq
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief  releases resources for all evq
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void
 sfvmk_evFini(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_intr_t *pIntr;
   int qIndex;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-              "Entered sfvmk_evFini");
-
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
   pIntr = &pAdapter->intr;
 
@@ -791,34 +705,27 @@ sfvmk_evFini(sfvmk_adapter_t *pAdapter)
 
   pAdapter->evqCount = 0;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_evFini");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ);
+
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqInit --
-*
-* @brief      destroy evq module for a particular evq.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-* @param[in]  qIndex      eventQ index
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief      destroy evq module for a particular evq.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex      eventQ index
+**
+** \return: void
+*/
 static void
 sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_evq_t *pEvq;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_evqStop[%d]", qIndex);
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
   pEvq = pAdapter->pEvq[qIndex];
-  VMK_ASSERT_BUG((NULL != pEvq), " null event queue ptr");
-
+  SFVMK_NULL_PTR_CHECK(pEvq);
 
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
                  "pEvq->initState != SFVMK_EVQ_STARTED");
@@ -832,21 +739,15 @@ sfvmk_evqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   SFVMK_EVQ_UNLOCK(pEvq);
 
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_evqStop[%d]", qIndex);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evStop --
-*
-* @brief      destroy all evq module.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief      destroy all evq module.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void
 sfvmk_evStop(sfvmk_adapter_t *pAdapter)
 {
@@ -854,13 +755,13 @@ sfvmk_evStop(sfvmk_adapter_t *pAdapter)
   efx_nic_t *pNic;
   int qIndex;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_evStop");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
   pIntr = &pAdapter->intr;
   pNic = pAdapter->pNic;
+
+  SFVMK_NULL_PTR_CHECK(pNic);
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_STARTED,
                     "Interrupts not started");
@@ -873,22 +774,16 @@ sfvmk_evStop(sfvmk_adapter_t *pAdapter)
 
   /* Tear down the event module */
   efx_ev_fini(pNic);
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_evStop");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ);
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evqStart --
-*
-* @brief    Create common evq and wait for initilize event from the fw.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-* @param[in]  qIndex      eventQ index
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief    Create common evq and wait for initilize event from the fw.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex      eventQ index
+**
+** \return: 0 <success> error code <failure>
+*/
 static int
 sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
@@ -897,20 +792,18 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   int count;
   int rc;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_evqStart[%d]", qIndex);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
   pEvq = pAdapter->pEvq[qIndex];
   pEvqMem = &pEvq->mem;
 
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_INITIALIZED,
-                    "pEvq->initState != SFVMK_EVQ_INITIALIZED");
-
+                 "pEvq->initState != SFVMK_EVQ_INITIALIZED");
 
   /* Clear all events. */
-  (void)vmk_Memset(pEvqMem->esm_base, 0xff, EFX_EVQ_SIZE(pEvq->entries));
+  (void)vmk_Memset(pEvqMem->pEsmBase, 0xff, EFX_EVQ_SIZE(pEvq->entries));
 
   /* Create the common code event queue. */
   if ((rc = efx_ev_qcreate(pAdapter->pNic, qIndex, pEvqMem, pEvq->entries,0 , pAdapter->evModeration,
@@ -936,7 +829,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   count = 0;
   do {
 
-      vmk_WorldSleep(SFVMK_EVQ_START_POLL_WAIT);
+    vmk_WorldSleep(SFVMK_EVQ_START_POLL_WAIT);
     /* Check to see if the test event has been processed */
     if (pEvq->initState == SFVMK_EVQ_STARTED)
       goto done;
@@ -950,10 +843,9 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
 done:
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_evqStart[%d]", qIndex);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ , "qIndex[%d]" , qIndex );
 
-  return (0);
+  return rc;
 
 sfvmk_qstart_fail:
   SFVMK_EVQ_LOCK(pEvq);
@@ -964,28 +856,23 @@ sfvmk_qprime_fail:
 sfvmk_qcreate_fail:
   return (rc);
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_evStop --
-*
-* @brief      init and allocate all evq module.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief      init and allocate all evq module.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return:  VMK_OK <success> error code <failure>
+*/
 VMK_ReturnStatus
 sfvmk_evStart(sfvmk_adapter_t *pAdapter)
 {
-
   sfvmk_intr_t *pIntr;
   int qIndex;
   int rc;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_evStart");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
   pIntr = &pAdapter->intr;
 
@@ -1006,18 +893,19 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
       goto sfvmk_qstart_fail;
     }
     else
-      vmk_NetPollEnable(pAdapter->pEvq[qIndex]->netPoll);   }
+      vmk_NetPollEnable(pAdapter->pEvq[qIndex]->netPoll);
+  }
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_evStart");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ);
 
   return VMK_OK;
 
 sfvmk_qstart_fail:
   /* Stop the event queue(s) */
   while (--qIndex >= 0) {
+    /* disable netPoll */
+    vmk_NetPollDisable(pAdapter->pEvq[qIndex]->netPoll);
     sfvmk_evqStop(pAdapter, qIndex);
-  /* disable netPoll */
   }
 
   /* Tear down the event module */

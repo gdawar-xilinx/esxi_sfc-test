@@ -4,8 +4,6 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
-
 #include "sfvmk.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
@@ -47,17 +45,14 @@ sfvmk_ModInfoCleanup(void)
   }
 }
 
-/************************************************************************
- * init_module --
- *
- * @brief   This is the driver module entry point that gets invoked
- * automatically when this module is loaded.
- *
- * @param  None
- *
- * @return 0 <Success> or 1 <Failure>
- *
- ************************************************************************/
+/*! \brief This is the driver module entry point that gets invoked
+**         automatically when this module is loaded.
+**
+** \param  None
+**
+** \return: 0 <success> or 1 <failure>
+**
+*/
 int
 init_module(void)
 {
@@ -97,7 +92,8 @@ init_module(void)
   heapProps.creationTimeoutMS = VMK_TIMEOUT_UNLIMITED_MS;
   status = vmk_HeapCreate(&heapProps, &sfvmk_ModInfo.heapID);
   if (status != VMK_OK) {
-     SFVMK_ERROR("Failed to create heap (%x) for sfc_native driver", status);
+     SFVMK_ERROR("Failed to create heap (%s) for sfc_native driver",
+                 vmk_StatusToString(status));
      goto err;
   }
 
@@ -105,11 +101,12 @@ init_module(void)
   vmk_NameCopy(&logProps.name, &sfvmk_ModInfo.driverName);
   logProps.module = vmk_ModuleCurrentID;
   logProps.heap = sfvmk_ModInfo.heapID;
-  logProps.defaultLevel = 5;
+  logProps.defaultLevel = SFVMK_LOG_LEVEL_FUNCTION;
   logProps.throttle = NULL;
   status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logID);
   if (status != VMK_OK) {
-     SFVMK_ERROR("Failed to register log component (%x)", status);
+     SFVMK_ERROR("Failed to register log component (%s)",
+                  vmk_StatusToString(status));
      goto err;
   }
 
@@ -118,7 +115,8 @@ init_module(void)
   vmk_NameInitialize(&logProps.name, SFC_DRIVER_NAME"_throttled");
   status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logThrottledID);
   if (status != VMK_OK) {
-     SFVMK_ERROR("Failed to register throttled log component (%x)", status);
+     SFVMK_ERROR("Failed to register throttled log component (%s)",
+                  vmk_StatusToString(status));
      goto err;
   }
 
@@ -128,7 +126,8 @@ init_module(void)
                                  &sfvmk_ModInfo.driverName,
                                  &sfvmk_ModInfo.lockDomain);
   if (status != VMK_OK) {
-     SFVMK_ERROR("Failed to create lock domain (%x)", status);
+     SFVMK_ERROR("Failed to create lock domain (%s)",
+                  vmk_StatusToString(status));
      goto err;
   }
 
@@ -144,7 +143,7 @@ init_module(void)
 
   status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_ModInfo.memPoolID);
   if (status != VMK_OK) {
-    SFVMK_ERROR("Failed to create mempool (%x)", status);
+    SFVMK_ERROR("Failed to create mempool (%s)", vmk_StatusToString(status));
     goto err;
   }
 
@@ -154,7 +153,8 @@ init_module(void)
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
   } else {
-    vmk_LogMessage("Initialization of SFC driver failed (%x)", status);
+    SFVMK_ERROR("Initialization of SFC driver failed (%s)",
+                vmk_StatusToString(status));
   }
 
 err:
@@ -164,19 +164,14 @@ err:
 
   return status;
 }
-
-/************************************************************************
- * cleanup_module --
- *
- * @brief: This is the module entry point that gets called automatically when
- * this module is unloaded.
- *
- * @param  None
- *
- * @return None
- *
- ************************************************************************/
-
+/*! \brief This is the  module exit point that gets invoked
+**         automatically when this module is unloaded.
+**
+** \param  None
+**
+** \return: None
+**
+*/
 void
 cleanup_module(void)
 {

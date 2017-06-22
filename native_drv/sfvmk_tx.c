@@ -1,4 +1,3 @@
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
@@ -11,32 +10,27 @@
 #define SFVMK_TXQ_STOP_POLL_WAIT 100*SFVMK_ONE_MILISEC
 #define SFVMK_TXQ_STOP_POLL_TIMEOUT 20
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqFini --
-*
-* @brief It releases the resource required for txQ module.
-*
-* @param[in]  adapter pointer to sfvmk_adapter_t
-* @param[in]  tx queue index
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief It releases the resource required for txQ module.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  tx queue index
+**
+** \return: void
+*/
 static void
 sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_txq_t *pTxq;
   efsys_mem_t *pTxqMem;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-             "Entered sfvmk_txqFini");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
 
   pTxq = pAdapter->pTxq[qIndex];
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pTxq);
+
   pTxqMem = &pTxq->mem;
 
   VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_INITIALIZED,
@@ -45,46 +39,39 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   /* Free the context arrays. */
   sfvmk_memPoolFree(pTxq->pPendDesc , pTxq->pendDescSize);
 
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxqMem->esm_base, pTxqMem->io_elem.ioAddr,
-                                pTxqMem->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxqMem->pEsmBase, pTxqMem->ioElem.ioAddr,
+                                pTxqMem->ioElem.length);
   pAdapter->pTxq[qIndex] = NULL;
 
   sfvmk_mutexDestroy(pTxq->lock);
 
   sfvmk_memPoolFree(pTxq,  sizeof(sfvmk_txq_t));
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_txqFini");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
 
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqInit --
-*
-* @brief It allocate resources required for a particular tx queue.
-*
-* @param  adapter pointer to sfvmk_adapter_t
-* @param[in]  tx queue index
-* @param[in]  tx queue type
-* @param[in]  associated event queue index
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief It allocates resources required for a particular tx queue.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  tx queue index
+** \param[in]  tx queue type
+** \param[in]  associated event queue index
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
 static VMK_ReturnStatus
 sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
                      enum sfvmk_txqType type, unsigned int evqIndex)
 {
   sfvmk_txq_t *pTxq;
-  sfvmk_evq_t *pEvq;
   efsys_mem_t *pTxqMem;
   VMK_ReturnStatus status ;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-             "Entered sfvmk_txqInit");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", txqIndex);
 
   pTxq = (sfvmk_txq_t *)sfvmk_memPoolAlloc(sizeof(sfvmk_txq_t));
   if (NULL == pTxq) {
@@ -101,15 +88,13 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   pTxqMem = &pTxq->mem;
   pTxqMem->esmHandle  = pAdapter->dmaEngine;
 
-  pEvq = pAdapter->pEvq[evqIndex];
-
   /* Allocate and zero DMA space for the descriptor ring. */
-  pTxqMem->io_elem.length = EFX_TXQ_SIZE(pAdapter->txqEntries);
+  pTxqMem->ioElem.length = EFX_TXQ_SIZE(pAdapter->txqEntries);
 
-  pTxqMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
-                                                  pTxqMem->io_elem.length,
-                                                  &pTxqMem->io_elem.ioAddr);
-  if(NULL == pTxqMem->esm_base) {
+  pTxqMem->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+                                                  pTxqMem->ioElem.length,
+                                                  &pTxqMem->ioElem.ioAddr);
+  if(NULL == pTxqMem->pEsmBase) {
     SFVMK_ERR(pAdapter,"failed to allocate memory for txq enteries");
     goto sfvmk_dma_alloc_fail;
   }
@@ -134,35 +119,28 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "txq[%d] is "
             "initialized associated evq index is %d", txqIndex, evqIndex);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_txqInit");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", txqIndex);
 
   return VMK_OK;
 
 sfvmk_mutex_fail:
   sfvmk_memPoolFree(pTxq->pPendDesc, pTxq->pendDescSize);
 sfvmk_pPendDesc_alloc_fail:
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxqMem->esm_base,
-                                pTxqMem->io_elem.ioAddr, pTxqMem->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxqMem->pEsmBase,
+                                pTxqMem->ioElem.ioAddr, pTxqMem->ioElem.length);
 sfvmk_dma_alloc_fail:
   sfvmk_memPoolFree(pTxq, sizeof(sfvmk_txq_t));
 sfvmk_alloc_fail:
   return VMK_FAILURE;
-
-
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txInit --
-*
-* @brief It allocate resource required for all the tx queues.
-*
-* @param  adapter pointer to sfvmk_adapter_t
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief It allocates resource required for all the tx queues.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
 int
 sfvmk_txInit(sfvmk_adapter_t *pAdapter)
 {
@@ -171,10 +149,10 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   vmk_uint32    evqIndex = 0;
   int rc;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-              "Entered sfvmk_txInit");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
+
   pIntr = &pAdapter->intr;
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
@@ -206,10 +184,9 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
     }
   }
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-              "Exited sfvmk_txInit");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
 
-  return (0);
+  return rc;
 
 sfvmk_fail3:
   while (--qIndex >= SFVMK_TXQ_NTYPES - 1)
@@ -224,26 +201,21 @@ sfvmk_fail:
 
   return (rc);
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txFini --
-*
-* @brief It releases resource required for all allocated tx queues
-*
-* @param  adapter pointer to sfvmk_adapter_t
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief It releases resource required for all allocated tx queues
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void
 sfvmk_txFini(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Entered sfvmk_txFini");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
@@ -251,55 +223,41 @@ sfvmk_txFini(sfvmk_adapter_t *pAdapter)
 
   pAdapter->txqCount = 0;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_txFini");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqComplete --
-*
-* @brief called when a tx comletion event comes from the fw.
-*
-* @param  tx queue ptr
-* @param  event queue ptr
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief called when a tx comletion event comes from the fw.
+**
+** \param[in]  tx queue ptr
+** \param[in]  event queue ptr
+**
+** \return: void
+*/
 void
 sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
 {
 
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqReap
-*
-* @brief
-*
-* @param  tx queue ptr
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief
+**
+** \param[in]  tx queue ptr
+**
+** \return: void
+*/
 static void
 sfvmk_txqReap(sfvmk_txq_t *pTxq)
 {
   pTxq->reaped = pTxq->completed;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqStop --
-*
-* @brief flush txq and destroy txq module for a particular txq
-*
-* @param  adapter pointer to sfvmk_adapter_t
-* @param[in]  tx queue index
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief flush txq and destroy txq module for a particular txq
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  tx queue index
+**
+** \return: void
+*/
 static void
 sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
@@ -307,10 +265,9 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   vmk_uint32 count;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Entered sfvmk_txqStop");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
 
   pTxq = pAdapter->pTxq[qIndex];
   pEvq = pAdapter->pEvq[pTxq->evqIndex];
@@ -367,7 +324,6 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_txqReap(pTxq);
   VMK_ASSERT(pTxq->reaped == pTxq->completed);
 
-
   pTxq->added = 0;
   pTxq->pending = 0;
   pTxq->completed = 0;
@@ -380,31 +336,24 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   SFVMK_EVQ_UNLOCK(pEvq);
   SFVMK_TXQ_UNLOCK(pTxq);
 
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exit sfvmk_txqStop");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
+  return;
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txStop --
-*
-* @brief flush txq and destroy txq module for all allocated txq.
-*
-* @param  adapter pointer to sfvmk_adapter_t
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
-
+/*! \brief flush txq and destroy txq module for all allocated txq.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
 void sfvmk_txStop(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Entered sfvmk_txStop");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
   qIndex = pAdapter->txqCount;
   while (--qIndex >= 0)
@@ -413,24 +362,16 @@ void sfvmk_txStop(sfvmk_adapter_t *pAdapter)
   /* Tear down the transmit module */
   efx_tx_fini(pAdapter->pNic);
 
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_txStop");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
 }
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txqStart --
-*
-* @brief creates txq module for a particular txq.
-*
-* @param  adapter pointer to sfvmk_adapter_t
-* @param[in]  tx queue index
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
-
+/*! \brief creates txq module for a particular txq.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  tx queue index
+**
+** \return: VMK_OK <success> error code <failure>
+*/
 static int
 sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
@@ -442,13 +383,11 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   vmk_uint32 descIndex;
   int rc;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Entered sfvmk_txqStart");
-
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
 
   pTxq = pAdapter->pTxq[qIndex];
-  VMK_ASSERT_BUG(NULL != pTxq, " NULL txq ptr");
+  SFVMK_NULL_PTR_CHECK(pTxq);
 
   pTxqMem = &pTxq->mem;
   pEvq = pAdapter->pEvq[pTxq->evqIndex];
@@ -458,32 +397,31 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
                   "evq is not initialized");
 
-
   /* Determine the kind of queue we are creating. */
   tsoFwAssisted = 0;
 
   switch (pTxq->type) {
 
-  case SFVMK_TXQ_NON_CKSUM:
-    flags = 0;
-    break;
+    case SFVMK_TXQ_NON_CKSUM:
+      flags = 0;
+      break;
 
-  case SFVMK_TXQ_IP_CKSUM:
-    flags = EFX_TXQ_CKSUM_IPV4;
-    break;
+    case SFVMK_TXQ_IP_CKSUM:
+      flags = EFX_TXQ_CKSUM_IPV4;
+      break;
 
-  case SFVMK_TXQ_IP_TCP_UDP_CKSUM:
-    flags = EFX_TXQ_CKSUM_IPV4 | EFX_TXQ_CKSUM_TCPUDP;
-    tsoFwAssisted = pAdapter->tsoFwAssisted;
+    case SFVMK_TXQ_IP_TCP_UDP_CKSUM:
+      flags = EFX_TXQ_CKSUM_IPV4 | EFX_TXQ_CKSUM_TCPUDP;
+      tsoFwAssisted = pAdapter->tsoFwAssisted;
 
-    if (tsoFwAssisted & SFVMK_FATSOV2)
-      flags |= EFX_TXQ_FATSOV2;
-    break;
+      if (tsoFwAssisted & SFVMK_FATSOV2)
+        flags |= EFX_TXQ_FATSOV2;
+      break;
 
-  default:
-    VMK_ASSERT(0);
-    flags = 0;
-    break;
+    default:
+      VMK_ASSERT(0);
+      flags = 0;
+      break;
 
   }
 
@@ -508,10 +446,10 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     }
   }
 
+  SFVMK_TXQ_LOCK(pTxq);
+
   /* Initialise queue descriptor indexes */
   pTxq->added = pTxq->pending = pTxq->completed = pTxq->reaped = descIndex;
-
-  SFVMK_TXQ_LOCK(pTxq);
 
   /* Enable the transmit queue. */
   efx_tx_qenable(pTxq->pCommonTxq);
@@ -520,37 +458,30 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;
 
-
   SFVMK_TXQ_UNLOCK(pTxq);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "Exited sfvmk_txqStart");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);
 
   return (0);
 
-  fail:
-    return (rc);
+fail:
+  return (rc);
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txStart --
-*
-* @brief creates txq module for all allocated txqs.
-*
-* @param  adapter pointer to sfvmk_adapter_t
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief creates txq module for all allocated txqs.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
 VMK_ReturnStatus
 sfvmk_txStart(sfvmk_adapter_t *pAdapter)
 {
   int qIndex;
   int rc;
 
-  VMK_ASSERT_BUG(NULL != pAdapter, " NULL adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "entered sfvmk_txStart");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
   /* Initialize the common code transmit module. */
   if ((rc = efx_tx_init(pAdapter->pNic)) != 0) {
@@ -565,9 +496,7 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
     }
   }
 
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
-            "exited sfvmk_txStart");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
 
   return VMK_OK;
 
@@ -579,17 +508,13 @@ sfvmk_fail:
   pAdapter->txqCount = 0;
   return VMK_FAILURE;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_txStart --
-*
-* @brief change the flush state to done. to bec called by event module.
-*
-* @param  pTxq    pointer to txq
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief change the flush state to done. to bec called by event module.
+**
+** \param[in]  pTxq    pointer to txq
+**
+** \return: void
+*/
 void
 sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq)
 {

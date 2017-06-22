@@ -1,4 +1,3 @@
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
@@ -19,17 +18,12 @@
 #define SFVMK_MCDI_LOCK(mcdi)     vmk_MutexLock(mcdi->lock);
 #define SFVMK_MCDI_UNLOCK(mcdi)   vmk_MutexUnlock(mcdi->lock);
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiTimeout --
- *
- * @brief routine to be called on mcdi timeout.
- *
- * @param adapter pointer to sfvmk_adapter_t
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief routine to be called on mcdi timeout.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 static void
 sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 {
@@ -37,21 +31,16 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 
   EFSYS_PROBE(mcdi_timeout);
 
-  //praveen  call reset functinality will do it later
-  //sfvmk_scheduleReset(pAdapter);
+  /* TODO: sfvmk_scheduleReset(pAdapter); */
+  return;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiPoll --
- *
- * @brief Routine for polling mcdi response.
- *
- * @param  adapter pointer to sfvmk_adapter_t
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief Routine for polling mcdi response.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 static void
 sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
 {
@@ -60,14 +49,13 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
   vmk_uint32 delayUS;
   boolean_t aborted;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   delayTotal = 0;
   delayUS = SFVMK_MCDI_POLL_INTERVAL_MIN;
   pNic = pAdapter->pNic;
 
-  VMK_ASSERT_BUG((NULL != pNic), " null nic ptr");
-
+  SFVMK_NULL_PTR_CHECK(pNic);
 
   do {
     if (efx_mcdi_request_poll(pNic)) {
@@ -93,17 +81,12 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
   } while (1);
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiExecute --
- *
- * @brief Routine for sending mcdi cmd.
- *
- * @param  adapter pointer to sfvmk_adapter_t
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief Routine for sending mcdi cmd.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 static void
 sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 {
@@ -112,7 +95,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 
   pAdapter = (sfvmk_adapter_t *)arg;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pMcdi = &pAdapter->mcdi;
 
@@ -128,17 +111,12 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
   SFVMK_MCDI_UNLOCK(pMcdi);
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiEvCpl --
- *
- * @brief Routine for mcdi event handling.
- *
- * @param  adapter pointer to sfvmk_adapter_t
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief Routine for mcdi event handling.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 static void
 sfvmk_mcdiEvCpl(void *arg)
 {
@@ -147,30 +125,23 @@ sfvmk_mcdiEvCpl(void *arg)
   sfvmk_mcdi_t *pMcdi;
 
   pAdapter= (sfvmk_adapter_t *)arg;
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pMcdi = &pAdapter->mcdi;
 
   VMK_ASSERT_BUG(pMcdi->state == SFVMK_MCDI_INITIALIZED,
                   "MCDI not initialized");
-
   /* We do not use MCDI completion, MCDI is simply polled */
-
+  return;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiException --
- *
- * @brief Routine handling mcdi exceptions.
- *
- * @param  adapter pointer to sfvmk_adapter_t
- * @param  mcdi exception
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
-
+/*! \brief Routine handling mcdi exceptions.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+** \param[in]  mcdi exception
+**
+** \return: void
+*/
 static void
 sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
 {
@@ -178,7 +149,7 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
   vmk_Device dev;
 
   pAdapter= (sfvmk_adapter_t *)arg;
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   dev = pAdapter->device;
 
@@ -188,22 +159,17 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
 
   EFSYS_PROBE(mcdi_exception);
 
-  // praveen needs reset functinality
-  //sfvmk_scheduleReset(pAdapter);
+  /* TODO: sfvmk_scheduleReset(pAdapter); */
+  return;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiInit --
- *
- * @brief Routine allocating resource for mcdi cmd handling and initializing
- *        mcdi module
- *
- * @param  adapter pointer to sfvmk_adapter_t
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief Routine allocating resource for mcdi cmd handling and initializing
+**        mcdi module
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
 int
 sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
 {
@@ -215,14 +181,14 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   sfvmk_mcdi_t *pMcdi;
   VMK_ReturnStatus status = VMK_OK;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), "null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pNic = pAdapter->pNic;
   pMcdi = &pAdapter->mcdi;
   pEmt = &pMcdi->transport;
   pMcdiMem = &pMcdi->mem;
 
-  maxMsgSize = sizeof ( vmk_uint32 ) + MCDI_CTL_SDU_LEN_MAX_V2;
+  maxMsgSize = sizeof(vmk_uint32) + MCDI_CTL_SDU_LEN_MAX_V2;
 
   VMK_ASSERT_BUG(pMcdi->state != SFVMK_MCDI_INITIALIZED,
                   "MCDI already initialized");
@@ -233,14 +199,14 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
 
   pMcdi->state = SFVMK_MCDI_INITIALIZED;
 
-  pMcdiMem->esm_base = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
-                                        maxMsgSize, &pMcdiMem->io_elem.ioAddr);
-  if (NULL== pMcdiMem->esm_base) {
+  pMcdiMem->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+                                        maxMsgSize, &pMcdiMem->ioElem.ioAddr);
+  if (NULL== pMcdiMem->pEsmBase) {
     SFVMK_ERR(pAdapter,"failed to allocate memory for mcdi module");
     goto sfvmk_mem_alloc_fail;
   }
 
-  pMcdiMem->io_elem.length = maxMsgSize;
+  pMcdiMem->ioElem.length = maxMsgSize;
   pMcdiMem->esmHandle = pAdapter->dmaEngine;
 
   pEmt->emt_context = pAdapter;
@@ -257,26 +223,22 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   return rc;
 
 sfvmk_mcdi_init_fail:
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->esm_base ,
-                              pMcdiMem->io_elem.ioAddr, pMcdiMem->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->pEsmBase ,
+                              pMcdiMem->ioElem.ioAddr, pMcdiMem->ioElem.length);
 sfvmk_mem_alloc_fail:
   sfvmk_mutexDestroy(pMcdi->lock);
 lock_create_fail:
   pMcdi->state = SFVMK_MCDI_UNINITIALIZED;
 
-  return (rc);
+  return rc;
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mcdiFini --
- *
- * @brief Routine for destroying mcdi module.
- *
- * @param  adapter pointer to sfvmk_adapter_t
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief Routine for destroying mcdi module.
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void
 sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
 {
@@ -285,15 +247,14 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
   efx_mcdi_transport_t *pEmt;
   efsys_mem_t *pMcdiMem;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pNic = pAdapter->pNic;
-  VMK_ASSERT_BUG((NULL != pNic), " null NIC ptr");
+  SFVMK_NULL_PTR_CHECK(pNic);
 
   pMcdi = &pAdapter->mcdi;
   pEmt = &pMcdi->transport;
   pMcdiMem = &pMcdi->mem;
-
 
   SFVMK_MCDI_LOCK(pMcdi);
   VMK_ASSERT_BUG(pMcdi->state == SFVMK_MCDI_INITIALIZED,
@@ -304,10 +265,11 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
 
   SFVMK_MCDI_UNLOCK(pMcdi);
 
-  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->esm_base,
-                                pMcdiMem->io_elem.ioAddr,
-                                pMcdiMem->io_elem.length);
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pMcdiMem->pEsmBase,
+                                pMcdiMem->ioElem.ioAddr,
+                                pMcdiMem->ioElem.length);
 
   sfvmk_mutexDestroy(pMcdi->lock);
 
+  return;
 }

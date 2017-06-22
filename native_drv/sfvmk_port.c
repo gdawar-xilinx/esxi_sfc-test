@@ -1,4 +1,3 @@
-
 /*************************************************************************
  * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
  * Use is subject to license terms.
@@ -10,27 +9,22 @@
 #include "sfvmk_port.h"
 #include "sfvmk_utils.h"
 
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_macLinkUpdate --
-*
-* @brief  update link mode and populate it to uplink device.
-*
-* @param[in]  adapter   pointer to sfvmk_adapter_t
-* @param[in]  linkmode  linkMode( link up/Down , Speed)
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+/*! \brief  update link mode and populate it to uplink device.
+**
+** \param[in]  adapter   pointer to sfvmk_adapter_t
+** \param[in]  linkmode  linkMode( link up/Down , Speed)
+**
+** \return: void
+*/
 void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
                                   efx_link_mode_t linkMode )
 {
   vmk_UplinkSharedData *pSharedData = &pAdapter->sharedData;
 
   if (NULL == pSharedData)
-    return ;
+    return;
 
-  /* right now writing hardcoded values will populate later on */
+  /* TODO: right now writing hardcoded values will populate later on */
   SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter)
 
   pSharedData->link.speed = VMK_LINK_SPEED_10000_MBPS;
@@ -52,17 +46,14 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
 
   return;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_macPollWork --
-*
-* @brief poll mac and update the link accordingly.
-*
-* @param[in]  arg     pointer to sfvmk_adapter_t
-*
-* @result: VMK_OK on success, and lock created. Error code if otherwise.
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief poll mac and update the link accordingly.
+**
+** \param[in]  arg     pointer to sfvmk_adapter_t
+**
+** @return: VMK_OK <success> error code <failure>
+**
+*/
 static void sfvmk_macPollWork(void *arg)
 {
   sfvmk_adapter_t *pAdapter;
@@ -71,7 +62,7 @@ static void sfvmk_macPollWork(void *arg)
   efx_link_mode_t mode;
 
   pAdapter = (sfvmk_adapter_t *)arg;
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pNic = pAdapter->pNic;
   pPort = &pAdapter->port;
@@ -87,27 +78,22 @@ static void sfvmk_macPollWork(void *arg)
 
 sfvmk_done:
   SFVMK_PORT_UNLOCK(pPort);
-  return ;
+  return;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_portStop --
-*
-* @brief  destory port and remove filters.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  destory port and remove filters.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_port_t *pPort;
   efx_nic_t *pNic;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_portStop");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
   pNic = pAdapter->pNic;
@@ -130,21 +116,16 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
 
   SFVMK_PORT_UNLOCK(pPort);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_portStop");
-
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_PORT);
+  return;
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_portStart --
-*
-* @brief  initialize port, filters , flow control and wait for link status.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  initialize port, filters , flow control and wait for link status.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: 0 <success>  error code <failure>
+*/
 int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_port_t *pPort;
@@ -152,10 +133,9 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   size_t pdu;
   int rc;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_portStart");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
   pNic = pAdapter->pNic;
@@ -190,10 +170,9 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   SFVMK_PORT_UNLOCK(pPort);
   sfvmk_macPollWork(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_portStart");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_PORT);
 
-  return (0);
+  return rc;
 
 sfvmk_mac_drain_fail:
 sfvmk_mac_fcntl_fail:
@@ -206,27 +185,21 @@ sfvmk_filter_init_fail:
 
   return (rc);
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_portInit --
-*
-* @brief  allocate resource for port module.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
-int
-sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
+
+/*! \brief  allocate resource for port module.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> Error code <failure>
+*/
+VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
 {
   struct sfvmk_port_s *pPort;
   VMK_ReturnStatus status;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_portInit");
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
 
@@ -237,51 +210,44 @@ sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
 
   status = sfvmk_mutexInit("port", SFVMK_PORT_LOCK_RANK, &pPort->lock);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "Failed to create lock for port. err: %d", status);
+    SFVMK_ERR(pAdapter, "Failed to create lock for port. err: %s",
+              vmk_StatusToString(status));
     goto sfvmk_fail;
   }
 
   pPort->initState = SFVMK_PORT_INITIALIZED;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_portInit");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_PORT);
 
 sfvmk_fail:
   return status ;
 
 }
-/**-----------------------------------------------------------------------------
-*
-* sfvmk_portFini --
-*
-* @brief  releases resource for port module.
-*
-* @param[in]  adapter     pointer to sfvmk_adapter_t
-*
-* @result: void
-*
-*-----------------------------------------------------------------------------*/
+
+/*! \brief  releases resource for port module.
+**
+** \param[in]  adapter     pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
 void
 sfvmk_portFini(struct sfvmk_adapter_s *pAdapter)
 {
   struct sfvmk_port_s *pPort;
 
-  VMK_ASSERT_BUG((NULL != pAdapter), " null adapter ptr");
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Entered sfvmk_portFini");
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
 
   VMK_ASSERT_BUG(pPort->initState == SFVMK_PORT_INITIALIZED,
               "Port is not initialized");
 
-  pPort->pAdapter = pAdapter;
+  pPort->pAdapter = NULL;
 
   sfvmk_mutexDestroy(pPort->lock);
+  pPort->initState = SFVMK_PORT_UNINITIALIZED;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                "Exited sfvmk_portFini");
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_PORT);
 }
-
-
 

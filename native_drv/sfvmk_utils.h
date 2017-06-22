@@ -31,5 +31,4 @@ void *
 sfvmk_allocCoherentDMAMapping(vmk_DMAEngine dmaEngine, vmk_uint32 size,
                                             vmk_IOA *ioAddr);
 
-
 #endif /*  __SFVMK_UTILS_H__ */

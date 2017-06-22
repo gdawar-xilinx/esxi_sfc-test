@@ -14,9 +14,11 @@
 #define SFVMK_TXQ_LOCK(pTxq) {     \
   vmk_MutexLock(pTxq->lock);       \
 }
-#define SFVMK_TXQ_UNLOCK(txq) { \
+#define SFVMK_TXQ_UNLOCK(txq) {  \
   vmk_MutexUnlock(pTxq->lock);   \
 }
+
+#define NUM_TX_QUEUES_FOR_EVQ0 3
 
 /*txq type */
 enum sfvmk_txqType {
@@ -25,7 +27,6 @@ enum sfvmk_txqType {
   SFVMK_TXQ_IP_TCP_UDP_CKSUM,
   SFVMK_TXQ_NTYPES
 };
-
 
 enum sfvmk_txqFlushState
 {
@@ -41,7 +42,6 @@ enum sfvmk_txqState {
   SFVMK_TXQ_INITIALIZED,
   SFVMK_TXQ_STARTED
 };
-
 
 typedef struct sfvmk_txq_s {
 
@@ -82,7 +82,6 @@ typedef struct sfvmk_txq_s {
   struct sfvmk_txq_s    *next;
 }sfvmk_txq_t;
 
-
 static inline uint16_t
 sfvmk_swEvTxqMagic(enum sfvmk_sw_ev sw_ev, struct sfvmk_txq_s *txq)
 {
@@ -96,8 +95,6 @@ void sfvmk_txStop(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_txStart(struct sfvmk_adapter_s *pAdapter);
 
 void sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq);
-
-
 
 #endif /* __SFVMK_TX_H__ */
 

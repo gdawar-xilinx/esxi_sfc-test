@@ -7,7 +7,6 @@
 #ifndef __SFVMK_RX_H__
 #define __SFVMK_RX_H__
 
-
 /* max number of rxq */
 #define SFVMK_RX_SCALE_MAX  EFX_MAXRSS
 
@@ -21,9 +20,9 @@ enum sfvmk_flushState {
 
 /* buff desc for each buffer */
 typedef struct sfvmk_rxSwDesc_s {
-  vmk_PktHandle     *pPkt;
-  vmk_int32   flags;
-  vmk_int32   size;
+  vmk_int32      flags;
+  vmk_int32      size;
+  vmk_PktHandle  *pPkt;
 }sfvmk_rxSwDesc_t;
 
 /* rxq state */
@@ -33,9 +32,7 @@ enum sfvmk_rxqState {
   SFVMK_RXQ_STARTED
 };
 
-
 typedef struct sfvmk_rxq_s {
-
   struct sfvmk_adapter_s *pAdapter;
   efsys_mem_t   mem;
   /* rxq Index */
@@ -44,21 +41,16 @@ typedef struct sfvmk_rxq_s {
   vmk_uint32    entries;
   vmk_uint32    ptrMask;
   vmk_uint32    qdescSize;
-
   /* variable for managing queue */
   vmk_uint32    added;
   vmk_uint32    pushed;
   vmk_uint32    pending;
   vmk_uint32    completed;
-
-
   vmk_uint32    loopback;
 
   sfvmk_rxSwDesc_t  *pQueue ;
-
   /* common rxq module handle*/
   efx_rxq_t   *pCommonRxq ;
-
   /* rxq state*/
   enum sfvmk_rxqState   initState;
   volatile enum sfvmk_flushState  flushState;
@@ -70,10 +62,8 @@ sfvmk_swEvRxqMagic(enum sfvmk_sw_ev sw_ev, struct sfvmk_rxq_s *rxq)
   return sfxge_swEvMkMagic(sw_ev, 0);
 }
 
-
-
 /* functions */
-int sfvmk_rxInit(struct sfvmk_adapter_s *adapter);
+VMK_ReturnStatus sfvmk_rxInit(struct sfvmk_adapter_s *adapter);
 void  sfvmk_rxFini(struct sfvmk_adapter_s *adapter);
 
 int sfvmk_rxStart(struct sfvmk_adapter_s *adapter);

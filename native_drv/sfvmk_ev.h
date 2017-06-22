@@ -4,16 +4,15 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
-
 #ifndef __SFVMK_EV_H__
 #define __SFVMK_EV_H__
 
+#define SFVMK_MIN_EVQ_COUNT     1
 
 #define SFVMK_MAGIC_RESERVED    0x8000
 
 #define SFVMK_MAGIC_DMAQ_LABEL_WIDTH  6
-#define SFVMK_MAGIC_DMAQ_LABEL_MASK \
+#define SFVMK_MAGIC_DMAQ_LABEL_MASK                \
   ((1 << SFVMK_MAGIC_DMAQ_LABEL_WIDTH) - 1)
 
 enum sfvmk_sw_ev {
@@ -23,8 +22,9 @@ enum sfvmk_sw_ev {
   SFVMK_SW_EV_TX_QFLUSH_DONE,
 };
 
-#define SFVMK_SW_EV_MAGIC(_sw_ev) \
-  (SFVMK_MAGIC_RESERVED | ((_sw_ev) << SFVMK_MAGIC_DMAQ_LABEL_WIDTH))
+#define SFVMK_SW_EV_MAGIC(_sw_ev)                  \
+  (SFVMK_MAGIC_RESERVED |                          \
+  ((_sw_ev) << SFVMK_MAGIC_DMAQ_LABEL_WIDTH))
 
 static inline uint16_t
 sfxge_swEvMkMagic(enum sfvmk_sw_ev sw_ev, unsigned int label)
@@ -34,16 +34,14 @@ sfxge_swEvMkMagic(enum sfvmk_sw_ev sw_ev, unsigned int label)
   return SFVMK_SW_EV_MAGIC(sw_ev) | label;
 }
 
-
 /* lock apis */
-#define SFVMK_EVQ_LOCK(pEvq) {   \
-  vmk_MutexLock(pEvq->lock);     \
+#define SFVMK_EVQ_LOCK(pEvq) {                     \
+  vmk_MutexLock(pEvq->lock);                       \
 }
 
-#define SFVMK_EVQ_UNLOCK(pEvq) { \
-  vmk_MutexUnlock(pEvq->lock);   \
+#define SFVMK_EVQ_UNLOCK(pEvq) {                   \
+  vmk_MutexUnlock(pEvq->lock);                     \
 }
-
 
 /* event queue state */
 enum sfvmk_evq_state {
@@ -52,9 +50,6 @@ enum sfvmk_evq_state {
   SFVMK_EVQ_STARTING,
   SFVMK_EVQ_STARTED
 };
-
-
-// better to aliign on cache line
 
 typedef struct sfvmk_evq_s {
   /* Structure members below are sorted by usage order */
@@ -80,14 +75,12 @@ typedef struct sfvmk_evq_s {
 
 } sfvmk_evq_t VMK_ATTRIBUTE_L1_ALIGNED;
 
-
 /* functions */
 VMK_ReturnStatus sfvmk_evInit(struct sfvmk_adapter_s *adapter);
 VMK_ReturnStatus sfvmk_evStart(struct sfvmk_adapter_s *adapter);
 void sfvmk_evStop(struct sfvmk_adapter_s *adapter);
 void sfvmk_evFini(struct sfvmk_adapter_s *adapter);
 int sfvmk_evqPoll(sfvmk_evq_t *pEvq);
-
 
 #endif /* __SFVMK_EV_H__ */
 

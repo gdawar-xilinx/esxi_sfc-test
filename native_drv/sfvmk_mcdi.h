@@ -25,7 +25,5 @@ typedef struct sfvmk_mcdi_s {
 void sfvmk_mcdiFini(struct sfvmk_adapter_s *pAdapter);
 int sfvmk_mcdiInit(struct sfvmk_adapter_s *pAdapter);
 
-
 #endif
-
 

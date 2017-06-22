@@ -4,7 +4,6 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
 #ifndef __SFVMK_DRIVER_H__
 #define __SFVMK_DRIVER_H__
 
@@ -19,11 +18,12 @@
 #include "sfvmk_uplink.h"
 #include "sfvmk_intr.h"
 
-
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
+/* Offset in 256 bytes configuration address space */
 #define SFVMK_PCI_COMMAND             0x04
+/* type of command */
 #define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
 
 #define SFVMK_NDESCS                  1024
@@ -35,8 +35,6 @@ extern void             sfvmk_driverUnregister(void);
 extern int sfvmk_txRingEntries;
 extern int sfvmk_rxRingEntries;
 
-
-
 /* rank for mutex lock in different module */
 enum sfvmk_LckRank {
   SFVMK_PORT_LOCK_RANK = VMK_MUTEX_RANK_LOWEST,
@@ -45,18 +43,15 @@ enum sfvmk_LckRank {
   SFVMK_MCDI_LOCK_RANK
 };
 
-
 /* adapter states */
 enum sfvmk_adapterState {
   SFVMK_UNINITIALIZED = 0,
-  SFVMK_INITIALIZED,
   SFVMK_REGISTERED,
   SFVMK_STARTED
 };
 
-
 /* adapter structure */
-typedef struct sfvmk_adapter_s{
+typedef struct sfvmk_adapter_s {
   /* Device handle passed by VMK */
   vmk_Device        device;
 
@@ -73,7 +68,7 @@ typedef struct sfvmk_adapter_s{
   /* EFX /efsys related information */
   efx_family_t      efxFamily;
   efsys_bar_t       bar;
-  efsys_lock_t      NicLock;
+  efsys_lock_t      nicLock;
   efx_nic_t         *pNic;
 
   sfvmk_mcdi_t      mcdi;
@@ -111,12 +106,13 @@ typedef struct sfvmk_adapter_s{
 
   /*uplink device inforamtion */
   vmk_Name        uplinkName;
+  vmk_Uplink      uplink;
+  vmk_uint32      supportedModesArraySz;
+  vmk_Device      uplinkDevice;
+
+  vmk_UplinkRegData       regData;
+  vmk_UplinkSharedData    sharedData;
   vmk_UplinkSupportedMode supportedModes[EFX_PHY_CAP_NTYPES];
-  vmk_uint32 supportedModesArraySz;
-  vmk_UplinkRegData regData;
-  vmk_UplinkSharedData  sharedData;
-  vmk_Uplink uplink;
-  vmk_Device uplinkDevice;
 
   /* Serializes multiple writers. */
   vmk_Lock shareDataLock;

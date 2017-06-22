@@ -4,23 +4,16 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
-
 #include "sfvmk_driver.h"
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_createLock --
- *
- * @brief It creates a spin lock with specified name and lock rank.
- *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief It creates a spin lock with specified name and lock rank.
+**
+** \param[in]  lockName  brief name for the spinlock
+** \param[in]  rank      lock rank)
+** \param[out] lock      lock pointer to create
+**
+** \return: VMK_OK on success, and lock created. Error code if otherwise.
+*/
 
 VMK_ReturnStatus
 sfvmk_createLock(const char *lockName,
@@ -42,22 +35,17 @@ sfvmk_createLock(const char *lockName,
    lockProps.rank = rank;
    status = vmk_SpinlockCreate(&lockProps, lock);
    if (status != VMK_OK) {
-      SFVMK_ERROR("Failed to create spinlock (%x)", status);
+      SFVMK_ERROR("Failed to create spinlock (%s)", vmk_StatusToString(status));
    }
    return status;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_DestroyLock --
- *
- * @brief It destroys the spin lock.
- *
- * @param[in,out] lock  lock pointer to create
- *
- * @result  None
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief It destroys the spin lock.
+**
+** \param[in] lock  vmk_lock to destory
+**
+** \return  void
+*/
 
 void
 sfvmk_destroyLock(vmk_Lock lock)
@@ -66,19 +54,14 @@ sfvmk_destroyLock(vmk_Lock lock)
     vmk_SpinlockDestroy(lock);
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_memPoolAlloc --
- *
- * @brief create contiguous memory from memory pool
- *
- * @param[in]   size of the memory to be allocated.
- *              memory is allocated always in pages
- *
- * @result: kernel virtual address of the memory allocated.
- *
- *-----------------------------------------------------------------------------*/
-
+/*! \brief create contiguous memory from memory pool
+**
+** \param[in] size of the memory to be allocated.
+**            memory is allocated always in pages
+**
+** \return:   kernel virtual address of the memory allocated <success>
+**            NULL <failure>
+*/
 void *
 sfvmk_memPoolAlloc(vmk_uint64 size)
 {
@@ -99,8 +82,6 @@ sfvmk_memPoolAlloc(vmk_uint64 size)
   request.numPages = size >> VMK_PAGE_SHIFT;
   request.numElements = 1;
   request.mpnRanges = &mpnRange;
-
-
 
   status = vmk_MemPoolAlloc(sfvmk_ModInfo.memPoolID, &props, &request);
   if (status != VMK_OK) {
@@ -132,18 +113,13 @@ sfvmk_allocation_err:
   return NULL;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_memPoolFree --
- *
- * @brief It creates a spin lock with specified name and lock rank.
- *
- * @param[in]  va     virtual address of the mem needs to get freed
- * @param[in]  size   size of the memory
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief Free memory allocated from memPool
+**
+** \param[in]  va     virtual address of the mem needs to get freed
+** \param[in]  size   size of the memory
+**
+** \return: void
+*/
 void
 sfvmk_memPoolFree(void *va, vmk_uint64 size)
 {
@@ -177,21 +153,17 @@ sfvmk_memPoolFree(void *va, vmk_uint64 size)
   }
 
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_DMAMapMA --
- *
- * @brief function to map machine address to DMA address
- *
- * @param[in]  ma       machine address
- * @param[in]  size     size of the memory
- * @param[in] direction DMADirection
- * @param[in]  engine   dma engine to be used
- * @param[out]  ioa     dma address
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief function to map machine address to DMA address
+**
+** \param[in]  ma       machine address
+** \param[in]  size     size of the memory
+** \param[in] direction DMADirection
+** \param[in]  engine   dma engine to be used
+** \param[out]  ioa     dma address
+**
+** \return: VMK_OK <success> error code <failure>
+*/
 
 static VMK_ReturnStatus
 sfvmk_DMAMapMA(vmk_MA ma,
@@ -215,8 +187,8 @@ sfvmk_DMAMapMA(vmk_MA ma,
                 vmk_DMAMapErrorReasonToString(err.reason));
 
     } else {
-      SFVMK_ERROR("Failed to map range [0x%lx, 0x%lx] (%x)",
-                in.addr, in.addr + in.length - 1, status);
+      SFVMK_ERROR("Failed to map range [0x%lx, 0x%lx] (%s)",
+                in.addr, in.addr + in.length - 1, vmk_StatusToString(status));
     }
   } else {
     VMK_ASSERT_EQ(in.length, out.length);
@@ -225,19 +197,15 @@ sfvmk_DMAMapMA(vmk_MA ma,
 
   return status;
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_allocCoherentDMAMapping --
- *
- * @brief this function allocate dmaable memory
- *
- * @param[in]  dmaEngine  dma engine to be used
- * @param[in]  size       size of the memory
- * @param[out] ioAddr     dma addressable memory
- *
- * @result: kernel virtual address of the dmaable memory
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief this function allocate dmaable memory
+**
+** \param[in]  dmaEngine  dma engine to be used
+** \param[in]  size       size of the memory
+** \param[out] ioAddr     dma addressable memory
+**
+** \return: kernel virtual address of the dmaable memory
+*/
 
 void *
 sfvmk_allocCoherentDMAMapping(vmk_DMAEngine dmaEngine, vmk_uint32 size,
@@ -267,20 +235,16 @@ sfvmk_dma_map_fail:
 sfvmk_mempool_alloc_fail:
   return NULL;
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_freeCoherentDMAMapping --
- *
- * @brief unmap dma mapping and free memory
- *
- * @param[in]  engine   dma engine to be used
- * @param[in]  pVA      kernel virtual address of the memory needs to be freed.
- * @param[in]  ioAddr   dma address of the memory
- * @param[out] size     size of the memory.
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief unmap dma mapping and free memory
+**
+** \param[in]  engine   dma engine to be used
+** \param[in]  pVA      kernel virtual address of the memory needs to be freed.
+** \param[in]  ioAddr   dma address of the memory
+** \param[out] size     size of the memory.
+**
+** \return: void
+*/
 
 void
 sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
@@ -294,26 +258,22 @@ sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
 
   status = vmk_DMAUnmapElem(engine, VMK_DMA_DIRECTION_BIDIRECTIONAL, &elem);
   if (VMK_UNLIKELY(status != VMK_OK)) {
-    SFVMK_ERROR("Failed to unmap range [0x%lx, 0x%lx] (%x)",
+    SFVMK_ERROR("Failed to unmap range [0x%lx, 0x%lx] (%s)",
               elem.ioAddr, elem.ioAddr + elem.length - 1,
-              status);
+              vmk_StatusToString(status));
   }
 
   sfvmk_memPoolFree(pVA, size);
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mutexInit --
- *
- * @brief It creates a mutex lock with specified name and lock rank.
- *
- * @param[in]  lckName    brief name for the mutexLock
- * @param[in]  rank       lock rank
- * @param[out] mutex      mutex lock pointer to create
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief It creates a mutex lock with specified name and lock rank.
+**
+** \param[in]  lckName    brief name for the mutexLock
+** \param[in]  rank       lock rank
+** \param[out] mutex      mutex lock pointer to create
+**
+** \return: VMK_OK on success, and lock created. Error code if otherwise.
+*/
 VMK_ReturnStatus
 sfvmk_mutexInit(const char *lckName, vmk_LockRank rank, vmk_Mutex *mutex)           // OUT: created lock
 {
@@ -328,28 +288,22 @@ sfvmk_mutexInit(const char *lckName, vmk_LockRank rank, vmk_Mutex *mutex)       
    lockProps.rank = rank;
    status = vmk_MutexCreate(&lockProps ,mutex);
    if (VMK_UNLIKELY(status != VMK_OK)) {
-      vmk_LogMessage("Failed to create mutex (%x)", status);
+      SFVMK_ERROR("Failed to create mutex (%s)", vmk_StatusToString(status));
    }
 
    return status ;
 
 }
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_mutexDestroy --
- *
- * @brief It destroy mutex.
- *
- * @param[in]  mutex  mutex handle
- *
- * @result: void
- *
- *-----------------------------------------------------------------------------*/
+
+/*! \brief It destroy mutex.
+**
+** \param[in]  mutex  mutex handle
+**
+** \return: void
+*/
 void sfvmk_mutexDestroy(vmk_Mutex mutex)
 {
   if(mutex)
     vmk_MutexDestroy(mutex);
 }
-
-
 

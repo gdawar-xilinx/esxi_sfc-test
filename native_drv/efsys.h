@@ -157,8 +157,8 @@ typedef vmk_IOA  efsys_dma_addr_t;
         do {                                                            \
             SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esip);                   \
             (_p) = sfvmk_MemAlloc(_size);                               \
-		if (NULL != _p)						\
-                  vmk_Memset(_p, 0 , _size);				\
+            if (NULL != _p)                                             \
+              vmk_Memset(_p, 0 , _size);                                \
         } while (B_FALSE)
 
 #define EFSYS_KMEM_FREE(_esip, _size, _p)                               \
@@ -198,26 +198,26 @@ typedef struct efsys_lock_s {
 /* DMA SYNC */
 #define EFSYS_DMA_SYNC_FOR_KERNEL(_esmp, _offset, _size)                \
         do {                                                            \
-            vmk_DMAFlushElem((_esmp)->esmHandle,                       \
-            VMK_DMA_DIRECTION_TO_MEMORY, &(_esmp)->io_elem);             \
+            vmk_DMAFlushElem((_esmp)->esmHandle,                        \
+            VMK_DMA_DIRECTION_TO_MEMORY, &(_esmp)->ioElem);             \
         } while (B_FALSE)
 
 #define EFSYS_DMA_SYNC_FOR_DEVICE(_esmp, _offset, _size)                \
         do {                                                            \
-            vmk_DMAFlushElem((_esmp)->esmHandle,                       \
-            VMK_DMA_DIRECTION_FROM_MEMORY, &(_esmp)->io_elem);           \
+            vmk_DMAFlushElem((_esmp)->esmHandle,                        \
+            VMK_DMA_DIRECTION_FROM_MEMORY, &(_esmp)->ioElem);           \
         } while (B_FALSE)
 
 typedef struct efsys_mem_s {
         vmk_DMAEngine       esmHandle;  // This is actually a pointer to vmk_DMAEngineInt
-        uint8_t             *esm_base;   // virtual address
-        vmk_SgElem          io_elem;    // addr and size
+        uint8_t             *pEsmBase;   // virtual address
+        vmk_SgElem          ioElem;    // addr and size
 } efsys_mem_t;
 
 
 #define EFSYS_MEM_ZERO(_esmp, _size)                                    \
         do {                                                            \
-            (void) vmk_Memset((_esmp)->esm_base, 0, (_size));           \
+            (void) vmk_Memset((_esmp)->pEsmBase, 0, (_size));           \
         } while (B_FALSE)
 
 #define EFSYS_MEM_READD(_esmp, _offset, _edp)                           \
@@ -227,7 +227,7 @@ typedef struct efsys_mem_s {
             VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)),     \
                 ("not power of 2 aligned"));                            \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             (_edp)->ed_u32[0] = *addr;                                  \
                                                                         \
@@ -243,7 +243,7 @@ typedef struct efsys_mem_s {
             VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)),     \
                 ("not power of 2 aligned"));                            \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             (_eqp)->eq_u64[0] = *addr;                                  \
                                                                         \
@@ -260,7 +260,7 @@ typedef struct efsys_mem_s {
             VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_oword_t)),     \
                 ("not power of 2 aligned"));                            \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             (_eop)->eo_u64[0] = *addr++;                                \
             (_eop)->eo_u64[1] = *addr;                                  \
@@ -283,7 +283,7 @@ typedef struct efsys_mem_s {
             EFSYS_PROBE2(mem_writed, unsigned int, (_offset),           \
                 uint32_t, (_edp)->ed_u32[0]);                           \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             *addr = (_edp)->ed_u32[0];                                  \
                                                                         \
@@ -300,7 +300,7 @@ typedef struct efsys_mem_s {
                 uint32_t, (_eqp)->eq_u32[1],                            \
                 uint32_t, (_eqp)->eq_u32[0]);                           \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             *addr   = (_eqp)->eq_u64[0];                                \
                                                                         \
@@ -320,7 +320,7 @@ typedef struct efsys_mem_s {
                 uint32_t, (_eop)->eo_u32[1],                            \
                 uint32_t, (_eop)->eo_u32[0]);                           \
                                                                         \
-            addr = (void *)((_esmp)->esm_base + (_offset));             \
+            addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
             *addr++ = (_eop)->eo_u64[0];                                \
             *addr   = (_eop)->eo_u64[1];                                \
@@ -328,83 +328,83 @@ typedef struct efsys_mem_s {
         } while (B_FALSE)
 
 #define EFSYS_MEM_ADDR(_esmp)                                           \
-        ((_esmp)->io_elem.ioAddr)
+        ((_esmp)->ioElem.ioAddr)
 
 #define EFSYS_MEM_IS_NULL(_esmp)                                        \
-        ((_esmp)->esm_base == NULL)
+        ((_esmp)->pEsmBase == NULL)
 
 
 
 /* PCI BAR access */
 
 typedef struct efsys_bar_s {
-        vmk_VA           esb_base;
-        vmk_Lock         esb_lock;
+  vmk_MappedResourceAddress esbBase;
+  vmk_Lock         esbLock;
 } efsys_bar_t;
 
 #define EFSYS_BAR_READD(_esbp, _offset, _edp, _lock)                    \
-        do {                                                            \
-            if(_lock)                                                   \
-            vmk_SpinlockLock(_esbp->esb_lock);                          \
-            (_edp)->ed_u32[0] = *(volatile unsigned int *)              \
-                (_esbp->esb_base + _offset);                            \
-            if(_lock)                                                   \
-                vmk_SpinlockUnlock(_esbp->esb_lock);                    \
-        } while (VMK_FALSE)
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    vmk_MappedResourceRead32(&(_esbp->esbBase) , _offset,               \
+                              &((_edp)->ed_u32[0]));                    \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock(_esbp->esbLock);                               \
+  } while (VMK_FALSE)
 
 #define EFSYS_BAR_READQ(_esbp, _offset, _eqp)                           \
-        do {                                                            \
-            SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                   \
-            (_eqp)->eq_u64[0] = *(volatile vmk_uint64 *)                \
-                (_esbp->esb_base + _offset);                            \
-        } while (VMK_FALSE)
+  do {                                                                  \
+    SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                           \
+    vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset,               \
+                              &((_eqp)->eq_u64[0]));                    \
+  } while (VMK_FALSE)
 
 #define EFSYS_BAR_READO(_esbp, _offset, _eop, _lock)                    \
-        do {                                                            \
-            SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                   \
-            if(_lock)                                                   \
-                vmk_SpinlockLock(_esbp->esb_lock);                      \
-            (_eop)->eo_u64[0] = *(volatile vmk_uint64 *)                \
-                (_esbp->esb_base + _offset);                            \
-            (_eop)->eo_u64[1] = *(volatile vmk_uint64 *)                \
-                (_esbp->esb_base + _offset + sizeof(vmk_uint64));       \
-            if(_lock)                                                   \
-                vmk_SpinlockUnlock(_esbp->esb_lock);                    \
-        } while (VMK_FALSE)
+  do {                                                                  \
+    SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                           \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset,               \
+                              &((_eop)->eo_u64[0]));                    \
+    vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset,               \
+                              &((_eop)->eo_u64[1]));                    \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock(_esbp->esbLock);                               \
+  } while (VMK_FALSE)
 
 #define EFSYS_BAR_WRITED(_esbp, _offset, _edp, _lock)                   \
-        do {                                                            \
-            if(_lock)                                                   \
-                vmk_SpinlockLock(_esbp->esb_lock);                      \
-            *(volatile vmk_uint32 *)(_esbp->esb_base + _offset) =       \
-                (_edp)->ed_u32[0];                                      \
-            if(_lock)                                                   \
-                vmk_SpinlockUnlock(_esbp->esb_lock);                    \
-        } while (VMK_FALSE)
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    vmk_MappedResourceWrite32(&(_esbp->esbBase) , _offset,              \
+                              (_edp)->ed_u32[0]);                       \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock(_esbp->esbLock);                               \
+  } while (VMK_FALSE)
 
 #define EFSYS_BAR_WRITEQ(_esbp, _offset, _eqp)                          \
-        do {                                                            \
-            *(volatile vmk_uint64 *)(_esbp->esb_base + _offset) =       \
-                (_eqp)->eq_u64[0];                                      \
-        } while (VMK_FALSE)
+  do {                                                                  \
+      vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset,            \
+                                (_eqp)->eq_u64[0]);                     \
+  } while (VMK_FALSE)
 
 #define EFSYS_BAR_WC_WRITEQ(_esbp, _offset, _eqp)                       \
-        do {                                                            \
-            SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                   \
-        } while (B_FALSE)
+  do {                                                                  \
+      SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                         \
+  } while (B_FALSE)
 
 
 #define EFSYS_BAR_WRITEO(_esbp, _offset, _eop, _lock)                   \
-        do {                                                            \
-            if(_lock)                                                   \
-                vmk_SpinlockLock(_esbp->esb_lock);                      \
-            *(volatile vmk_uint64  *)                                   \
-                (_esbp->esb_base + _offset) = (_eop)->eo_u64[0] ;       \
-            *(volatile vmk_uint64  *) (_esbp->esb_base + _offset +      \
-                sizeof(vmk_uint64)) = (_eop)->eo_u64[1];                \
-            if(_lock)                                                   \
-                vmk_SpinlockUnlock(_esbp->esb_lock);                    \
-        } while (VMK_FALSE)
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset,              \
+                              (_eop)->eo_u64[0]);                       \
+    vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset,              \
+                              (_eop)->eo_u64[1]);                       \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock(_esbp->esbLock);                               \
+  } while (VMK_FALSE)
 
 
 
@@ -489,9 +489,6 @@ typedef uint64_t    efsys_stat_t;
 #define EFSYS_ASSERT3P(_x, _op, _y)     EFSYS_ASSERT3(_x, _op, _y, uintptr_t)
 
 /* Probes */
-
-//#define EFSYS_PROBES
-
 #ifndef EFSYS_PROBES
 
 #define EFSYS_PROBE(_name)

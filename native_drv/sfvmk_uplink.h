@@ -13,10 +13,10 @@
   vmk_VersionedAtomicBeginWrite(&adapter->sharedData.lock);   \
 }
 
-#define SFVMK_SHARED_AREA_END_WRITE(adapter)                    \
-{                                                               \
-  vmk_VersionedAtomicEndWrite(&adapter->sharedData.lock);       \
-  vmk_SpinlockUnlock(adapter->shareDataLock);                   \
+#define SFVMK_SHARED_AREA_END_WRITE(adapter)                  \
+{                                                             \
+  vmk_VersionedAtomicEndWrite(&adapter->sharedData.lock);     \
+  vmk_SpinlockUnlock(adapter->shareDataLock);                 \
 }
 
 VMK_ReturnStatus sfvmk_initUplinkData(struct sfvmk_adapter_s * pAdapter);

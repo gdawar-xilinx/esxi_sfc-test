@@ -85,7 +85,8 @@ hgheadrev () {
 
 hgpush () {
     local repo="$1" rev
-
+    echo " ..hg push .."
+    echo ${repo}
     msg "push back ${repo} changes"
 
     cd ${INCOMING}/${repo}
@@ -97,7 +98,7 @@ hgpush () {
     if [ "$(hgheadrev ${repo})" != "${rev}" ]; then
         log "Repo ${repo} has changed. Merging"
         hg --noninteractive merge ${newbrancha[${repo}]}
-        hg --noninteractive commit --message "Task 6436: merge"
+        hg --noninteractive commit --message "Task 71858: merge"
     fi
     # Some versions of hg exit with an non-zero error code if their is
     # nothing to push
@@ -128,7 +129,7 @@ commitversion () {
     vmsg "repo ${repo} commit version ${version}"
     if checkworkingdir ${repo}; then
         hg --noninteractive addremove
-        hg --noninteractive commit --message "Task 6436: [${tagfor}] update version numbers to ${version}"
+        hg --noninteractive commit --message "Task 71858: [${tagfor}] update version numbers to ${version}"
     fi
 
     if [ -f version.mk ]; then
@@ -200,9 +201,10 @@ versionupdate () {
     shift
 
     vmsg "updating ${repo} repo to ${tag}"
-
+    echo $version
     local pstamp
     pstamp="${version}_$(date +'%y%m%d-%H%M')"
+    echo $pstamp
 
     # bug 28141/29333 - avoid replacing version numbers within changelogs
     local predicate
@@ -249,33 +251,33 @@ validatetag () {
              "Did you skip --operation=pull?"
 
     # Find the latest tag on the branch
-    cd ${INCOMING}/esxi_sfc
-    lasttag="$(hglasttag esxi_sfc)"
-    IFS=_; eval set -- ${lasttag}; IFS="${_IFS}"
-    [ $# = 4 ] && [[ "${lasttag}" =~ v4_[0-9]+_[0-9]+_[0-9]{4} ]] || \
-        fail "Current branch '${newbrancha[${repo}]}' head tag '${lasttag}' is invalid. "\
-             "Try using --lasttag to point at the last normal tag"
+    #cd ${INCOMING}/esxi_sfc
+    #lasttag="$(hglasttag esxi_sfc)"
+    #IFS=_; eval set -- ${lasttag}; IFS="${_IFS}"
+    #[ $# = 4 ] && [[ "${lasttag}" =~ v4_[0-9]+_[0-9]+_[0-9]{4} ]] || \
+    #    fail "Current branch '${newbrancha[${repo}]}' head tag '${lasttag}' is invalid. "\
+    #         "Try using --lasttag to point at the last normal tag"
     # If you hit this because there is a bad tag in history then you will need
     # to run a modified version of this script with hardcoded lasttag
 
-    lastversion_major="${1:1}"
-    lastversion_minor="$2"
-    lastversion_patch="$3"
-    lastversion_build="$4"
-    lastversion="${lastversion_major}.${lastversion_minor}.${lastversion_patch}.${lastversion_build}"
+    #lastversion_major="${1:1}"
+    #lastversion_minor="$2"
+    #lastversion_patch="$3"
+    #lastversion_build="$4"
+    #lastversion="${lastversion_major}.${lastversion_minor}.${lastversion_patch}.${lastversion_build}"
 
-    if [ -z "${tag}" ]; then
-        tag="v${lastversion_major}_${lastversion_minor}_${lastversion_patch}_$((lastversion_build + 1))"
+    #if [ -z "${tag}" ]; then
+     #   tag="v${lastversion_major}_${lastversion_minor}_${lastversion_patch}_$((lastversion_build + 1))"
     # Note need to match in longest prefix order
-    elif [[ ${tag} =~ v4_[0-9]+_[0-9]+_[0-9]{4} ]]; then
-	tag="${tag}"
-    elif [[ ${tag} =~ v4_[0-9]+_[0-9]+ ]]; then
-        tag="${tag}_$((lastversion_build + 1))"
-    else
-        fail "Tag '${tag}' has an invalid format. Should be v4_M_m[_bbbb]"
-    fi
+    #elif [[ ${tag} =~ v4_[0-9]+_[0-9]+_[0-9]{4} ]]; then
+#	tag="${tag}"
+ #   elif [[ ${tag} =~ v4_[0-9]+_[0-9]+ ]]; then
+ #       tag="${tag}_$((lastversion_build + 1))"
+ #   else
+ #       fail "Tag '${tag}' has an invalid format. Should be v4_M_m[_bbbb]"
+ #   fi
 
-    msg "Will move branch '${newbrancha[${repo}]}' from '${lasttag}' to '${tag}'"
+  #  msg "Will move branch '${newbrancha[${repo}]}' from '${lasttag}' to '${tag}'"
 
     # Check if this tag exists on any branch
     cd ${INCOMING}/v5
@@ -343,10 +345,10 @@ sanitychecks () {
             cd "${INCOMING}/${repo}"
 
             # Check no local changes
-            if ! $clean; then
-		lines=$(hg --noninteractive status | wc -l)
-		[ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
-            fi
+            #if ! $clean; then
+#		lines=$(hg --noninteractive status | wc -l)
+#		[ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
+ #           fi
 
 	    # Check no outgoing commits
 	    cd "${INCOMING}/${repo}"
@@ -423,15 +425,41 @@ maketag () {
 
     # If the user uses --operation, then this gets run on every invocation
     # Don't run for --operation=PUSH because the new tag is already commited
-    if [[ "${operation}" != push ]]; then
-        validatetag
-    fi
+    #if [[ "${operation}" != push ]]; then
+    validatetag
+    #fi
 
     TMPDIR=$(mktemp -dt mmaketag.$USER.XXXXXXXX)
-    trap "echo \"Please cleanup temporary directory ${TMPDIR}\"" EXIT;
+    #trap "echo \"Please cleanup temporary directory ${TMPDIR}\"" EXIT;
     # use readlink to ensure that this starts with a /
     export BUILDPRODUCTS="${TMPDIR}$(readlink -f ${FINALBUILDPRODUCTS})"
     mkdir -p "${BUILDPRODUCTS}"
+
+    changed=false
+    for repo in $tag_trees; do
+        if checktag ${repo}; then
+            changed=true
+            break
+        fi
+    done
+
+    if $changed; then
+        if runop version silent; then
+            #infupdate
+            versionupdate native_drv/sfvmk.sc
+        fi
+        if runop build; then
+                echo "Creating VIB and offline bundle packages."
+                #genaoepkg ${tag} $BUILDPRODUCTS
+        fi
+        if runop commit; then
+            for repo in $tag_trees; do
+                commitversion ${repo}
+            done
+        fi
+    elif runop version silent || runop build silent; then
+        fail "All repos unchanged since last tag! Nothing to do"
+    fi
 
     if runop push; then
 	local answer=""
@@ -445,7 +473,7 @@ maketag () {
 	    read -p "Do you want to push the above tag ${tag} (y/n)" answer
 	done
 	if [ "$answer" = "y" ]; then
-	    copy_tmp_build_products
+	    #copy_tmp_build_products
             for repo in $push_trees; do
 		hgpush ${repo}
             done
@@ -504,7 +532,7 @@ this="scripts/mmaketag"
 
 # BUILDPRODUCTS is set in mmaketag() to point to a temporary staging area
 # This is so that consistency is maintined even if the tag is not pushed.
-#export FINALBUILDPRODUCTS="/project/ci/build-products"
+export FINALBUILDPRODUCTS="/home/vijays/build-products"
 #export TOPPATH="$(mmaketool --toppath)"
 #export INCOMING="$(mmaketool --toppath)/.."
 #export USERBUILD="$(mmaketool --userbuild)"
@@ -557,7 +585,7 @@ checkdeps
 tinderboxcheck
 sanitychecks
 
-hgpullall
+#hgpullall
 checklasttag
 # Note checknewtag is in maketag
 

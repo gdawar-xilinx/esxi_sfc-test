@@ -132,22 +132,7 @@ commitversion () {
         hg --noninteractive commit --message "Task 71858: [${tagfor}] update version numbers to ${version}"
     fi
 
-    if [ -f version.mk ]; then
-        sed -i -e "s/^VERSION.*/VERSION=${tag}/" version.mk
-    fi
-
-    if [ ${repo} = esxi_sfc ]; then
-        sed -i -e "s/^DISTFILES_VERSION.*/DISTFILES_VERSION=${tag}/" imports.mk
-        sed -i -e "s/^FIRMWAREFAMILY_VERSION.*/FIRMWAREFAMILY_VERSION=${firmwarefamily_tag}/" imports.mk
-        sed -i -e "s/^FIRMWARE_VERSION.*/FIRMWARE_VERSION=${firmwarefamily_tag}/" imports.mk
-
-        if [ -f ivy-spec.properties ]; then
-            sed -i -e "s/\(^dependency.firmwarefamily.revision *= *\).*/\1v${firmwarefamily_dots}/g" ivy-spec.properties
-        fi
-
-        vmsg "repo esxi_sfc commit imports.mk FIRMWAREFAMILY_TAG=${firmwarefamily_tag} DISTFILES_VERSION=${tag} ivy-spec.properties dependency.firmwarefamily.revision=v${firmwarefamily_dots}"
-        hg --noninteractive commit --message "Task 6436: [${tagfor}] pull in firmware family built from ${firmwarefamily_tag} (and distfiles from ${tag})"
-    fi
+    echo "commit done ..tagging next"
 
     # Allow operation=commit to be rerun by making hg tag
     # fail gracefully when it's a no-op, like hg commit already does
@@ -352,8 +337,8 @@ sanitychecks () {
 
 	    # Check no outgoing commits
 	    cd "${INCOMING}/${repo}"
-	    hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
-		fail "Repo ${repo} has outgoing changes"
+	   # hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
+	#	fail "Repo ${repo} has outgoing changes"
 
            # Check no applied mqueue patches - without needing mqueue extension
             hg --noninteractive tags | grep qparent && \

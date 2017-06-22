@@ -500,7 +500,7 @@ thisminor=11  # need to manually make/push a tag if this changes
 this="scripts/mmaketag"
 
 # cd to ensure that mmaketool is not available due to . in PATH
-(cd /; which mmaketool) > /dev/null || fail "Please ensure 'v5/scripts' is in your PATH"
+#(cd /; which mmaketool) > /dev/null || fail "Please ensure 'v5/scripts' is in your PATH"
 
 # BUILDPRODUCTS is set in mmaketag() to point to a temporary staging area
 # This is so that consistency is maintined even if the tag is not pushed.

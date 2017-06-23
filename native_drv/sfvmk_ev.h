@@ -7,6 +7,9 @@
 #ifndef __SFVMK_EV_H__
 #define __SFVMK_EV_H__
 
+/* Number of events processed per batch */
+#define SFVMK_EV_BATCH      16384
+
 #define SFVMK_MIN_EVQ_COUNT     1
 
 #define SFVMK_MAGIC_RESERVED    0x8000

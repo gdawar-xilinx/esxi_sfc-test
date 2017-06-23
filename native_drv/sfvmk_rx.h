@@ -7,6 +7,8 @@
 #ifndef __SFVMK_RX_H__
 #define __SFVMK_RX_H__
 
+#define SFVMK_RX_BATCH  128
+
 /* max number of rxq */
 #define SFVMK_RX_SCALE_MAX  EFX_MAXRSS
 
@@ -23,6 +25,7 @@ typedef struct sfvmk_rxSwDesc_s {
   vmk_int32      flags;
   vmk_int32      size;
   vmk_PktHandle  *pPkt;
+  vmk_IOA        ioAddr;
 }sfvmk_rxSwDesc_t;
 
 /* rxq state */
@@ -46,6 +49,7 @@ typedef struct sfvmk_rxq_s {
   vmk_uint32    pushed;
   vmk_uint32    pending;
   vmk_uint32    completed;
+  vmk_uint32    refillThreshold;
   vmk_uint32    loopback;
 
   sfvmk_rxSwDesc_t  *pQueue ;
@@ -71,6 +75,7 @@ void sfvmk_rxStop(struct sfvmk_adapter_s *adapter);
 
 void sfvmk_rxqFlushFailed(struct sfvmk_rxq_s *pRxq);
 void sfvmk_rxqFlushDone(struct sfvmk_rxq_s *pRxq);
+void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop);
 
 #endif /* __SFVMK_RX_H__ */
 

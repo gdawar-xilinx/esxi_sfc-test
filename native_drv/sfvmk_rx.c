@@ -13,6 +13,10 @@
 #define SFVMK_RXQ_STOP_POLL_WAIT 100*SFVMK_ONE_MILISEC
 #define SFVMK_RXQ_STOP_POLL_TIMEOUT 20
 
+/* refill low watermark */
+#define RX_REFILL_THRESHOLD(_entries)   (EFX_RXQ_LIMIT(_entries) * 9 / 10)
+#define SFVMK_MIN_PKT_SIZE 60
+
 /* hash key */
 static uint8_t sfvmk_toepKey[] = {
   0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
@@ -44,7 +48,56 @@ static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
                             sfvmk_rxSwDesc_s *pRxDesc, unsigned int qIndex)
 {
-  /* TODO: functionality will be added later */
+  vmk_PktHandle *pPkt = NULL;
+  vmk_VA frameVA  ;
+  int flags ;
+  VMK_ReturnStatus status;
+  vmk_SgElem elem;
+
+  if (qIndex >=  pAdapter->intr.numIntrAlloc)
+    return ;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_NULL_PTR_CHECK(pRxDesc);
+  pPkt = pRxDesc->pPkt;
+  SFVMK_NULL_PTR_CHECK(pPkt);
+  flags = pRxDesc->flags;
+
+  elem.ioAddr = pRxDesc->ioAddr;
+  elem.length = pRxDesc->size;
+  status = vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY, &elem);
+  VMK_ASSERT(status == VMK_OK);
+
+  /* Convert checksum flags */
+  if (flags & EFX_CKSUM_TCPUDP)
+    vmk_PktSetCsumVfd(pPkt);
+
+  /* pad the pPkt if it is shorter than 60 bytes */
+  if (pRxDesc->size < SFVMK_MIN_PKT_SIZE) {
+    frameVA = vmk_PktFrameMappedPointerGet(pPkt);
+    SFVMK_NULL_PTR_CHECK(((vmk_uint8 *)frameVA));
+    VMK_ASSERT_BUG(vmk_PktIsBufDescWritable(pPkt) == VMK_TRUE);
+    vmk_Memset((vmk_uint8 *)frameVA + pRxDesc->size, 0,
+               SFVMK_MIN_PKT_SIZE - pRxDesc->size);
+      pRxDesc->size = SFVMK_MIN_PKT_SIZE;
+  }
+
+  /* set pkt len */
+  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
+
+  /* if prefix header is present, remove it */
+  status = vmk_PktPushHeadroom(pPkt, pAdapter->rxPrefixSize);
+  if(status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "vmk_PktPushHeadroom failed with err %s",
+              vmk_StatusToString(status));
+  }
+
+  /* deliver the pkt to uplink layer */
+  vmk_NetPollRxPktQueue(pAdapter->pEvq[qIndex]->netPoll, pPkt);
+
+  pRxDesc->flags = EFX_DISCARD;
+  pRxDesc->pPkt = NULL;
+
   return;
 }
 
@@ -65,6 +118,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
   unsigned int level;
   vmk_PktHandle *pPkt ;
   struct sfvmk_rxSwDesc_s *prev = NULL;
+  vmk_SgElem elem;
+  VMK_ReturnStatus status;
 
   SFVMK_NULL_PTR_CHECK(pRxq);
 
@@ -76,24 +131,24 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
   completed = pRxq->completed;
   while (completed != pRxq->pending) {
     unsigned int id;
-    struct sfvmk_rxSwDesc_s *rxDesc;
+    struct sfvmk_rxSwDesc_s *pRxDesc;
 
     id = completed++ & pRxq->ptrMask;
-    rxDesc = &pRxq->pQueue[id];
-    pPkt = rxDesc->pPkt;
+    pRxDesc = &pRxq->pQueue[id];
+    pPkt = pRxDesc->pPkt;
 
     if (VMK_UNLIKELY(pRxq->initState != SFVMK_RXQ_STARTED))
       goto sfvmk_discard;
 
-    if (rxDesc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
+    if (pRxDesc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
       goto sfvmk_discard;
 
-    switch (rxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
+    switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
       case EFX_PKT_IPV4:
-        rxDesc->flags &=  ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
+        pRxDesc->flags &=  ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
         break;
       case EFX_PKT_IPV6:
-        rxDesc->flags &= ~EFX_CKSUM_TCPUDP;
+        pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
         break;
       default:
         SFVMK_ERR(pAdapter, "Rx Desc with both ipv4 and ipv6 flags");
@@ -105,13 +160,19 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
       sfvmk_rxDeliver(pAdapter, prev, pRxq->index);
     }
 
-    prev = rxDesc;
+    prev = pRxDesc;
     continue;
 
 sfvmk_discard:
     /* Return the packet to the pool */
+    elem.ioAddr = pRxDesc->ioAddr;
+    elem.length = pRxDesc->size;
+    status = vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY, &elem);
+    VMK_ASSERT(status == VMK_OK);
+
     vmk_PktRelease(pPkt);
-    rxDesc->pPkt = NULL;
+    pRxDesc->pPkt = NULL;
+
     SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG, "completed = %d"
               "pending = %d", completed, pRxq->pending);
   }
@@ -123,6 +184,9 @@ sfvmk_discard:
   if (prev != NULL) {
     sfvmk_rxDeliver(pAdapter, prev, pRxq->index);
   }
+
+  if (level < pRxq->refillThreshold)
+    sfvmk_rxqFill(pRxq, EFX_RXQ_LIMIT(pRxq->entries));
 }
 
 /*! \brief      fill RX buffer desc with pkt information.
@@ -187,6 +251,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs)
 
     rxDesc = &pRxq->pQueue[id];
     rxDesc->flags = EFX_DISCARD;
+    rxDesc->ioAddr = mapperOut.ioAddr;
     rxDesc->pPkt = pNewpkt;
     rxDesc->size = mblkSize;
     addr[batch++] = mapperOut.ioAddr;
@@ -245,6 +310,8 @@ static VMK_ReturnStatus sfvmk_rxqInit(sfvmk_adapter_t *pAdapter,
   pRxq->index = qIndex;
   pRxq->entries = pAdapter->rxqEntries;
   pRxq->ptrMask = pRxq->entries - 1;
+  pRxq->refillThreshold = RX_REFILL_THRESHOLD(pRxq->entries);
+
 
   pAdapter->pRxq[qIndex] = pRxq;
 
@@ -451,6 +518,7 @@ static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_evq_t *pEvq;
   vmk_uint32 count;
   vmk_uint32 retry = 3;
+  vmk_uint32 spinTime = SFVMK_ONE_MILISEC;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
@@ -479,8 +547,12 @@ static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
     count = 0;
     do {
-      /* Spin for 100 ms */
-      vmk_WorldSleep(SFVMK_RXQ_STOP_POLL_WAIT);
+      vmk_WorldSleep(spinTime);
+      spinTime *= 2;
+
+      /* MAX Spin will not be more than SFVMK_RXQ_STOP_POLL_WAIT */
+      if (spinTime >= SFVMK_RXQ_STOP_POLL_WAIT);
+        spinTime = SFVMK_RXQ_STOP_POLL_WAIT;
 
       if (pRxq->flushState != SFVMK_FLUSH_PENDING)
         break;

@@ -264,6 +264,7 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   sfvmk_txq_t *pTxq;
   sfvmk_evq_t *pEvq;
   vmk_uint32 count;
+  vmk_uint32 spinTime = SFVMK_ONE_MILISEC;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
@@ -294,8 +295,12 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     else {
         count = 0;
         do {
-          /* Spin for 100ms. */
-           vmk_WorldSleep(SFVMK_TXQ_STOP_POLL_WAIT);
+          vmk_WorldSleep(spinTime);
+          spinTime *= 2;
+
+          /* MAX Spin will not be more than SFVMK_TXQ_STOP_POLL_WAIT */
+          if (spinTime >= SFVMK_TXQ_STOP_POLL_WAIT);
+            spinTime = SFVMK_TXQ_STOP_POLL_WAIT;
 
           if (pTxq->flushState != SFVMK_FLUSH_PENDING)
             break;

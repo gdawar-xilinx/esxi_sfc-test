@@ -39,6 +39,7 @@ static boolean_t sfvmk_evSram(void *arg, uint32_t code);
 static boolean_t sfvmk_evTimer(void *arg, uint32_t index);
 static boolean_t sfvmk_evWakeup(void *arg, uint32_t index);
 static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t link_mode);
+void sfvmk_evqComplete(sfvmk_evq_t *pEvq, boolean_t eop);
 
 /* call back functions which needs to be registered with common evq module */
 /*common evq  module call them apropriatly */
@@ -167,8 +168,66 @@ static boolean_t
 sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
    uint16_t flags)
 {
-  /* TODO : implementation will be added later */
-  return B_FALSE;
+  sfvmk_evq_t *pEvq;
+  sfvmk_adapter_t *pAdapter;
+  sfvmk_rxq_t *pRxq;
+  unsigned int stop;
+  unsigned int delta;
+  struct sfvmk_rxSwDesc_s *pRxDesc;
+
+  pEvq = (sfvmk_evq_t *)arg;
+  SFVMK_NULL_PTR_CHECK(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  if (pEvq->exception)
+    goto done;
+
+  const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+
+  /* get corresponding rxq*/
+  pRxq = pAdapter->pRxq[pEvq->index];
+  SFVMK_NULL_PTR_CHECK(pRxq);
+
+  if (VMK_UNLIKELY(pRxq->initState != SFVMK_RXQ_STARTED)) {
+    SFVMK_ERR(pAdapter, "RXQ[%d] is not yet started", pEvq->index);
+    goto done;
+  }
+
+  stop = (id + 1) & pRxq->ptrMask;
+  id = pRxq->pending & pRxq->ptrMask;
+  delta = (stop >= id) ? (stop - id) : (pRxq->entries - id + stop);
+  pRxq->pending += delta;
+
+  if (delta != 1) {
+    if ((delta <= 0) || (delta > pNicCfg->enc_rx_batch_max)) {
+      pEvq->exception = B_TRUE;
+      SFVMK_ERR(pAdapter, "RXQ[%d] completion out of order", pEvq->index);
+      /* TODO: sfvmk_schedule_reset(pAdapter);*/
+      goto done;
+    }
+  }
+
+  pRxDesc = &pRxq->pQueue[id];
+  /* update rxdesc */
+  for (; id != stop; id = (id + 1) & pRxq->ptrMask) {
+    pRxDesc = &pRxq->pQueue[id];
+    VMK_ASSERT(pRxDesc->flags == EFX_DISCARD);
+    pRxDesc->flags = flags;
+    VMK_ASSERT(size < (1 << 16), ("size > (1 << 16)"));
+    pRxDesc->size = (uint16_t)size;
+  }
+
+  pEvq->rxDone++;
+  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_DBG,
+            "pending %d, Completed %d", pRxq->pending , pRxq->completed);
+
+  if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
+    sfvmk_evqComplete(pEvq, B_FALSE);
+
+done:
+  return (pEvq->rxDone >= SFVMK_EV_BATCH);
 }
 
 /*! \brief  called when commond module finshed flushing rxq and send the event
@@ -435,8 +494,44 @@ sfvmk_evWakeup(void *arg, uint32_t index)
 */
 void sfvmk_evqComplete(sfvmk_evq_t *pEvq, boolean_t eop)
 {
-  /* TODO : will be implemented for data path */
-  return ;
+  sfvmk_adapter_t *pAdapter;
+  unsigned int index;
+  sfvmk_rxq_t *pRxq;
+  sfvmk_txq_t *pTxq;
+
+  SFVMK_NULL_PTR_CHECK(pEvq);
+  pAdapter = pEvq->pAdapter;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  index = pEvq->index;
+  pRxq = pAdapter->pRxq[index];
+  SFVMK_NULL_PTR_CHECK(pRxq);
+
+  /* check if there is something for TX */
+  if ((pTxq = pEvq->pTxq) != NULL) {
+    pEvq->pTxq = NULL;
+    pEvq->pTxqs = &(pEvq->pTxq);
+
+    do {
+      sfvmk_txq_t *next;
+
+      next = pTxq->next;
+      pTxq->next = NULL;
+      VMK_ASSERT(pTxq->evqIndex == index);
+
+      if (pTxq->pending != pTxq->completed)
+        sfvmk_txqComplete(pTxq, pEvq);
+
+      pTxq = next;
+    } while (pTxq != NULL);
+  }
+
+  /* if there are some pending Rx data call rx module's fn to process it */
+  if (pRxq->pending != pRxq->completed) {
+    sfvmk_rxqComplete(pRxq, eop);
+  }
+
+  return;
 }
 
 /*! \brief  poll event from eventQ and process it. function should be called in thread
@@ -789,6 +884,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 {
   sfvmk_evq_t *pEvq;
   efsys_mem_t *pEvqMem;
+  vmk_uint32 spinTime = SFVMK_ONE_MILISEC;
   int count;
   int rc;
 
@@ -829,7 +925,13 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   count = 0;
   do {
 
-    vmk_WorldSleep(SFVMK_EVQ_START_POLL_WAIT);
+    vmk_WorldSleep(spinTime);
+    spinTime *= 2;
+
+    /* MAX Spin will not be more than SFVMK_EVQ_START_POLL_WAIT */
+    if (spinTime >= SFVMK_EVQ_START_POLL_WAIT);
+      spinTime = SFVMK_EVQ_START_POLL_WAIT;
+
     /* Check to see if the test event has been processed */
     if (pEvq->initState == SFVMK_EVQ_STARTED)
       goto done;

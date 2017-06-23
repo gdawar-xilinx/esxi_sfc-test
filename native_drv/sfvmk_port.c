@@ -164,6 +164,12 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if ((rc = efx_mac_drain(pNic, B_FALSE)) != 0)
     goto sfvmk_mac_drain_fail;
 
+  /* by default Promiscuous, all multicast and  broadcast filters are enabled*/
+  if ((rc = efx_mac_filter_set(pNic, B_TRUE, 0, B_TRUE, B_TRUE)) != 0) {
+    SFVMK_ERR(pAdapter, "Error %d in setting mac filter ", rc);
+    goto sfvmk_mac_filter_set_fail;
+  }
+
   pPort->initState = SFVMK_PORT_STARTED;
 
   /* Single poll in case there were missing initial events */
@@ -174,6 +180,7 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
 
   return rc;
 
+sfvmk_mac_filter_set_fail:
 sfvmk_mac_drain_fail:
 sfvmk_mac_fcntl_fail:
 sfvmk_mac_pdu_fail:

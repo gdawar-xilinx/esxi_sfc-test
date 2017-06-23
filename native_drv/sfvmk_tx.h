@@ -95,6 +95,7 @@ void sfvmk_txStop(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_txStart(struct sfvmk_adapter_s *pAdapter);
 
 void sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq);
+void sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq);
 
 #endif /* __SFVMK_TX_H__ */
 

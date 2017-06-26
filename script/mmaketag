@@ -254,7 +254,7 @@ validatetag () {
     cd ${INCOMING}/esxi_sfc
     lasttag="$(hglasttag esxi_sfc)"
     IFS=_; eval set -- ${lasttag}; IFS="${_IFS}"
-    [ $# = 4 ] && [[ "${lasttag}" =~ v4_[0-9]+_[0-9]+_[0-9]{4} ]] || \
+    [ $# = 4 ] && [[ "${lasttag}" =~ v1_[0-9]+_[0-9]+_[0-9]{4} ]] || \
         fail "Current branch '${newbrancha[${repo}]}' head tag '${lasttag}' is invalid. "\
              "Try using --lasttag to point at the last normal tag"
     # If you hit this because there is a bad tag in history then you will need

@@ -18,6 +18,8 @@ vmsg () { if ${verbose}; then echo "$p: $*"; fi; }
 log  () { err "$p: $*"; }
 fail () { log "$@"; exit 1; }
 
+branch=$1
+echo $branch
 products="esxi_sfc"
 
 usage () {
@@ -488,9 +490,10 @@ push_trees="esxi_sfc"
 # When switching branches, mmaketag will exec the mmaketag
 # from the destination branch. This variable encodes the
 # branch that *this* mmaketag runs on
-thisbranch=default
+thisbranch=$(hg branch)
+echo $thisbranch
 
-newbrancha["esxi_sfc"]="default"
+newbrancha["esxi_sfc"]=$branch
 
 # effectively v4_11
 #                ^ thisminor
@@ -545,8 +548,6 @@ esac
 
 [ $# = 2 -o $# = 1 ] || usage
 
-branch=$1
-echo $branch
 tag=${2:-}
 
 # create build products as group writeable.

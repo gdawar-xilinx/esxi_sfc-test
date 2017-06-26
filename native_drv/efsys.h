@@ -366,7 +366,8 @@ typedef struct efsys_bar_s {
       vmk_SpinlockLock(_esbp->esbLock);                                 \
     vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset,               \
                               &((_eop)->eo_u64[0]));                    \
-    vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset,               \
+    vmk_MappedResourceRead64(&(_esbp->esbBase) , _offset+               \
+                              sizeof(vmk_uint64),                       \
                               &((_eop)->eo_u64[1]));                    \
     if(_lock)                                                           \
       vmk_SpinlockUnlock(_esbp->esbLock);                               \
@@ -400,7 +401,8 @@ typedef struct efsys_bar_s {
       vmk_SpinlockLock(_esbp->esbLock);                                 \
     vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset,              \
                               (_eop)->eo_u64[0]);                       \
-    vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset,              \
+    vmk_MappedResourceWrite64(&(_esbp->esbBase) , _offset +             \
+                              sizeof(vmk_uint64),                       \
                               (_eop)->eo_u64[1]);                       \
     if(_lock)                                                           \
       vmk_SpinlockUnlock(_esbp->esbLock);                               \

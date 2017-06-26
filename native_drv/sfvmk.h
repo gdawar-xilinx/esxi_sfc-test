@@ -73,6 +73,7 @@ typedef enum sfvmk_logLevel {
 #define SFVMK_DBG_DEFAULT ( SFVMK_DBG_DRIVER |                               \
                             SFVMK_DBG_UPLINK |                               \
                             SFVMK_DBG_EVQ    |                               \
+                            SFVMK_DBG_TX     |                               \
                             SFVMK_DBG_HW)
 
 #define SFVMK_IS_NAME_EMPTY(name)   (*((name).string) == '\0')
@@ -189,6 +190,16 @@ sfvmk_MemFree(void *memPtr)
 #define sfvmk_LE32ToCPU(x)      ((uint32_t)(x))
 #define sfvmk_CPUToLE32(x)      ((uint32_t)(x))
 #define sfvmk_CPUToLE64(x)      ((uint64_t)(x))
+
+
+/* VLAN handling related macros */
+#define SFVMK_VLAN_HDR_START_OFFSET     12
+#define SFVMK_ETH_TYPE_SIZE             2
+
+#define SFVMK_VLAN_PRIO_SHIFT           13
+#define SFVMK_VLAN_PRIO_MASK            0xe000
+#define SFVMK_VLAN_VID_MASK             0x0fff
+
 
 #endif /* __SFVMK_H__ */
 

@@ -20,6 +20,11 @@
 
 #define NUM_TX_QUEUES_FOR_EVQ0 3
 
+// Number of transmit descriptors processed per batch
+#define SFVMK_TX_BATCH              64
+
+#define SFVMK_TXQ_UNBLOCK_LEVEL(entries)       (EFX_TXQ_LIMIT(entries) / 4)
+
 /*txq type */
 enum sfvmk_txqType {
   SFVMK_TXQ_NON_CKSUM = 0,
@@ -43,6 +48,22 @@ enum sfvmk_txqState {
   SFVMK_TXQ_STARTED
 };
 
+/*structure defining a dma segment */
+typedef struct sfvmk_dma_segment_s
+{
+   vmk_IOA ds_addr;
+   vmk_ByteCountSmall ds_len;
+}sfvmk_dma_segment_t;
+
+
+/*
+ * Buffer mapping information for descriptors in flight.
+ */
+typedef struct sfvmk_tx_mapping_s {
+	vmk_PktHandle *pkt;
+	vmk_SgElem sgelem;
+}sfvmk_tx_mapping_t;
+
 typedef struct sfvmk_txq_s {
 
   struct sfvmk_adapter_s  *pAdapter;
@@ -59,6 +80,7 @@ typedef struct sfvmk_txq_s {
   vmk_uint32      maxPktDesc;
   efsys_mem_t     mem;
 
+  sfvmk_tx_mapping_t   *pStmp;  /* Packets in flight. */
   efx_desc_t      *pPendDesc;
   vmk_uint64      pendDescSize;
 
@@ -79,6 +101,11 @@ typedef struct sfvmk_txq_s {
   vmk_uint32      pending VMK_ATTRIBUTE_L1_ALIGNED;
   vmk_uint32      completed;
 
+  /*
+  ** The last VLAN TCI seen on the queue if
+  ** FW-assisted tagging is used
+  */
+  vmk_uint16        hwVlanTci;
   struct sfvmk_txq_s    *next;
 }sfvmk_txq_t;
 
@@ -95,7 +122,9 @@ void sfvmk_txStop(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_txStart(struct sfvmk_adapter_s *pAdapter);
 
 void sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq);
+void sfvmk_transmitPkt(struct sfvmk_adapter_s *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
 void sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq);
+void sfvmk_populateTxDescriptor(struct sfvmk_adapter_s *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
 
 #endif /* __SFVMK_TX_H__ */
 

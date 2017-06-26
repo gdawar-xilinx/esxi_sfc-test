@@ -445,11 +445,38 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
   return VMK_OK;
 }
 
+/*! \brief function to check if the transmit queue is stopped
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  txq     transmit queue id
+**
+** \return: VMK_TRUE if txq is stopped, VMK_FALSE otherwise.
+**
+*/
+static vmk_Bool
+sfvmk_isTxqStopped(struct sfvmk_adapter_s * pAdapter, vmk_uint32 txq)
+{
+  vmk_UplinkSharedQueueData *pTxqData;
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+  /* Get shared data */
+  pTxqData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+
+  if (pTxqData[txq].state == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+   return VMK_TRUE;
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return VMK_FALSE;
+}
+
 /*! \brief uplink callback function to transmit pkt
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pktList List of packets to be transmitted
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK on success, VMK_BUSY otherwise.
 **
 */
 static VMK_ReturnStatus
@@ -458,9 +485,70 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  vmk_PktHandle *pkt;
+  vmk_UplinkQueueID uplinkQid;
+  vmk_uint32 qid;
+  vmk_ByteCountSmall pktLen;
+  vmk_int16 maxRxQueues;
+  vmk_int16 maxTxQueues;
+
+  maxRxQueues = pAdapter->queueInfo.maxRxQueues;
+  maxTxQueues = pAdapter->queueInfo.maxTxQueues;
+
+  /* retrieve the qid from first packet */
+  pkt = vmk_PktListGetFirstPkt(pktList);
+  uplinkQid = vmk_PktQueueIDGet(pkt);
+  qid = vmk_UplinkQueueIDVal(uplinkQid);
+
+  if ((!qid) || (qid >= (maxTxQueues + maxRxQueues))) {
+   SFVMK_ERR(pAdapter,"Invalid QID %d, numTxQueue %d,  maxRxQueues: %d, device %s",
+			   qid,
+			   maxTxQueues,
+			   maxRxQueues,
+			   vmk_NameToString(&pAdapter->uplinkName));
+
+	/* TODO: need to see the pkt completion context and use appropriate function call */
+   vmk_PktListReleaseAllPkts(pktList);
+   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+	return VMK_OK;
+  }
+
+  if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
+   SFVMK_ERR(pAdapter, "sfvmk_isTxqStopped returned TRUE");
+   /* TODO: need to see the pkt completion context and use appropriate function call */
+   vmk_PktListReleaseAllPkts(pktList);
+   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+   return VMK_BUSY;
+  }
+
+  /* cross over the rx queues */
+  qid -= maxRxQueues;
+
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Not Supported");
-  /* TODO : feature implementation will be done later */
+            "RxQ: %d, TxQ: %d, qid: %d", maxRxQueues, maxTxQueues, qid);
+
+  VMK_PKTLIST_ITER_STACK_DEF(iter);
+  for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
+   vmk_PktListIterRemovePkt(iter, &pkt);
+   VMK_ASSERT(pkt);
+
+   pktLen = vmk_PktFrameLenGet(pkt);
+   if (pktLen > SFVMK_MAX_PKT_SIZE) {
+    SFVMK_ERR(pAdapter, "Invalid len %d, device %s",
+              pktLen, vmk_NameToString(&pAdapter->uplinkName));
+    goto sfvmk_release_pkt;
+	}
+
+   sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);
+   continue;
+
+sfvmk_release_pkt:
+   vmk_PktRelease(pkt);
+   continue;
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return VMK_OK;
 }
 
@@ -588,6 +676,47 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
 
   /* TODO : will be done later */
   return VMK_OK;
+}
+
+/*! \brief function to update the queue state.
+**
+** \param[in]  pAdapter	pointer to sfvmk_adapter_t
+** \param[in]  qState   queue state STOPPED or STARTED
+**
+** \return:    Nothing
+**
+*/
+void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState)
+{
+  vmk_UplinkSharedQueueData *queueData;
+  vmk_uint16 i;
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+  SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+  queueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+
+  for (i=0; i<pAdapter->queueInfo.maxTxQueues; i++) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+             "queueData flags: %x", queueData[i].flags);
+   if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+    queueData[i].state = qState;
+   }
+  }
+
+  SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+
+  for (i=0; i<pAdapter->queueInfo.maxTxQueues; i++) {
+   if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+    if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+      vmk_UplinkQueueStop(pAdapter->uplink, queueData[i].qid);
+    }
+    else {
+       vmk_UplinkQueueStart(pAdapter->uplink, queueData[i].qid);
+    }
+   }
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 }
 
 /*! \brief uplink callback function to start the IO operations.

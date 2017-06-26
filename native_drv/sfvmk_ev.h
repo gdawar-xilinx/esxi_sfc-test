@@ -46,6 +46,9 @@ sfxge_swEvMkMagic(enum sfvmk_sw_ev sw_ev, unsigned int label)
   vmk_MutexUnlock(pEvq->lock);                     \
 }
 
+/* Number of events processed per batch */
+#define SFVMK_EV_BATCH       16384
+
 /* event queue state */
 enum sfvmk_evq_state {
   SFVMK_EVQ_UNINITIALIZED = 0,

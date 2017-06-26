@@ -97,6 +97,7 @@ sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
 {
   sfvmk_evq_t *pEvq;
   sfvmk_adapter_t *pAdapter;
+  sfvmk_port_t *pPort;
 
   pEvq = (sfvmk_evq_t *)arg;
 
@@ -104,9 +105,18 @@ sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
   pAdapter = pEvq->pAdapter;
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO,
-            "Link change is detected");
+  pPort = &pAdapter->port;
 
+  if (pPort->linkMode == linkMode) {
+		SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_DBG,
+        "Spurious link change event: %d", linkMode);
+      return 0;
+  }
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_INFO,
+            "Link change is detected: %d", linkMode);
+
+  pPort->linkMode = linkMode;
   sfvmk_macLinkUpdate(pAdapter, linkMode);
 
   return B_FALSE;
@@ -344,7 +354,55 @@ sfvmk_getTxqByLabel(struct sfvmk_evq_s *pEvq, enum sfvmk_txqType label)
 static boolean_t
 sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 {
-  return B_FALSE;
+  struct sfvmk_evq_s *pEvq;
+  struct sfvmk_txq_s *pTxq;
+  struct sfvmk_adapter_s *pAdapter;
+  unsigned int stop;
+  unsigned int delta;
+
+  pEvq = (sfvmk_evq_t *)arg;
+  pAdapter = pEvq->pAdapter;
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
+
+  pTxq = sfvmk_getTxqByLabel(pEvq, label);
+
+  VMK_ASSERT(pTxq != NULL, ("pTxq == NULL"));
+  VMK_ASSERT(pEvq->index == pTxq->evqIndex,
+      ("pEvq->index != pTxq->evqIndex"));
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+            "id: %d txq_index %d for evqIndex: %d, initState:%d",
+            id, pTxq->evqIndex, pEvq->index, pTxq->initState);
+
+  if ((pTxq->initState != SFVMK_TXQ_STARTED))
+    goto done;
+
+  stop = (id + 1) & pTxq->ptrMask;
+  id = pTxq->pending & pTxq->ptrMask;
+
+  delta = (stop >= id) ? (stop - id) : (pTxq->entries - id + stop);
+  pTxq->pending += delta;
+
+  pEvq->txDone++;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+            "id %d stop %d mask: %x delta:%d pending: %d, completed: %d, pTxq->next: %p, evq_pTxq: %p",
+            id, stop, pTxq->ptrMask, delta, pTxq->pending,pTxq->completed, pTxq->next ,  &(pTxq->next));
+
+  if (pTxq->next == NULL &&
+      pEvq->pTxqs != &(pTxq->next)) {
+    *(pEvq->pTxqs) = pTxq;
+    pEvq->pTxqs = &(pTxq->next);
+  }
+
+  if (pTxq->pending - pTxq->completed >= SFVMK_TX_BATCH)
+    sfvmk_txqComplete(pTxq, pEvq);
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ , "txDone[%d]" , pEvq->txDone);
+done:
+  return (pEvq->txDone >= SFVMK_EV_BATCH);
+
 }
 
 /*! \brief  called when commond module finshed flushing txq and send the event

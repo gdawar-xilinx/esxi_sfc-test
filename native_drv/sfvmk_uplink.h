@@ -19,8 +19,17 @@
   vmk_SpinlockUnlock(adapter->shareDataLock);                 \
 }
 
+#define SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter)              \
+               &pAdapter->queueData[0];
+
+#define SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter)              \
+               &pAdapter->queueData[pAdapter->queueInfo.maxRxQueues];
+
+#define SFVMK_MAX_PKT_SIZE         65535
+
 VMK_ReturnStatus sfvmk_initUplinkData(struct sfvmk_adapter_s * pAdapter);
 VMK_ReturnStatus sfvmk_destroyUplinkData(struct sfvmk_adapter_s *pAdapter);
+void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState);
 
 #endif /* __SFVMK_RX_H__ */
 

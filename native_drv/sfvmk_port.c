@@ -44,6 +44,10 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
 
   vmk_UplinkUpdateLinkState(pAdapter->uplink, &pAdapter->sharedData.link);
 
+  sfvmk_updateQueueStatus(pAdapter, pSharedData->link.state?
+                          VMK_UPLINK_QUEUE_STATE_STARTED:VMK_UPLINK_QUEUE_STATE_STOPPED);
+
+
   return;
 }
 

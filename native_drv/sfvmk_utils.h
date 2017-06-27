@@ -30,5 +30,6 @@ sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
 void *
 sfvmk_allocCoherentDMAMapping(vmk_DMAEngine dmaEngine, vmk_uint32 size,
                                             vmk_IOA *ioAddr);
+uint16_t sfvmk_swapBytes(uint16_t int16);
 
 #endif /*  __SFVMK_UTILS_H__ */

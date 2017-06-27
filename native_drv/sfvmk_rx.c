@@ -37,6 +37,67 @@ static void sfvmk_rxqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 static int sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex);
 
+/*! \brief      software implementation to strip vlan hdr from pkt
+**
+** \param[in]   pAdapter     pointer to sfvmk_adapter_t
+** \param[in]   pkt          pointer to packet handle
+**
+** \return: void
+*/
+
+static void
+sfvmk_stripVlanHdr(sfvmk_adapter_t *pAdapter, vmk_PktHandle *pkt)
+{
+  uint8_t *ptr=NULL;
+  uint16_t thisTag=0;
+  uint16_t *pTag=NULL;
+  vmk_VlanID vlanId;
+  vmk_VlanPriority vlanPrio;
+  vmk_uint8 *frameVA;
+  VMK_ReturnStatus ret;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
+            "Mapped len: %d, frame len: %d",
+            vmk_PktFrameMappedLenGet(pkt), vmk_PktFrameLenGet(pkt));
+
+  frameVA = (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pkt);
+  ptr = frameVA + SFVMK_VLAN_HDR_START_OFFSET;
+  pTag = (uint16_t *)ptr;
+#ifdef DEBUG_VLAN
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
+            "frameVA: %p, tci: %x", frameVA, sfvmk_swapBytes(*pTag));
+
+  if(sfvmk_swapBytes(*pTag) == VMK_ETH_TYPE_VLAN)
+    SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG, "check passed");
+#endif
+  ptr += SFVMK_ETH_TYPE_SIZE;
+
+  /*fetch the TCI now */
+  thisTag = *(uint16_t *)ptr;
+  vlanId = sfvmk_swapBytes(thisTag & SFVMK_VLAN_VID_MASK);
+  vlanPrio = (thisTag & SFVMK_VLAN_PRIO_MASK) >> SFVMK_VLAN_PRIO_SHIFT;
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
+            "vlanid: %d , vlanPrio: %d", vlanId, vlanPrio);
+  ret = vmk_PktVlanIDSet(pkt, vlanId);
+  VMK_ASSERT(ret == VMK_OK);
+  ret = vmk_PktPrioritySet(pkt, vlanPrio);
+  VMK_ASSERT(ret == VMK_OK);
+
+  /* strip off the vlan header */
+  vmk_Memmove(frameVA+4, frameVA, SFVMK_VLAN_HDR_START_OFFSET);
+  ret = vmk_PktPushHeadroom(pkt, 4);
+  if(ret != VMK_OK) {
+    SFVMK_ERR(pAdapter, "vmk_PktPushHeadroom failed with err %s",
+              vmk_StatusToString(ret));
+  }
+
+#ifdef DEBUG_VLAN
+  frameVA = (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pkt);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG, "frameVA: %p", frameVA);
+#endif
+}
+
 /*! \brief      function to deliver rx pkt to uplink layer
 **
 ** \param[in]  adapter     pointer to sfvmk_adapter_t
@@ -53,6 +114,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   int flags ;
   VMK_ReturnStatus status;
   vmk_SgElem elem;
+  vmk_uint8 vlanHdrSize=0;
 
   if (qIndex >=  pAdapter->intr.numIntrAlloc)
     return ;
@@ -68,21 +130,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   status = vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY, &elem);
   VMK_ASSERT(status == VMK_OK);
 
-  /* Convert checksum flags */
-  if (flags & EFX_CKSUM_TCPUDP)
-    vmk_PktSetCsumVfd(pPkt);
-
-  /* pad the pPkt if it is shorter than 60 bytes */
-  if (pRxDesc->size < SFVMK_MIN_PKT_SIZE) {
-    frameVA = vmk_PktFrameMappedPointerGet(pPkt);
-    SFVMK_NULL_PTR_CHECK(((vmk_uint8 *)frameVA));
-    VMK_ASSERT_BUG(vmk_PktIsBufDescWritable(pPkt) == VMK_TRUE);
-    vmk_Memset((vmk_uint8 *)frameVA + pRxDesc->size, 0,
-               SFVMK_MIN_PKT_SIZE - pRxDesc->size);
-      pRxDesc->size = SFVMK_MIN_PKT_SIZE;
-  }
-
-  /* set pkt len */
+  /* Initialize the pkt len for vmk_PktPushHeadroom to work */
   vmk_PktFrameLenSet(pPkt, pRxDesc->size);
 
   /* if prefix header is present, remove it */
@@ -91,6 +139,30 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
     SFVMK_ERR(pAdapter, "vmk_PktPushHeadroom failed with err %s",
               vmk_StatusToString(status));
   }
+
+  if(flags & (EFX_PKT_VLAN_TAGGED  | EFX_CHECK_VLAN)) {
+    sfvmk_stripVlanHdr(pAdapter, pPkt);
+    vlanHdrSize= SFVMK_VLAN_HDR_SIZE;
+  }
+
+  /* pad the pPkt if it is shorter than 60 bytes */
+  if (pRxDesc->size - vlanHdrSize < SFVMK_MIN_PKT_SIZE) {
+    frameVA = vmk_PktFrameMappedPointerGet(pPkt);
+    SFVMK_NULL_PTR_CHECK(((vmk_uint8 *)frameVA));
+    VMK_ASSERT_BUG(vmk_PktIsBufDescWritable(pPkt) == VMK_TRUE);
+    vmk_Memset((vmk_uint8 *)frameVA + pRxDesc->size - vlanHdrSize, 0,
+               SFVMK_MIN_PKT_SIZE - (pRxDesc->size-vlanHdrSize));
+    pRxDesc->size = SFVMK_MIN_PKT_SIZE;
+  }
+  else
+    pRxDesc->size -= vlanHdrSize;
+
+  /* set pkt len */
+  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
+
+  /* Convert checksum flags */
+  if (flags & EFX_CKSUM_TCPUDP)
+    vmk_PktSetCsumVfd(pPkt);
 
   /* deliver the pkt to uplink layer */
   vmk_NetPollRxPktQueue(pAdapter->pEvq[qIndex]->netPoll, pPkt);

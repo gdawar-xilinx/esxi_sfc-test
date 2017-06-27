@@ -341,6 +341,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     VMK_ASSERT(0);
   }
 
+#endif
   /* Driver supports VLAN RX offload (tag stripping) */
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                   VMK_UPLINK_CAP_VLAN_RX_STRIP,  NULL);
@@ -358,7 +359,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
               status);
     VMK_ASSERT(0);
   }
-#endif
+
   /* Driver supports getting and setting message level */
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                 VMK_UPLINK_CAP_MESSAGE_LEVEL,

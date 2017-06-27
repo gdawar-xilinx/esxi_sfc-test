@@ -307,3 +307,25 @@ void sfvmk_mutexDestroy(vmk_Mutex mutex)
     vmk_MutexDestroy(mutex);
 }
 
+/*! \brief utility function to swap the low and high order bytes of a u16
+**
+** \param[in]  int16  16-bit unsigned integer value
+**
+** \return: 16-bit uint with low and high bytes swapped
+*/
+uint16_t sfvmk_swapBytes(uint16_t int16)
+{
+  const unsigned char *from;
+  unsigned char *to;
+  uint16_t t;
+
+  from = (const unsigned char *) &int16;
+  to = (unsigned char *) &t;
+
+  to[0] = from[1];
+  to[1] = from[0];
+
+  return (t);
+}
+
+

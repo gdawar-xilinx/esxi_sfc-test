@@ -732,27 +732,6 @@ sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_tx_mapping_t **pStmp)
   SFVMK_DBG_FUNC_EXIT(pTxq->pAdapter, SFVMK_DBG_TX);
 }
 
-/*! \brief utility function to swap the low and high order bytes of a u16
-**
-** \param[in]  int16  16-bit unsigned integer value
-**
-** \return: 16-bit uint with low and high bytes swapped
-*/
-uint16_t sfvmk_swapBytes(uint16_t int16)
-{
-  const unsigned char *from;
-  unsigned char *to;
-  uint16_t t;
-
-  from = (const unsigned char *) &int16;
-  to = (unsigned char *) &t;
-
-  to[0] = from[1];
-  to[1] = from[0];
-
-  return (t);
-}
-
 /*! \brief  insert vlan tag in the packet header
 **
 ** \param[in,out]    ppPkt       pointer to pointer to packet to be transmitted

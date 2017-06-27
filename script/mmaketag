@@ -20,6 +20,7 @@ fail () { log "$@"; exit 1; }
 
 branch=$1
 echo $branch
+
 products="esxi_sfc"
 
 usage () {
@@ -125,29 +126,14 @@ hglasttag() {
 
 commitversion () {
     local repo="$1"
+    local tag="$2"
+    local version="$2"
 
     cd ${INCOMING}/${repo}
-    vmsg "repo ${repo} commit version ${version}"
+    echo "repo ${repo} commit version ${version}"
     if checkworkingdir ${repo}; then
         hg --noninteractive addremove
-        hg --noninteractive commit --message "Task 6436: [${tagfor}] update version numbers to ${version}"
-    fi
-
-    if [ -f version.mk ]; then
-        sed -i -e "s/^VERSION.*/VERSION=${tag}/" version.mk
-    fi
-
-    if [ ${repo} = esxi_sfc ]; then
-        sed -i -e "s/^DISTFILES_VERSION.*/DISTFILES_VERSION=${tag}/" imports.mk
-        sed -i -e "s/^FIRMWAREFAMILY_VERSION.*/FIRMWAREFAMILY_VERSION=${firmwarefamily_tag}/" imports.mk
-        sed -i -e "s/^FIRMWARE_VERSION.*/FIRMWARE_VERSION=${firmwarefamily_tag}/" imports.mk
-
-        if [ -f ivy-spec.properties ]; then
-            sed -i -e "s/\(^dependency.firmwarefamily.revision *= *\).*/\1v${firmwarefamily_dots}/g" ivy-spec.properties
-        fi
-
-        vmsg "repo esxi_sfc commit imports.mk FIRMWAREFAMILY_TAG=${firmwarefamily_tag} DISTFILES_VERSION=${tag} ivy-spec.properties dependency.firmwarefamily.revision=v${firmwarefamily_dots}"
-        hg --noninteractive commit --message "Task 6436: [${tagfor}] pull in firmware family built from ${firmwarefamily_tag} (and distfiles from ${tag})"
+        hg --noninteractive commit --message "Task 71858 : [${tagfor}] update version numbers to ${version}"
     fi
 
     # Allow operation=commit to be rerun by making hg tag
@@ -197,43 +183,49 @@ infupdate () {
 
 # Update the files ($2..) in the repository $1 to ${tag}
 versionupdate () {
-    local repo
-    repo="$1"
-    shift
+#3    local repo
+    #repo="$1"
+#    shift
+    tag=$1
+    echo "updating ${repo} repo to ${tag}"
 
-    vmsg "updating ${repo} repo to ${tag}"
-
-    local pstamp
-    pstamp="${version}_$(date +'%y%m%d-%H%M')"
+##    local pstamp
+#    pstamp="${version}_$(date +'%y%m%d-%H%M')"
 
     # bug 28141/29333 - avoid replacing version numbers within changelogs
-    local predicate
-    if [ "${repo}" = "distfiles" ]; then
-	predicate="1,+7"
-    else
-	predicate=""
-    fi
+#    local predicate
+#    if [ "${repo}" = "distfiles" ]; then
+#	predicate="1,+7"
+#    else
+#	predicate=""
+#    fi
 
-    for file in $*; do
-        cd ${INCOMING}/${repo}
+#    for file in $*; do
+    file=$(pwd)/native_drv/sfvmk.sc
+    ver=$tag
+    echo "tag: $tag, ver : $ver"
+    ver=${ver:1}
+    ver="\"${ver}\""
+    echo "..VERION ... : $ver"
+    sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
+
+    #    cd ${INCOMING}/${repo}
 	# bug 32894: Only replace version numbers starting with v|"|=|whitespace
-        sed -i \
-            -e ${predicate}' s/\([v"=[:space:]]\)[0-9]\.[0-9]\+\.[0-9]\+\.[0-9]\{4\}/\1'${version}'/g'                      \
-            -e ${predicate}' s/\([v"=[:space:]]\)[0-9]\.[0-9]\+\.[0-9]\+/\1'${version_major}'.'${version_minor}'.'${version_patch}'/g' \
-            -e ${predicate}' s/[(][0-9]\{4\}[)]/('${version_build}')/g'                                                       \
-            -e ${predicate}' s/\(CI_MAJ_RELEASE_VERSION[ ]\+\)[(][0-9]\+[)]/\1('${version_major}')/'                          \
-            -e ${predicate}' s/\(CI_MIN_RELEASE_VERSION.*\)[(][0-9]\+[)]/\1('${version_minor}')/'                             \
-            -e ${predicate}' s/\(CI_MAINT_RELEASE_VERSION.*\)[(][0-9]\+[)]/\1('${version_patch}')/'                        \
-            -e ${predicate}' s/\(<SfVersionMajor>\)[0-9]\+/\1'${version_major}'/'                                             \
-            -e ${predicate}' s/\(<SfVersionMinor>\)[0-9]\+/\1'${version_minor}'/'                                             \
-            -e ${predicate}' s/\(<SfVersionPatch>\)[0-9]\+/\1'${version_patch}'/'                                       \
-            -e ${predicate}' s/\(<SfVersionBuild>\)[0-9]\+/\1'${version_build}'/'                                             \
-            ${file}
+     #   sed -i \
+      #      -e ${predicate}' s/\(["=[:space:]]\)[0-9]\.[0-9]\+\.[0-9]\+\.[0-9]\{4\}/\1'${version}'/g'                      \
+       #     -e ${predicate}' s/\(["=[:space:]]\)[0-9]\.[0-9]\+\.[0-9]\+/\1'${version_major}'.'${version_minor}'.'${version_patch}'/g' \
+        #    -e ${predicate}' s/[(][0-9]\{4\}[)]/('${version_build}')/g'                                                       \
+         #   -e ${predicate}' s/\(CI_MAJ_RELEASE_VERSION[ ]\+\)[(][0-9]\+[)]/\1('${version_major}')/'                          \
+          #  -e ${predicate}' s/\(CI_MIN_RELEASE_VERSION.*\)[(][0-9]\+[)]/\1('${version_minor}')/'                             \
+           # -e ${predicate}' s/\(CI_MAINT_RELEASE_VERSION.*\)[(][0-9]\+[)]/\1('${version_patch}')/'                        \
+            #-e ${predicate}' s/\(<SfVersionMajor>\)[0-9]\+/\1'${version_major}'/'                                             \
+            #3-e ${predicate}' s/\(<SfVersionMinor>\)[0-9]\+/\1'${version_minor}'/'                                             \
+            #-e ${predicate}' s/\(<SfVersionPatch>\)[0-9]\+/\1'${version_patch}'/'                                       \
+            #-e ${predicate}' s/\(<SfVersionBuild>\)[0-9]\+/\1'${version_build}'/'                                             \
+            #${file}
 
-        if [ "${file}" = "src/pkg/sysv/SFCsfxge/pkginfo" ]; then
-          sed -i -e 's/^PSTAMP=.*$/PSTAMP="'${pstamp}'"/' ${file}
-        fi
-    done
+        #fi
+#    done
 }
 
 # tag may be of the form
@@ -251,12 +243,12 @@ validatetag () {
              "Did you skip --operation=pull?"
 
     # Find the latest tag on the branch
-    cd ${INCOMING}/esxi_sfc
-    lasttag="$(hglasttag esxi_sfc)"
-    IFS=_; eval set -- ${lasttag}; IFS="${_IFS}"
-    [ $# = 4 ] && [[ "${lasttag}" =~ v1_[0-9]+_[0-9]+_[0-9]{4} ]] || \
-        fail "Current branch '${newbrancha[${repo}]}' head tag '${lasttag}' is invalid. "\
-             "Try using --lasttag to point at the last normal tag"
+#    cd ${INCOMING}/esxi_sfc
+#    lasttag="$(hglasttag esxi_sfc)"
+#    IFS=_; eval set -- ${lasttag}; IFS="${_IFS}"
+#    [ $# = 4 ] && [[ "${lasttag}" =~ v1_[0-9]+_[0-9]+_[0-9]{4} ]] || \
+#        fail "Current branch '${newbrancha[${repo}]}' head tag '${lasttag}' is invalid. "\
+#             "Try using --lasttag to point at the last normal tag"
     # If you hit this because there is a bad tag in history then you will need
     # to run a modified version of this script with hardcoded lasttag
 
@@ -280,7 +272,7 @@ validatetag () {
     msg "Will move branch '${newbrancha[${repo}]}' from '${lasttag}' to '${tag}'"
 
     # Check if this tag exists on any branch
-    cd ${INCOMING}/v5
+    cd ${INCOMING}/esxi_sfc
     if hg --noninteractive log --rev "${tag}" >/dev/null 2>&1; then
         fail "New tag '${tag}' already exists in repository"
     fi
@@ -345,15 +337,15 @@ sanitychecks () {
             cd "${INCOMING}/${repo}"
 
             # Check no local changes
-            if ! $clean; then
-		lines=$(hg --noninteractive status | wc -l)
-		[ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
-            fi
+#            if ! $clean; then
+#		lines=$(hg --noninteractive status | wc -l)
+#		[ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
+#            fi
 
 	    # Check no outgoing commits
-	    cd "${INCOMING}/${repo}"
-	    hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
-		fail "Repo ${repo} has outgoing changes"
+#	    cd "${INCOMING}/${repo}"
+#	    hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
+#		fail "Repo ${repo} has outgoing changes"
 
            # Check no applied mqueue patches - without needing mqueue extension
             hg --noninteractive tags | grep qparent && \
@@ -426,7 +418,8 @@ maketag () {
     # If the user uses --operation, then this gets run on every invocation
     # Don't run for --operation=PUSH because the new tag is already commited
     if [[ "${operation}" != push ]]; then
-        validatetag
+        #validatetag
+        echo "No.."
     fi
 
     TMPDIR=$(mktemp -dt mmaketag.$USER.XXXXXXXX)
@@ -434,6 +427,12 @@ maketag () {
     # use readlink to ensure that this starts with a /
     export BUILDPRODUCTS="${TMPDIR}$(readlink -f ${FINALBUILDPRODUCTS})"
     mkdir -p "${BUILDPRODUCTS}"
+
+    if runop commit; then
+      for repo in $tag_trees; do
+        commitversion ${repo} ${tag}
+        done
+    fi
 
     if runop push; then
 	local answer=""
@@ -447,8 +446,9 @@ maketag () {
 	    read -p "Do you want to push the above tag ${tag} (y/n)" answer
 	done
 	if [ "$answer" = "y" ]; then
-	    copy_tmp_build_products
+	    #copy_tmp_build_products
             for repo in $push_trees; do
+                echo " call hgpush ...."  
 		hgpush ${repo}
             done
 
@@ -548,8 +548,8 @@ esac
 
 [ $# = 2 -o $# = 1 ] || usage
 
-tag=${2:-}
 
+tag=${2:-}
 # create build products as group writeable.
 umask 0002
 echo ${INCOMING}
@@ -558,9 +558,11 @@ checkdeps
 tinderboxcheck
 sanitychecks
 
-hgpullall
+#hgpullall
 checklasttag
 # Note checknewtag is in maketag
+echo " before version update :  $tag"
+versionupdate $tag
 
 # Note this promts if to push
 # Preceeding functions should not create permanent files/take actions until

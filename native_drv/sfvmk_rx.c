@@ -150,6 +150,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
       case EFX_PKT_IPV6:
         pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
         break;
+      case 0:
+        break;
       default:
         SFVMK_ERR(pAdapter, "Rx Desc with both ipv4 and ipv6 flags");
         goto sfvmk_discard;

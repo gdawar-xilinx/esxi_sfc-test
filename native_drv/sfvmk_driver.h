@@ -21,6 +21,16 @@
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
+#define SFVMK_ADAPTER_LOCK(pAdapter) {   \
+  vmk_MutexLock(pAdapter->lock);         \
+}
+
+#define SFVMK_ADAPTER_UNLOCK(pAdapter) { \
+  vmk_MutexUnlock(pAdapter->lock);       \
+}
+
+#define SFVMK_PRIV_STATS_BUFFER_SZ    20480
+
 /* Offset in 256 bytes configuration address space */
 #define SFVMK_PCI_COMMAND             0x04
 /* type of command */
@@ -37,7 +47,8 @@ extern int sfvmk_rxRingEntries;
 
 /* rank for mutex lock in different module */
 enum sfvmk_LckRank {
-  SFVMK_PORT_LOCK_RANK = VMK_MUTEX_RANK_LOWEST,
+  SFVMK_ADAPTER_LOCK_RANK = VMK_MUTEX_RANK_LOWEST,
+  SFVMK_PORT_LOCK_RANK,
   SFVMK_TXQ_LOCK_RANK,
   SFVMK_EVQ_LOCK_RANK,
   SFVMK_MCDI_LOCK_RANK
@@ -64,6 +75,9 @@ typedef struct sfvmk_adapter_s {
   vmk_PCIDeviceID   pciDeviceID;
   vmk_PCIDeviceAddr pciDeviceAddr;
   vmk_Name          pciDeviceName;
+
+  /* Adapter lock */
+  vmk_Mutex         lock;
 
   /* EFX /efsys related information */
   efx_family_t      efxFamily;
@@ -102,7 +116,13 @@ typedef struct sfvmk_adapter_s {
   struct sfvmk_phyInfo_s  phy;
   struct sfvmk_port_s     port;
 
+  /* MAC stats copy */
+  uint64_t adapterStats[EFX_MAC_NSTATS];
+
   vmk_DeviceID   deviceID;
+
+  /* World for preodic device stats collection */
+  vmk_WorldID  worldId;
 
   /*uplink device inforamtion */
   vmk_Name        uplinkName;

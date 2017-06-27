@@ -39,10 +39,16 @@ enum sfvmk_port_state {
   SFVMK_PORT_STARTED
 };
 
+typedef struct sfvmk_hw_stats_s {
+  efsys_mem_t	dmaBuf;
+  void		*decodeBuf;
+}sfvmk_hw_stats_t;
+
 typedef struct sfvmk_port_s {
 
   struct sfvmk_adapter_s  *pAdapter;
   enum sfvmk_port_state   initState;
+  sfvmk_hw_stats_t        macStats;
   efx_link_mode_t         linkMode;
   vmk_uint32    fcRequested;
   vmk_Mutex     lock;
@@ -56,7 +62,7 @@ int sfvmk_portStart(struct sfvmk_adapter_s *pAdapter);
 
 void sfvmk_macLinkUpdate(struct sfvmk_adapter_s *pAdapter,
                                     efx_link_mode_t linkMode);
-
+VMK_ReturnStatus sfvmk_macStatsUpdate(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter);
 void sfvmk_portFini(struct sfvmk_adapter_s *pAdapter);
 

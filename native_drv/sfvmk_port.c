@@ -51,11 +51,51 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
   return;
 }
 
+/*! \brief Function to DMA the latest stats from NIC
+**
+** \param[in] adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_macStatsUpdate(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_port_t *pPort = &pAdapter->port;
+  efsys_mem_t *esmp = &(pPort->macStats.dmaBuf);
+  unsigned int count;
+  VMK_ReturnStatus status;
+
+  SFVMK_PORT_LOCK(pPort);
+  if (pPort->initState != SFVMK_PORT_STARTED) {
+    status = ENOTACTIVE;
+    goto sfvmk_out;
+  }
+
+  /* If we're unlucky enough to read statistics wduring the DMA, wait
+   * up to 5ms for it to finish (typically takes <500us) */
+  for (count = 0; count < 5; ++count) {
+    EFSYS_PROBE1(wait, unsigned int, count);
+
+    /* Try to update the cached counters */
+    if ((status = efx_mac_stats_update(pAdapter->pNic, esmp,
+       pPort->macStats.decodeBuf, NULL)) != EAGAIN)
+       goto sfvmk_out;
+
+      vmk_DelayUsecs(10000);
+  }
+
+  status = ETIMEDOUT;
+
+sfvmk_out:
+  SFVMK_PORT_UNLOCK(pPort);
+  return status;
+}
+
 /*! \brief poll mac and update the link accordingly.
 **
 ** \param[in]  arg     pointer to sfvmk_adapter_t
 **
-** @return: VMK_OK <success> error code <failure>
+** \return: VMK_OK <success> error code <failure>
 **
 */
 static void sfvmk_macPollWork(void *arg)
@@ -107,6 +147,8 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_BUG(pPort->initState == SFVMK_PORT_STARTED);
 
   pPort->initState = SFVMK_PORT_INITIALIZED;
+
+  (void)efx_mac_stats_periodic(pNic, &pPort->macStats.dmaBuf, 0, B_FALSE);
 
   /* This may call MCDI */
   (void)efx_mac_drain(pNic, B_TRUE);
@@ -165,14 +207,21 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if ((rc = efx_mac_fcntl_set(pNic, pPort->fcRequested, B_TRUE)) != 0)
     goto sfvmk_mac_fcntl_fail;
 
-  if ((rc = efx_mac_drain(pNic, B_FALSE)) != 0)
-    goto sfvmk_mac_drain_fail;
-
   /* by default Promiscuous, all multicast and  broadcast filters are enabled*/
   if ((rc = efx_mac_filter_set(pNic, B_TRUE, 0, B_TRUE, B_TRUE)) != 0) {
     SFVMK_ERR(pAdapter, "Error %d in setting mac filter ", rc);
     goto sfvmk_mac_filter_set_fail;
   }
+
+  /* Update MAC stats by DMA every second */
+  if ((rc = efx_mac_stats_periodic(pNic, &pPort->macStats.dmaBuf,
+                                   1000, B_FALSE)) != 0) {
+    vmk_LogMessage("%s: stats start failed", __func__);
+    goto sfvmk_mac_stats_fail;
+  }
+
+  if ((rc = efx_mac_drain(pNic, B_FALSE)) != 0)
+    goto sfvmk_mac_drain_fail;
 
   pPort->initState = SFVMK_PORT_STARTED;
 
@@ -184,8 +233,10 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
 
   return rc;
 
-sfvmk_mac_filter_set_fail:
 sfvmk_mac_drain_fail:
+(void)efx_mac_stats_periodic(pNic, &pPort->macStats.dmaBuf, 0, B_FALSE);
+sfvmk_mac_stats_fail:
+sfvmk_mac_filter_set_fail:
 sfvmk_mac_fcntl_fail:
 sfvmk_mac_pdu_fail:
   efx_port_fini(pNic);
@@ -206,33 +257,60 @@ sfvmk_filter_init_fail:
 VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
 {
   struct sfvmk_port_s *pPort;
-  VMK_ReturnStatus status;
+  efsys_mem_t *macStatsBuf;
+  VMK_ReturnStatus status = VMK_OK;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
+  macStatsBuf = &pPort->macStats.dmaBuf;
 
   VMK_ASSERT_BUG(pPort->initState == SFVMK_PORT_UNINITIALIZED,
               "Port already initialized");
 
   pPort->pAdapter = pAdapter;
 
+  pPort->macStats.decodeBuf = sfvmk_memPoolAlloc(EFX_MAC_NSTATS * sizeof(uint64_t));
+  if (NULL == pPort->macStats.decodeBuf) {
+    SFVMK_ERR(pAdapter,"failed to allocate memory for MacStats decode buf");
+    status = VMK_NO_MEMORY;
+    goto sfvmk_alloc_fail;
+  }
+
+  /* Allocate DMA space. */
+  macStatsBuf->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, EFX_MAC_STATS_SIZE, &macStatsBuf->ioElem.ioAddr);
+  if(NULL == macStatsBuf->pEsmBase) {
+    SFVMK_ERR(pAdapter,"failed to allocate DMA memory for macStatsBuf enteries");
+    status = VMK_NO_MEMORY;
+    goto sfvmk_dma_alloc_fail;
+  }
+
+  macStatsBuf->ioElem.length = EFX_MAC_STATS_SIZE;
+  macStatsBuf->esmHandle = pAdapter->dmaEngine;
+  memset(pAdapter->adapterStats, 0, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
+
   status = sfvmk_mutexInit("port", SFVMK_PORT_LOCK_RANK, &pPort->lock);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to create lock for port. err: %s",
               vmk_StatusToString(status));
-    goto sfvmk_fail;
+    goto sfvmk_mutex_fail;
   }
 
   pPort->initState = SFVMK_PORT_INITIALIZED;
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_PORT);
 
-sfvmk_fail:
-  return status ;
+  return status;
 
+sfvmk_mutex_fail:
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, macStatsBuf->pEsmBase,
+                                macStatsBuf->ioElem.ioAddr, macStatsBuf->ioElem.length);
+sfvmk_dma_alloc_fail:
+  sfvmk_memPoolFree(pPort->macStats.decodeBuf, EFX_MAC_NSTATS * sizeof(uint64_t));
+sfvmk_alloc_fail:
+  return status;
 }
 
 /*! \brief  releases resource for port module.
@@ -245,14 +323,22 @@ void
 sfvmk_portFini(struct sfvmk_adapter_s *pAdapter)
 {
   struct sfvmk_port_s *pPort;
+  efsys_mem_t *macStatsBuf;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_PORT);
 
   pPort = &pAdapter->port;
+  macStatsBuf = &pPort->macStats.dmaBuf;
 
   VMK_ASSERT_BUG(pPort->initState == SFVMK_PORT_INITIALIZED,
               "Port is not initialized");
+  sfvmk_memPoolFree(pPort->macStats.decodeBuf, EFX_MAC_NSTATS * sizeof(uint64_t));
+  sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, macStatsBuf->pEsmBase, macStatsBuf->ioElem.ioAddr,
+                                macStatsBuf->ioElem.length);
+  pPort->macStats.decodeBuf = NULL;
+  macStatsBuf = NULL;
+  memset(pAdapter->adapterStats, 0, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
 
   pPort->pAdapter = NULL;
 

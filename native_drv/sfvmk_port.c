@@ -9,6 +9,29 @@
 #include "sfvmk_port.h"
 #include "sfvmk_utils.h"
 
+const uint64_t sfvmk_link_baudrate[EFX_LINK_NMODES] = {
+  [EFX_LINK_10HDX] = VMK_LINK_SPEED_10_MBPS,
+  [EFX_LINK_10FDX] = VMK_LINK_SPEED_10_MBPS,
+  [EFX_LINK_100HDX] = VMK_LINK_SPEED_100_MBPS,
+  [EFX_LINK_100FDX] = VMK_LINK_SPEED_100_MBPS,
+  [EFX_LINK_1000HDX] = VMK_LINK_SPEED_1000_MBPS,
+  [EFX_LINK_1000FDX] = VMK_LINK_SPEED_1000_MBPS,
+  [EFX_LINK_10000FDX] = VMK_LINK_SPEED_10000_MBPS,
+  [EFX_LINK_40000FDX] = VMK_LINK_SPEED_40000_MBPS
+};
+
+const uint8_t sfvmk_link_duplex[EFX_LINK_NMODES] = {
+  [EFX_LINK_10HDX] = VMK_LINK_DUPLEX_HALF,
+  [EFX_LINK_10FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_100HDX] = VMK_LINK_DUPLEX_HALF,
+  [EFX_LINK_100FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_1000HDX] = VMK_LINK_DUPLEX_HALF,
+  [EFX_LINK_1000FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_10000FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_40000FDX] = VMK_LINK_DUPLEX_FULL,
+};
+
+
 /*! \brief  update link mode and populate it to uplink device.
 **
 ** \param[in]  adapter   pointer to sfvmk_adapter_t
@@ -24,11 +47,10 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
   if (NULL == pSharedData)
     return;
 
-  /* TODO: right now writing hardcoded values will populate later on */
   SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter)
 
-  pSharedData->link.speed = VMK_LINK_SPEED_10000_MBPS;
-  pSharedData->link.duplex = VMK_LINK_DUPLEX_FULL;
+  pSharedData->link.speed = sfvmk_link_baudrate[linkMode];
+  pSharedData->link.duplex = sfvmk_link_duplex[linkMode];
 
   if (linkMode > EFX_LINK_DOWN)
     pSharedData->link.state = VMK_LINK_STATE_UP;

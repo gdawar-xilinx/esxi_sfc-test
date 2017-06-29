@@ -11,7 +11,7 @@
 #
 
 driver_name    = "sfvmk"
-driver_ver     = "0.1.0.108"
+driver_ver     = "0.1.0.109"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {
@@ -80,9 +80,9 @@ module_def = {
                        ],
    "cc warnings"     : [ "-Winline", ],
    "cc flags"        : [ ],
-   "cc defs"         : { 'SFC_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
-                         'SFC_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,
-                         'SFC_DRIVER_VERSION_NUM=%s' % (driver_ver_hex)       : None,
+   "cc defs"         : { 'SFVMK_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
+                         'SFVMK_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,
+                         'SFVMK_DRIVER_VERSION_NUM=%s' % (driver_ver_hex)       : None,
 
                        },
 }

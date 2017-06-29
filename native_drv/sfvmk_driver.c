@@ -6,6 +6,8 @@
  ************************************************************************/
 #include "sfvmk_driver.h"
 
+#define SFVMK_MOD_INTERFACE "native"
+
 /* Initialize default value of module parameters */
 #define PARAMS(param, defval, type1, type2, min, max, desc)     \
     .param = defval,
@@ -51,6 +53,7 @@ static VMK_ReturnStatus sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_getPciDevice(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_removeUplinkDevice(vmk_Device sfvmk_device);
 static void sfvmk_destroyDMAEngine(sfvmk_adapter_t *pAdapter);
+static void sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter);
 
 static vmk_DeviceOps sfvmk_uplinkDeviceOps = {
   .removeDevice = sfvmk_removeUplinkDevice
@@ -353,6 +356,30 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
 
   return VMK_OK;
+}
+
+/*! \brief  Routine to update driver information
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: none
+*/
+static void sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter)
+{
+  vmk_UplinkDriverInfo *drvInfo;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  drvInfo = &pAdapter->sharedData.driverInfo;
+
+  SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+  vmk_NameInitialize(&drvInfo->driver, sfvmk_ModInfo.driverName.string);
+  vmk_NameInitialize(&drvInfo->moduleInterface, SFVMK_MOD_INTERFACE);
+  vmk_NameInitialize(&drvInfo->version, SFVMK_DRIVER_VERSION_STRING);
+  /* TODO FW version needs to be populated */
+  SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+
+  return;
 }
 
 /*! \brief  Routine to get pci device information such as vendor id , device ID
@@ -685,6 +712,9 @@ sfvmk_attachDevice(vmk_Device dev)
               vmk_StatusToString(status));
     goto sfvmk_init_uplink_data_fail;
   }
+
+  /* updating driver infor */
+  (void)sfvmk_updateDrvInfo(pAdapter);
 
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {

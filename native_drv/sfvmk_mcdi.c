@@ -31,7 +31,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 
   EFSYS_PROBE(mcdi_timeout);
 
-  /* TODO: sfvmk_scheduleReset(pAdapter); */
+  sfvmk_scheduleReset(pAdapter);
   return;
 }
 
@@ -41,7 +41,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 **
 ** \return: void
 */
-static void
+static int
 sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
 {
   efx_nic_t *pNic;
@@ -60,14 +60,14 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
   do {
     if (efx_mcdi_request_poll(pNic)) {
       EFSYS_PROBE1(mcdi_delay, vmk_uint32, delayTotal);
-      return;
+      return 0;
     }
 
     if (delayTotal > SFVMK_MCDI_WATCHDOG_INTERVAL) {
       aborted = efx_mcdi_request_abort(pNic);
       VMK_ASSERT_BUG(!aborted, "abort failed");
       sfvmk_mcdiTimeout(pAdapter);
-      return;
+      return ETIMEDOUT;
     }
 
     vmk_DelayUsecs(delayUS);
@@ -79,6 +79,8 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
       delayUS = SFVMK_MCDI_POLL_INTERVAL_MAX;
 
   } while (1);
+
+  return 0;
 }
 
 /*! \brief Routine for sending mcdi cmd.
@@ -92,6 +94,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 {
   sfvmk_adapter_t *pAdapter;
   sfvmk_mcdi_t *pMcdi;
+  int status;
 
   pAdapter = (sfvmk_adapter_t *)arg;
 
@@ -106,9 +109,16 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 
   /* Issue request and poll for completion. */
   efx_mcdi_request_start(pAdapter->pNic, emrp, B_FALSE);
-  sfvmk_mcdiPoll(pAdapter);
+  status = sfvmk_mcdiPoll(pAdapter);
 
   SFVMK_MCDI_UNLOCK(pMcdi);
+
+  /* Check if driver reset required */
+  if (!status && (emrp->emr_rc == EIO) &&
+      (pMcdi->mode == SFVMK_MCDI_MODE_POLL)) {
+      SFVMK_ERR(pAdapter, "Reboot detected, schedule the reset helper");
+      sfvmk_scheduleReset(pAdapter);
+  }
 }
 
 /*! \brief Routine for mcdi event handling.
@@ -159,7 +169,7 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
 
   EFSYS_PROBE(mcdi_exception);
 
-  /* TODO: sfvmk_scheduleReset(pAdapter); */
+  sfvmk_scheduleReset(pAdapter);
   return;
 }
 
@@ -198,6 +208,9 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
     goto lock_create_fail;
 
   pMcdi->state = SFVMK_MCDI_INITIALIZED;
+
+  /* Set MCDI mode to Polling */
+  pMcdi->mode = SFVMK_MCDI_MODE_POLL;
 
   pMcdiMem->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
                                         maxMsgSize, &pMcdiMem->ioElem.ioAddr);

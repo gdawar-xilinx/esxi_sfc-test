@@ -527,6 +527,60 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
 
 }
 
+/*! \brief  Routine to create a VMK Helper queue
+**
+** \param  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+**
+*/
+static VMK_ReturnStatus
+sfvmk_CreateHelper(sfvmk_adapter_t *pAdapter)
+{
+  vmk_HelperProps props;
+  VMK_ReturnStatus status;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
+
+  vmk_NameFormat(&props.name, "%s-helper",
+                 SFVMK_NAME_TO_STRING(sfvmk_ModInfo.driverName));
+  props.heap = sfvmk_ModInfo.heapID;
+  props.useIrqSpinlock = VMK_TRUE;
+  props.preallocRequests = VMK_FALSE;
+  props.blockingSubmit = VMK_FALSE;
+  props.maxRequests = 8;
+  props.mutables.minWorlds = 0;
+  props.mutables.maxWorlds = 1;
+  props.mutables.maxIdleTime = 0;
+  props.mutables.maxRequestBlockTime = 0;
+  props.tagCompare = NULL;
+  props.constructor = NULL;
+  props.constructorArg = (vmk_AddrCookie) NULL;
+
+  status = vmk_HelperCreate(&props, &pAdapter->helper);
+  if (status != VMK_OK) {
+     SFVMK_ERROR("Failed to create helper world queue (%x)", status);
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
+  return status;
+}
+
+/* \brief  Routine to Destroy a VMK Helper queue
+**
+** \param  adapter pointer to sfvmk_adapter_t
+**
+** \return: None
+**
+*/
+static void
+sfmvk_DestroyHelper(sfvmk_adapter_t *pAdapter)
+{
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
+  vmk_HelperDestroy(pAdapter->helper);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -723,6 +777,12 @@ sfvmk_attachDevice(vmk_Device dev)
     goto sfvmk_set_drvdata_fail;
   }
 
+  status = sfvmk_CreateHelper(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed while creating helper"
+              "with err %s", vmk_StatusToString(status));
+    goto sfvmk_create_helper_fail;
+  }
   /* calling nic_fini as nic init is happening in startIO */
   efx_nic_fini(pAdapter->pNic);
 
@@ -732,6 +792,7 @@ sfvmk_attachDevice(vmk_Device dev)
 
   return VMK_OK;
 
+sfvmk_create_helper_fail:
 sfvmk_set_drvdata_fail:
   sfvmk_destroyUplinkData(pAdapter);
 sfvmk_init_uplink_data_fail:
@@ -965,6 +1026,9 @@ sfvmk_detachDevice(vmk_Device dev)
   }
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  sfmvk_DestroyHelper(pAdapter);
+
   /* Destroy worker thread. */
   if (pAdapter->worldId) {
     vmk_WorldDestroy(pAdapter->worldId);

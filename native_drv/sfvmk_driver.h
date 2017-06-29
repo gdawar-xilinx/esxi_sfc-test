@@ -141,6 +141,9 @@ typedef struct sfvmk_adapter_s {
   vmk_UplinkSharedQueueInfo queueInfo;
   vmk_UplinkSharedQueueData queueData[SFVMK_RX_SCALE_MAX + SFVMK_TX_SCALE_MAX];
 
+  /* VMK helper for scheduling a Adapter Reset */
+  vmk_Helper helper;
 }sfvmk_adapter_t;
 
+extern VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *);
 #endif /* __SFVMK_DRIVER_H__ */

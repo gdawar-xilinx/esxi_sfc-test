@@ -713,6 +713,9 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 	return VMK_OK;
   }
 
+  /* cross over the rx queues */
+  qid -= maxRxQueues;
+
   if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
    SFVMK_ERR(pAdapter, "sfvmk_isTxqStopped returned TRUE");
    /* TODO: need to see the pkt completion context and use appropriate function call */
@@ -720,9 +723,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
    return VMK_BUSY;
   }
-
-  /* cross over the rx queues */
-  qid -= maxRxQueues;
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "RxQ: %d, TxQ: %d, qid: %d", maxRxQueues, maxTxQueues, qid);
@@ -1374,7 +1374,7 @@ static VMK_ReturnStatus sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
   else
     return VMK_FAILURE;
 
-  qData = &pAdapter->queueData[qStartIndex];
+  qData = &pAdapter->queueData[0];
 
   /* check if queue is free*/
   for (qIndex = qStartIndex ; qIndex < maxQueue; qIndex++)
@@ -1597,7 +1597,8 @@ sfvmk_initSharedQueueInfo(sfvmk_adapter_t *pAdapter)
 
   /* update max tx and rx queue*/
   /* needs modification when RSS and dynamic queue support is added */
-  pQueueInfo->maxTxQueues =  pAdapter->txqCount;
+  /* set txq = rxq because of BUG#72050 TODO: needs to revisit later */
+  pQueueInfo->maxTxQueues =  pAdapter->rxqCount;
   pQueueInfo->maxRxQueues =  pAdapter->rxqCount;
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,

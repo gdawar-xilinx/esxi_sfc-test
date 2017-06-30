@@ -65,6 +65,7 @@ void sfvmk_macLinkUpdate(struct sfvmk_adapter_s *pAdapter,
 VMK_ReturnStatus sfvmk_macStatsUpdate(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter);
 void sfvmk_portFini(struct sfvmk_adapter_s *pAdapter);
+VMK_ReturnStatus sfvmk_phyLinkSpeedSet(struct sfvmk_adapter_s *pAdapter, vmk_uint32 speed);
 
 #endif
 

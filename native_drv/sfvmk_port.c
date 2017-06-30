@@ -31,6 +31,16 @@ const uint8_t sfvmk_link_duplex[EFX_LINK_NMODES] = {
   [EFX_LINK_40000FDX] = VMK_LINK_DUPLEX_FULL,
 };
 
+#define SFVMK_PHY_CAP_ALL_SPEEDS_MASK     \
+  ((1 << EFX_PHY_CAP_AN) |              \
+   (1 << EFX_PHY_CAP_40000FDX) |        \
+   (1 << EFX_PHY_CAP_10000FDX) |        \
+   (1 << EFX_PHY_CAP_1000FDX) |         \
+   (1 << EFX_PHY_CAP_1000HDX) |         \
+   (1 << EFX_PHY_CAP_100FDX) |          \
+   (1 << EFX_PHY_CAP_100HDX) |          \
+   (1 << EFX_PHY_CAP_10FDX) |           \
+   (1 << EFX_PHY_CAP_10HDX))
 
 /*! \brief  update link mode and populate it to uplink device.
 **
@@ -71,6 +81,88 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
 
 
   return;
+}
+
+/*! /brief  update the PHY link speed
+**
+** /param[in]  adapter  pointer to sfvmk_adapter_t
+** /param[in]  speed  link speed 
+**
+** /result: VMK_OK on seccess, error no otherwise.
+**
+*/
+VMK_ReturnStatus
+sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
+{
+  sfvmk_port_t *pPort;
+  VMK_ReturnStatus status;
+  vmk_uint32 supportedCapabilities;
+  vmk_uint32 advertisedCapabilities;
+  pPort = &pAdapter->port;
+
+  SFVMK_PORT_LOCK(pPort);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM,
+                      &supportedCapabilities);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &advertisedCapabilities);
+
+  advertisedCapabilities &= ~SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
+  switch (speed) {
+    case VMK_LINK_SPEED_40000_MBPS:
+      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
+                    "LINK: 40G FULL-DUPLEX");
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_40000FDX;
+      speed = VMK_LINK_SPEED_40000_MBPS;
+      break;
+    case VMK_LINK_SPEED_10000_MBPS:
+      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
+                    "LINK: 10G FULL-DUPLEX");
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_10000FDX;
+      speed = VMK_LINK_SPEED_10000_MBPS;
+      break;
+    case VMK_LINK_SPEED_1000_MBPS:
+      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
+                    "LINK: 1G FULL-DUPLEX");
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_1000FDX;
+      speed = VMK_LINK_SPEED_1000_MBPS;
+      break;
+    default:
+      status = VMK_BAD_PARAM;
+      goto sfvmk_link_speed_set_fail;
+  }
+
+  /* Fail if no supported speeds are advertised */
+  if (!(advertisedCapabilities & SFVMK_PHY_CAP_ALL_SPEEDS_MASK &
+	    supportedCapabilities)) {
+    status = VMK_NOT_SUPPORTED;
+    goto sfvmk_link_speed_set_fail;
+  }
+
+  /* Fail if unsupported capabilities have been requested */
+  if (advertisedCapabilities & ~supportedCapabilities) {
+    status = VMK_NOT_SUPPORTED;
+    goto sfvmk_link_speed_set_fail;
+  }
+
+  if (pAdapter->phy.advertising == advertisedCapabilities)
+    goto sfvmk_link_speed_set_done;
+
+  status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);
+  if (status != 0)
+    goto sfvmk_link_speed_set_fail;
+
+  pAdapter->phy.linkSpeed = speed;
+  pAdapter->phy.advertising = advertisedCapabilities;
+
+sfvmk_link_speed_set_done:
+  SFVMK_PORT_UNLOCK(pPort);
+  return VMK_OK;
+  
+sfvmk_link_speed_set_fail:
+  SFVMK_PORT_UNLOCK(pPort);
+  return status;
 }
 
 /*! \brief Function to DMA the latest stats from NIC

@@ -287,12 +287,51 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
 {
 
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status;
+
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
-  /* TODO : need to implement */
+  SFVMK_ADAPTER_LOCK(pAdapter);
+  /* Handle Link down request */
+  if (linkStatus->state == VMK_LINK_STATE_DOWN) {
 
-  return VMK_OK;
+    /* If Link State is already down, return now */
+    if (pAdapter->initState != SFVMK_STARTED) {
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                "Take no action, Link is already down");
+      status = VMK_OK;
+      goto sfvmk_link_state_done;
+    }
+
+    /* Call Uplink Quiesce IO to bring the link down */
+    status = sfvmk_stopNic(pAdapter);
+    goto sfvmk_link_state_done;
+  }
+  
+  /* Handle Link UP request */
+  if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              "Bringing link UP");
+    status = sfvmk_startNic(pAdapter);
+    goto sfvmk_link_state_done;
+  }
+
+  if (linkStatus->speed >= 1000) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              "Update the link speed");
+    status = sfvmk_phyLinkSpeedSet(pAdapter, linkStatus->speed);
+  } else {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              "unrecongnized options");
+    status = VMK_BAD_PARAM;
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+
+sfvmk_link_state_done:
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
+  return status;
 }
 
 /*! \brief function to register driver cap with uplink device.

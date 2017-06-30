@@ -96,6 +96,20 @@ static vmk_UplinkPrivStatsOps sfvmkPrivStatsOps = {
 
 
 /****************************************************************************
+ *               vmk_UplinkPauseParamsOps Handlers                          *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_pauseParamGet(vmk_AddrCookie cookie,
+                                            vmk_UplinkPauseParams  *pauseParams);
+static VMK_ReturnStatus sfvmk_pauseParamSet(vmk_AddrCookie cookie,
+                                            vmk_UplinkPauseParams  pauseParams);
+
+
+static vmk_UplinkPauseParamsOps sfvmkPauseParamsOps = {
+  .pauseParamsGet = sfvmk_pauseParamGet,
+  .pauseParamsSet = sfvmk_pauseParamSet,
+};
+
+/****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
@@ -123,6 +137,115 @@ static vmk_UplinkOps sfvmkUplinkOps = {
   .uplinkQuiesceIO = sfvmk_uplinkQuiesceIO,
   .uplinkReset = sfvmk_uplinkReset,
 };
+
+/*! \brief uplink callback function to retrieve pause params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] params    pause parameters returned
+**
+** \return: VMK_OK <success> VMK_FAILURE <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_pauseParamGet(vmk_AddrCookie cookie,
+                    vmk_UplinkPauseParams *params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 fcntlWanted = VMK_FALSE;
+  vmk_uint32 fcntlLink   = VMK_FALSE;
+  vmk_uint32 mask        = VMK_FALSE;
+  sfvmk_port_t *pPort = NULL;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  pPort = &pAdapter->port;
+  SFVMK_NULL_PTR_CHECK(pPort);
+
+  vmk_MutexLock(pPort->lock);
+
+  efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntlLink);
+
+  params->txPauseEnabled = (fcntlWanted & EFX_FCNTL_GENERATE) ? VMK_TRUE : VMK_FALSE;
+  params->rxPauseEnabled = (fcntlWanted & EFX_FCNTL_RESPOND) ? VMK_TRUE : VMK_FALSE;
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT, &mask);
+
+  params->autoNegotiate = (mask & (1 << EFX_PHY_CAP_AN)) ? VMK_TRUE : VMK_FALSE;
+  params->localDeviceAdvertise = (mask & (1 << EFX_PHY_CAP_ASYM)) ? VMK_UPLINK_FLOW_CTRL_ASYM_PAUSE : VMK_UPLINK_FLOW_CTRL_PAUSE;
+
+  efx_phy_lp_cap_get(pAdapter->pNic, &mask);
+  params->linkPartnerAdvertise = (mask & (1 << EFX_PHY_CAP_ASYM)) ? VMK_UPLINK_FLOW_CTRL_ASYM_PAUSE : VMK_UPLINK_FLOW_CTRL_PAUSE;
+
+  vmk_MutexUnlock(pPort->lock);
+
+  return VMK_OK;
+}
+
+/*! \brief uplink callback function to set requested pause params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[in]  params    Pause parameters to set
+**
+** \return: VMK_OK <success> VMK_FAILURE <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 cap = 0;
+  vmk_uint32 fcntl = VMK_FALSE;
+  vmk_uint32 fcntlWanted = VMK_FALSE;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_port_t *pPort;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  pPort = &pAdapter->port;
+  SFVMK_NULL_PTR_CHECK(pPort);
+
+  vmk_MutexLock(pPort->lock);
+
+  efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntl);
+
+  if (params.txPauseEnabled == VMK_TRUE)
+    fcntl |=  EFX_FCNTL_GENERATE;
+  else
+    fcntl &= ~EFX_FCNTL_GENERATE;
+
+  if (params.rxPauseEnabled == VMK_TRUE)
+    fcntl |= EFX_FCNTL_RESPOND;
+  else
+    fcntl &= ~EFX_FCNTL_RESPOND;
+
+  status = efx_mac_fcntl_set(pAdapter->pNic, fcntl, params.autoNegotiate);
+  if (status != VMK_OK) {
+    vmk_LogMessage(" Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
+    status = VMK_FAILURE;
+    goto end;
+  }
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT, &cap);
+
+  if (params.autoNegotiate)
+    cap |= (1 << EFX_PHY_CAP_AN);
+  else
+    cap &= ~(1 << EFX_PHY_CAP_AN);
+
+  status = efx_phy_adv_cap_set(pAdapter->pNic, cap);
+  if (status != VMK_OK) {
+    vmk_LogMessage("VIJAYS Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
+    status = VMK_FAILURE;
+    goto end;
+  }
+
+  vmk_MutexUnlock(pPort->lock);
+
+  return VMK_OK;
+
+end:
+  return status;
+}
 
 /*! \brief uplink callback function to retrieve log level.
 **
@@ -443,6 +566,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
      SFVMK_ERR(pAdapter, "link status cap register failed with error %s",
                vmk_StatusToString(status));
      VMK_ASSERT(0);
+   }
+
+   /* Register Pause Params capability */
+   status = vmk_UplinkCapRegister(pAdapter->uplink,
+                                  VMK_UPLINK_CAP_PAUSE_PARAMS,
+                                  &sfvmkPauseParamsOps);
+   if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "Flow Control cap register failed with error 0x%s",
+                vmk_StatusToString(status));
+      VMK_ASSERT(0);
    }
 
   /* Driver supports getting and setting cable type */

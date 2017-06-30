@@ -64,6 +64,11 @@ sfvmk_intrAckMSIX(void *arg, vmk_IntrCookie intrCookie)
     return VMK_IGNORE;
   }
 
+  /* This info is required only for testing */
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+      "Got MSIX interrupt");
+ vmk_LogMessage("Got MSIX interrupt");
+
   return VMK_OK;
 }
 

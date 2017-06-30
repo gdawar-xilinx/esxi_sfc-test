@@ -1074,3 +1074,27 @@ sfvmk_qstart_fail:
   return VMK_FAILURE;
 }
 
+VMK_ReturnStatus
+sfvmk_ev_qmoderate(sfvmk_adapter_t *pAdapter, unsigned int index, unsigned int us)
+{
+  sfvmk_evq_t *pEvq = pAdapter->pEvq[index];
+  const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+
+  VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
+      "pEvq->initState != SFVMK_EVQ_STARTED");
+
+  /* Parameter Validation */
+  if (us > pNicCfg->enc_evq_timer_max_us) {
+    return VMK_BAD_PARAM;
+  }
+
+  SFVMK_EVQ_LOCK(pEvq);
+
+  (efx_ev_qmoderate(pEvq->pCommonEvq, us));
+
+  SFVMK_EVQ_UNLOCK(pEvq);
+
+  return VMK_OK;
+}
+
+

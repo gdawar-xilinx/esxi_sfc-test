@@ -87,6 +87,8 @@ VMK_ReturnStatus sfvmk_evStart(struct sfvmk_adapter_s *adapter);
 void sfvmk_evStop(struct sfvmk_adapter_s *adapter);
 void sfvmk_evFini(struct sfvmk_adapter_s *adapter);
 int sfvmk_evqPoll(sfvmk_evq_t *pEvq);
+VMK_ReturnStatus sfvmk_ev_qmoderate(struct sfvmk_adapter_s *adapter,
+	unsigned int index, unsigned int us);
 
 #endif /* __SFVMK_EV_H__ */
 

@@ -94,6 +94,18 @@ static vmk_UplinkPrivStatsOps sfvmkPrivStatsOps = {
    .privStatsGet           = sfvmk_privStatsGet,
 };
 
+/****************************************************************************
+ *               vmk_UplinkCoalesceParamsOps Handlers                       *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_coalesceParamsGet(vmk_AddrCookie,
+                                                 vmk_UplinkCoalesceParams *);
+static VMK_ReturnStatus sfvmk_coalesceParamsSet(vmk_AddrCookie,
+                                                 vmk_UplinkCoalesceParams *);
+
+static vmk_UplinkCoalesceParamsOps sfvmkCoalesceParamsOps = {
+   .getParams = sfvmk_coalesceParamsGet,
+   .setParams = sfvmk_coalesceParamsSet,
+};
 
 /****************************************************************************
  *               vmk_UplinkPauseParamsOps Handlers                          *
@@ -234,7 +246,7 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
 
   status = efx_phy_adv_cap_set(pAdapter->pNic, cap);
   if (status != VMK_OK) {
-    vmk_LogMessage("VIJAYS Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
+    vmk_LogMessage("Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
     status = VMK_FAILURE;
     goto end;
   }
@@ -288,6 +300,107 @@ static VMK_ReturnStatus sfvmk_messageLevelSet(vmk_AddrCookie cookie,
   vmk_LogSetCurrentLogLevel(sfvmk_ModInfo.logID , level);
 
   return VMK_OK;
+}
+
+/*! \brief uplink callback function to get current coalesce params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] params    pointer to vmk_UplinkCoalesceParams
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_coalesceParamsGet(vmk_AddrCookie cookie, vmk_UplinkCoalesceParams *params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_UplinkSharedQueueData *pQueueData;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_NULL_PTR_CHECK(params);
+
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  SFVMK_NULL_PTR_CHECK(pQueueData);
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "sfvmk_coalesceParamsGet entered");
+
+  vmk_Memset(params, 0, sizeof(vmk_UplinkCoalesceParams));
+
+  /* Firmware doesn't support different moderation settings for
+  different (rx/tx) event types, Only txUsecs parameter would be used */
+  params->txUsecs = params->rxUsecs = pQueueData->coalesceParams.txUsecs;
+
+  return VMK_OK;
+}
+
+/*! \brief uplink callback function to set requested coalesce params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[in] params    pointer to vmk_UplinkCoalesceParams
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
+                        vmk_UplinkCoalesceParams *params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_uint32 moderation=0, qIndex=0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_NULL_PTR_CHECK(params);
+
+  /* Firmware doesn't support different moderation settings
+      for different (rx/tx) event types, Only "txUsecs" parameter
+      would be considered if both the paramters are provided */
+   if (!(params->rxUsecs) && !(params->txUsecs))
+     return VMK_BAD_PARAM;
+   else if ((params->rxUsecs) && !(params->txUsecs))
+     moderation = params->rxUsecs;
+   else
+     moderation = params->txUsecs;
+
+   for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
+     status = sfvmk_ev_qmoderate(pAdapter, qIndex, moderation);
+     if (status != VMK_OK) {
+       vmk_LogMessage("Error : Invalid value (%d) of Interrupt Moderation [Value should be < 23921]  %s",
+			moderation, vmk_NameToString(&pAdapter->uplinkName));
+       goto end;
+     }
+   }
+
+   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+            "sfvmk_coalesceParamsSet: Configured static interupt moderation to %d (us)", moderation);
+
+   pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+   SFVMK_NULL_PTR_CHECK(pQueueData);
+
+   /* Once gloabl coalesce params are set, set to every TX/RX queues */
+   SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+
+   /* Configure RX queue data */
+   pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+   for (qIndex=0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
+     vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+   }
+
+   /* Configure TX queue data */
+   pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+   for (qIndex=0; qIndex < pAdapter->queueInfo.maxTxQueues; qIndex++) {
+     vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+   }
+
+   SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+
+   return VMK_OK;
+
+end:
+  return status;
+
 }
 
 /*! \brief uplink callback function to get ring params
@@ -595,6 +708,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                 "PRIV_STATS cap register failed with error 0x%x", status);
       VMK_ASSERT(0);
    }
+
+   /* Register coalace param capability */
+   status = vmk_UplinkCapRegister(pAdapter->uplink,VMK_UPLINK_CAP_COALESCE_PARAMS,
+				  &sfvmkCoalesceParamsOps);
+   if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "COALESCE_PARAMS cap register failed with error 0x%x",
+                status);
+      VMK_ASSERT(0);
+   }
+
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
   return (status);

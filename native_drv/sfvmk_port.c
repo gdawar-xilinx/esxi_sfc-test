@@ -313,7 +313,7 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
     goto sfvmk_port_init_fail;
 
   /* Set the SDU */
-  pdu = EFX_MAC_PDU(pAdapter->mtu);
+  pdu = EFX_MAC_PDU(pAdapter->sharedData.mtu);
   if ((rc = efx_mac_pdu_set(pNic, pdu)) != 0)
     goto sfvmk_mac_pdu_fail;
 

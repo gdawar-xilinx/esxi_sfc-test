@@ -691,7 +691,7 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
 
   pEfxNicCfg = efx_nic_cfg_get(pAdapter->pNic);
 
-  pAdapter->rxBufferSize = EFX_MAC_PDU(pAdapter->mtu);
+  pAdapter->rxBufferSize = EFX_MAC_PDU(pAdapter->sharedData.mtu);
 
   /* Calculate the receive packet buffer size. */
   pAdapter->rxPrefixSize = pEfxNicCfg->enc_rx_prefix_size;

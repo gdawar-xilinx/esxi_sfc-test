@@ -8,6 +8,8 @@
 
 /* default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
+/* JUMBO frame */
+#define SFVMK_JUMBO_FRAME 9000
 /* hardcoded max filter needs to revisit when implement multiQ */
 #define SFVMK_MAX_FILTER_PER_QUEUE 10
 
@@ -879,20 +881,64 @@ sfvmk_release_pkt:
 ** \param[in]  adapter pointer to sfvmk_adapter_t
 ** \param[in] mtu
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK <success>
+** \return: VMK_FAILURE <failure>
+** \return: VMK_BAD_PARAM <failure>
 **
 */
 static VMK_ReturnStatus
 sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  SFVMK_NULL_PTR_CHECK(pAdapter);
+  VMK_ReturnStatus status;
 
+  SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Not Supported");
-  /* TODO : feature implementation will be done later */
-  return VMK_OK;
+
+  SFVMK_ADAPTER_LOCK(pAdapter);
+  if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_ERR(pAdapter, "Adapter is not yet started");
+    status = VMK_FAILURE;
+    goto sfvmk_fail;
+  }
+
+  /* nothing to be done if mtu is same as before */
+  if (mtu == pAdapter->sharedData.mtu) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              " same as old mtu");
+    status = VMK_OK;
+    goto sfvmk_fail;
+  }
+  /* return error if mtu size more than jumbo frame */
+  else if (mtu > SFVMK_JUMBO_FRAME) {
+    SFVMK_ERR(pAdapter, "mtu[%d] is too big to handle", mtu);
+    status = VMK_BAD_PARAM;
+    goto sfvmk_fail;
+  }
+  else {
+    /* stopping io operation */
+    status = sfvmk_uplinkQuiesceIO(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "Failed in sfvmk_uplinkQuiesceIO, err %s",
+                vmk_StatusToString(status));
+      goto sfvmk_fail;
+    }
+    SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+    pAdapter->sharedData.mtu = mtu;
+    SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+    status = sfvmk_uplinkStartIO( pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "Failed in sfvmk_uplinkStartIO, err %s",
+                vmk_StatusToString(status));
+      goto sfvmk_fail;;
+    }
+  }
+
+sfvmk_fail:
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return status;
+
 }
 
 /*! \brief uplink callback function to set the link status.
@@ -1830,7 +1876,7 @@ sfvmk_initUplinkData(sfvmk_adapter_t * pAdapter)
   pSharedData->flags = 0;
   pSharedData->state = VMK_UPLINK_STATE_ENABLED;
 
-  pSharedData->mtu = pAdapter->mtu = SFVMK_DEFAULT_MTU;
+  pSharedData->mtu = SFVMK_DEFAULT_MTU;
 
   pSharedData->queueInfo = &pAdapter->queueInfo;
 

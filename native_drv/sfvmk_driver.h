@@ -105,7 +105,6 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32      txqEntries;
   vmk_uint32      evModeration;
   vmk_uint32      tsoFwAssisted;
-  vmk_uint32      mtu;
 
   size_t        rxPrefixSize;
   size_t        rxBufferSize;

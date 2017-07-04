@@ -18,6 +18,11 @@
 #define SFVMK_MAGIC_DMAQ_LABEL_MASK                \
   ((1 << SFVMK_MAGIC_DMAQ_LABEL_WIDTH) - 1)
 
+/* default interrupt moderation value */
+#define SFVMK_MODERATION_USEC           30
+/* Max interrupt moderation value */
+#define SFVMK_MAX_MODERATION_USEC       23920
+
 enum sfvmk_sw_ev {
   SFVMK_SW_EV_RX_QFLUSH_DONE = 1,
   SFVMK_SW_EV_RX_QFLUSH_FAILED,
@@ -87,7 +92,7 @@ VMK_ReturnStatus sfvmk_evStart(struct sfvmk_adapter_s *adapter);
 void sfvmk_evStop(struct sfvmk_adapter_s *adapter);
 void sfvmk_evFini(struct sfvmk_adapter_s *adapter);
 int sfvmk_evqPoll(sfvmk_evq_t *pEvq);
-VMK_ReturnStatus sfvmk_ev_qmoderate(struct sfvmk_adapter_s *adapter,
+VMK_ReturnStatus sfvmk_evqModerate(struct sfvmk_adapter_s *adapter,
 	unsigned int index, unsigned int us);
 
 #endif /* __SFVMK_EV_H__ */

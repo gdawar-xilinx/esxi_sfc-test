@@ -324,9 +324,6 @@ sfvmk_coalesceParamsGet(vmk_AddrCookie cookie, vmk_UplinkCoalesceParams *params)
   pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
   SFVMK_NULL_PTR_CHECK(pQueueData);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "sfvmk_coalesceParamsGet entered");
-
   vmk_Memset(params, 0, sizeof(vmk_UplinkCoalesceParams));
 
   /* Firmware doesn't support different moderation settings for
@@ -359,50 +356,50 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
   /* Firmware doesn't support different moderation settings
       for different (rx/tx) event types, Only "txUsecs" parameter
       would be considered if both the paramters are provided */
-   if (!(params->rxUsecs) && !(params->txUsecs))
-     return VMK_BAD_PARAM;
-   else if ((params->rxUsecs) && !(params->txUsecs))
-     moderation = params->rxUsecs;
-   else
-     moderation = params->txUsecs;
+  if (!(params->rxUsecs) && !(params->txUsecs))
+    return VMK_BAD_PARAM;
+  else if ((params->rxUsecs) && !(params->txUsecs))
+    moderation = params->rxUsecs;
+  else
+    moderation = params->txUsecs;
 
-   for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
-     status = sfvmk_ev_qmoderate(pAdapter, qIndex, moderation);
-     if (status != VMK_OK) {
-       vmk_LogMessage("Error : Invalid value (%d) of Interrupt Moderation [Value should be < 23921]  %s",
-			moderation, vmk_NameToString(&pAdapter->uplinkName));
-       goto end;
-     }
-   }
+  for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
+    status = sfvmk_evqModerate(pAdapter, qIndex, moderation);
+    if (status != VMK_OK) {
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_ERROR,
+		"Error : Invalid value (%d) of Interrupt Moderation [Value should be <= %d] %s",
+                moderation, SFVMK_MAX_MODERATION_USEC, vmk_NameToString(&pAdapter->uplinkName));
+      goto end;
+    }
+  }
 
-   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-            "sfvmk_coalesceParamsSet: Configured static interupt moderation to %d (us)", moderation);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+           "sfvmk_coalesceParamsSet: Configured static interupt moderation to %d (us)", moderation);
 
-   pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
-   SFVMK_NULL_PTR_CHECK(pQueueData);
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  SFVMK_NULL_PTR_CHECK(pQueueData);
 
-   /* Once gloabl coalesce params are set, set to every TX/RX queues */
-   SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+  /* Once gloabl coalesce params are set, set to every TX/RX queues */
+  SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
 
-   /* Configure RX queue data */
-   pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
-   for (qIndex=0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
-     vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
-   }
+  /* Configure RX queue data */
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  for (qIndex=0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+  }
 
-   /* Configure TX queue data */
-   pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
-   for (qIndex=0; qIndex < pAdapter->queueInfo.maxTxQueues; qIndex++) {
-     vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
-   }
+  /* Configure TX queue data */
+  pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+  for (qIndex=0; qIndex < pAdapter->queueInfo.maxTxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+  }
 
-   SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+  SFVMK_SHARED_AREA_END_WRITE(pAdapter);
 
-   return VMK_OK;
+  return VMK_OK;
 
 end:
   return status;
-
 }
 
 /*! \brief uplink callback function to get ring params
@@ -715,8 +712,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    status = vmk_UplinkCapRegister(pAdapter->uplink,VMK_UPLINK_CAP_COALESCE_PARAMS,
 				  &sfvmkCoalesceParamsOps);
    if (status != VMK_OK) {
-      SFVMK_ERR(pAdapter, "COALESCE_PARAMS cap register failed with error 0x%x",
-                status);
+      SFVMK_ERR(pAdapter, "COALESCE_PARAMS cap register failed, err :%s",
+                vmk_StatusToString(status));
       VMK_ASSERT(0);
    }
 

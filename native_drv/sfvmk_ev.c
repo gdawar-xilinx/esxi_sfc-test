@@ -6,9 +6,6 @@
  ************************************************************************/
 #include "sfvmk_driver.h"
 
-/* default interrupt moderation value */
-#define SFVMK_MODERATION_USEC   30
-
 #define NUM_TX_QUEUES_FOR_EVQ0  3
 /* space required in for link state event and mcdi completion */
 #define EVQ_EXTRA_SPACE         128
@@ -789,6 +786,7 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
   sfvmk_intr_t *pIntr;
   int qIndex;
   VMK_ReturnStatus status = VMK_OK;
+  vmk_UplinkSharedQueueData *pQueueData = NULL;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
@@ -802,6 +800,10 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
 
   /* Set default interrupt moderation; */
   pAdapter->evModeration = SFVMK_MODERATION_USEC;
+
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  SFVMK_NULL_PTR_CHECK(pQueueData);
+  pQueueData->coalesceParams.txUsecs = pAdapter->evModeration;
 
   /* Initialize the event queue(s) - one per interrupt.*/
   for (qIndex = 0; qIndex < pAdapter->evqCount; qIndex++) {
@@ -1075,10 +1077,13 @@ sfvmk_qstart_fail:
 }
 
 VMK_ReturnStatus
-sfvmk_ev_qmoderate(sfvmk_adapter_t *pAdapter, unsigned int index, unsigned int us)
+sfvmk_evqModerate(sfvmk_adapter_t *pAdapter, unsigned int index, unsigned int us)
 {
   sfvmk_evq_t *pEvq = pAdapter->pEvq[index];
   const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+
+  SFVMK_NULL_PTR_CHECK(pEvq);
+  SFVMK_NULL_PTR_CHECK(pNicCfg);
 
   VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
       "pEvq->initState != SFVMK_EVQ_STARTED");

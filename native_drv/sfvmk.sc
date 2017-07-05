@@ -11,7 +11,7 @@
 #
 
 driver_name    = "sfvmk"
-driver_ver     = "0.1.0.113"
+driver_ver     = "888_1_2_111"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {

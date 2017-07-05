@@ -175,7 +175,7 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
   pPort = &pAdapter->port;
   SFVMK_NULL_PTR_CHECK(pPort);
 
-  vmk_MutexLock(pPort->lock);
+  SFVMK_PORT_LOCK(pPort);
 
   efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntlLink);
 
@@ -190,7 +190,7 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
   efx_phy_lp_cap_get(pAdapter->pNic, &mask);
   params->linkPartnerAdvertise = (mask & (1 << EFX_PHY_CAP_ASYM)) ? VMK_UPLINK_FLOW_CTRL_ASYM_PAUSE : VMK_UPLINK_FLOW_CTRL_PAUSE;
 
-  vmk_MutexUnlock(pPort->lock);
+  SFVMK_PORT_UNLOCK(pPort);
 
   return VMK_OK;
 }
@@ -211,14 +211,14 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
   vmk_uint32 fcntl = VMK_FALSE;
   vmk_uint32 fcntlWanted = VMK_FALSE;
   VMK_ReturnStatus status = VMK_FAILURE;
-  sfvmk_port_t *pPort;
+  sfvmk_port_t *pPort = NULL;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
   pPort = &pAdapter->port;
   SFVMK_NULL_PTR_CHECK(pPort);
 
-  vmk_MutexLock(pPort->lock);
+  SFVMK_PORT_LOCK(pPort);
 
   efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntl);
 
@@ -234,7 +234,8 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
 
   status = efx_mac_fcntl_set(pAdapter->pNic, fcntl, params.autoNegotiate);
   if (status != VMK_OK) {
-    vmk_LogMessage(" Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_ERROR,
+         "Set flow control failed with err %s",vmk_NameToString(&pAdapter->uplinkName));
     status = VMK_FAILURE;
     goto end;
   }
@@ -248,16 +249,18 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
 
   status = efx_phy_adv_cap_set(pAdapter->pNic, cap);
   if (status != VMK_OK) {
-    vmk_LogMessage("Set flow control failed for %s",vmk_NameToString(&pAdapter->uplinkName));
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_ERROR,
+         "Set flow control failed with err %s",vmk_NameToString(&pAdapter->uplinkName));
     status = VMK_FAILURE;
     goto end;
   }
 
-  vmk_MutexUnlock(pPort->lock);
+  SFVMK_PORT_UNLOCK(pPort);
 
   return VMK_OK;
 
 end:
+  SFVMK_PORT_UNLOCK(pPort);
   return status;
 }
 

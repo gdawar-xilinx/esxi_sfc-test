@@ -107,7 +107,6 @@ versionupdate () {
     echo "tag: $tag, ver : $ver"
     ver=${ver:1}
     ver="\"${ver}\""
-    echo "..VERION ... : $ver"
     sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
 }
 
@@ -127,7 +126,7 @@ commitversion () {
     fi
 
     # fail gracefully when it's a no-op, like hg commit already does
-    vmsg "repo ${repo} tag ${tag}"
+    echo "repo ${repo} tag ${tag}"
     if [ -z "$(hg --noninteractive tags | grep ${tag})" ]; then
         hg --noninteractive tag ${tag}
     fi

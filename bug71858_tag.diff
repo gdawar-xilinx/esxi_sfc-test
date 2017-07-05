@@ -1,0 +1,175 @@
+diff -r 977c464861a3 script/createtag
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/script/createtag	Wed Jul 05 18:52:32 2017 +0100
+@@ -0,0 +1,171 @@
++#!/bin/bash -eu
++#############
++
++# This script currently:
++# - version bumps in sfvmk.sc
++# - tags esxi_sfc
++# - commit and push changes
++
++
++p=$(basename "$0")
++args="$@"
++
++err  () { echo "$*" 1>&2; }
++msg () { echo 1>&2 "$p: $*"; }
++vmsg () { if ${verbose}; then echo "$p: $*"; fi; }
++log  () { err "$p: $*"; }
++fail () { log "$@"; exit 1; }
++
++# Usage
++usage () {
++    err "Usage: mmaketag <branch> [<desired new tag>]"
++    err
++    err "  branch:"
++    err
++    err "    The branch can be either 'default' 'sfvmk_dev_x'. If crossing branches,"
++    err "    mmaketag will take care to re-exec mmaketag on the target branch."
++    err
++    err "  desired new tag:"
++    err
++    err "    The tag can be in the form of the following:"
++    err "      v1_1_m"
++    err "      v1_1_m_bbbb"
++    err "    Note that mmaketag will check that this tag does not already exist"
++    err
++    exit 1
++}
++[ $# = 2 ] || usage
++
++branch=$1
++echo $branch
++tag=${2:-}
++echo $tag
++repo="esxi_sfc"
++prompt=true
++changes_pushed=false
++
++# Functions
++
++checkrequiredargs() {
++    [ "${branch}" == "${branch/\-\-/X}" ] || \
++        fail "Please check -- arguments are first"
++    [ "${tag}" == "${tag/\-\-/X}" ] || \
++        fail "Please check -- arguments are first"
++}
++
++tinderboxcheck() {
++    if $prompt; then
++        # Manual check for now
++        echo
++        echo "*** Please consult http://tinderbox/ to check that the current tree builds (to avoid bad tags) ***"
++        read -p "Press enter to proceed (or use --noprompt) ..."
++        echo "Thanks, proceeding ..."
++    fi
++}
++
++sanitychecks () {
++            # Check no local changes
++            lines=$(hg --noninteractive status | wc -l)
++            [ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
++
++            # Check no outgoing commits
++            hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
++               fail "Repo ${repo} has outgoing changes"
++
++           # Check no applied mqueue patches - without needing mqueue extension
++            hg --noninteractive tags | grep qparent && \
++                fail "Repo ${repo} has mqueue patches applied. Aborting" || true
++}
++
++hgpull () {
++    hg --noninteractive pull
++
++    # We assume that newbranch already exists
++    # This will leave esxi_sfc/build
++    log "Updating '${repo}' to branch '${branch}'"
++    hg --noninteractive update --clean ${branch}
++}
++
++checktagexists() {
++     echo "Checking Existing tags"
++     hg log -r "$tag" >/dev/null 2>&1
++}
++
++checklasttag() {
++     checktagexists  && \
++         fail "Error: $tag already exist !!!"
++
++     echo " Tag $tag does not exist in the repo : $repo"
++}
++
++# Update the sfvmk.sc file in the repository $1 to ${tag}
++versionupdate () {
++    echo "updating ${repo} repo to ${tag}"
++
++    file=$(pwd)/native_drv/sfvmk.sc
++    ver=$tag
++    echo "tag: $tag, ver : $ver"
++    ver=${ver:1}
++    ver="\"${ver}\""
++    echo "..VERION ... : $ver"
++    sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
++}
++
++# Return true (via $?) if the working directory contains local changes
++checkworkingdir () {
++    local repo lines
++    repo="$1"
++    lines="$(hg --noninteractive status | wc -l)"
++    test ${lines} -gt 0
++}
++
++commitversion () {
++    echo "repo ${repo} commit version ${tag}"
++    if checkworkingdir ${repo}; then
++        hg --noninteractive addremove
++        hg --noninteractive commit --message "Task 71858 : Update version numbers to ${tag}"
++    fi
++
++    # fail gracefully when it's a no-op, like hg commit already does
++    vmsg "repo ${repo} tag ${tag}"
++    if [ -z "$(hg --noninteractive tags | grep ${tag})" ]; then
++        hg --noninteractive tag ${tag}
++    fi
++}
++
++
++hgpush () {
++    local repo="$1" rev
++
++    msg "push back ${repo} changes"
++
++    hg --noninteractive push || true
++}
++
++maketag () {
++    commitversion
++
++    local answer=""
++    until [ "$answer" = "y" -o "$answer" = "n" ]; do
++        echo "You can explore the changes with 'hg outgoing -p'"
++        echo "You can request a test of these changes here http://tinderbox/request"
++        read -p "Do you want to push the above tag ${tag} (y/n)" answer
++    done
++    if [ "$answer" = "y" ]; then
++           hgpush ${repo}
++       changes_pushed=true
++       msg "Changes have been pushed. Tag ${tag} was created."
++    else
++       fail "Please hg strip the outgoing commits from your repo"
++    fi
++}
++
++# Invoke Functions to create tag
++checkrequiredargs
++tinderboxcheck
++sanitychecks
++hgpull
++checklasttag
++versionupdate
++maketag
++${changes_pushed} && log "Please update the correct !TEST! entry with details"

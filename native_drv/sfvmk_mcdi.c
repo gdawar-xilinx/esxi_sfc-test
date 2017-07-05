@@ -39,7 +39,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 **
 ** \param[in] adapter pointer to sfvmk_adapter_t
 **
-** \return: void
+** \return: 0 <success> error code <failure>
 */
 static int
 sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)

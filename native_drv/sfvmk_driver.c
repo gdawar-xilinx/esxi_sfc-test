@@ -535,12 +535,13 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
 **
 */
 static VMK_ReturnStatus
-sfvmk_CreateHelper(sfvmk_adapter_t *pAdapter)
+sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
 {
   vmk_HelperProps props;
   VMK_ReturnStatus status;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter,SFVMK_DBG_DRIVER);
 
   vmk_NameFormat(&props.name, "%s-helper",
                  SFVMK_NAME_TO_STRING(sfvmk_ModInfo.driverName));
@@ -559,7 +560,8 @@ sfvmk_CreateHelper(sfvmk_adapter_t *pAdapter)
 
   status = vmk_HelperCreate(&props, &pAdapter->helper);
   if (status != VMK_OK) {
-     SFVMK_ERROR("Failed to create helper world queue (%x)", status);
+     SFVMK_ERR(pAdapter, "Failed to create helper world queue %s",
+                vmk_StatusToString(status));
   }
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
@@ -574,9 +576,9 @@ sfvmk_CreateHelper(sfvmk_adapter_t *pAdapter)
 **
 */
 static void
-sfmvk_DestroyHelper(sfvmk_adapter_t *pAdapter)
+sfmvk_destroyHelper(sfvmk_adapter_t *pAdapter)
 {
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_DRIVER);
   vmk_HelperDestroy(pAdapter->helper);
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
 }
@@ -777,7 +779,7 @@ sfvmk_attachDevice(vmk_Device dev)
     goto sfvmk_set_drvdata_fail;
   }
 
-  status = sfvmk_CreateHelper(pAdapter);
+  status = sfvmk_createHelper(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "failed while creating helper"
               "with err %s", vmk_StatusToString(status));
@@ -1027,7 +1029,7 @@ sfvmk_detachDevice(vmk_Device dev)
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  sfmvk_DestroyHelper(pAdapter);
+  sfmvk_destroyHelper(pAdapter);
 
   /* Destroy worker thread. */
   if (pAdapter->worldId) {

@@ -32,8 +32,6 @@ static VMK_ReturnStatus sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
 
 static int sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter);
 static void sfvmk_updateCableType(sfvmk_adapter_t *adapter);
-static VMK_ReturnStatus sfvmk_stopNic(sfvmk_adapter_t *pAdapter);
-static VMK_ReturnStatus sfvmk_startNic(sfvmk_adapter_t *pAdapter);
 static void sfvmk_uplinkResetHelper(vmk_AddrCookie data);
 
 /****************************************************************************
@@ -530,7 +528,6 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
-  SFVMK_ADAPTER_LOCK(pAdapter);
   /* Handle Link down request */
   if (linkStatus->state == VMK_LINK_STATE_DOWN) {
 
@@ -543,18 +540,19 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
     }
 
     /* Call Uplink Quiesce IO to bring the link down */
-    status = sfvmk_stopNic(pAdapter);
+    status = sfvmk_uplinkQuiesceIO(pAdapter);
     goto sfvmk_link_state_done;
   }
-  
+
   /* Handle Link UP request */
   if (pAdapter->initState != SFVMK_STARTED) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
               "Bringing link UP");
-    status = sfvmk_startNic(pAdapter);
+    status = sfvmk_uplinkStartIO(pAdapter);
     goto sfvmk_link_state_done;
   }
 
+  SFVMK_ADAPTER_LOCK(pAdapter);
   if (linkStatus->speed >= 1000) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
               "Update the link speed");
@@ -565,10 +563,10 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
     status = VMK_BAD_PARAM;
   }
 
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
 sfvmk_link_state_done:
-  SFVMK_ADAPTER_UNLOCK(pAdapter);
   return status;
 }
 
@@ -1150,10 +1148,8 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Uplink Reset Started");
-
   sfvmk_uplinkResetHelper(cookie);
+
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return VMK_OK;
 }
@@ -1211,134 +1207,24 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *) cookie.ptr;
   VMK_ReturnStatus status;
+  int rc;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "Received Uplink Start I/O");
-  status = sfvmk_startNic(pAdapter);
-  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
-  return status;
-}
-
-/*! \brief uplink callback function to  Quiesce IO operations.
-**
-** \param[in]  cookie  pointer to sfvmk_adapter_t
-**
-** \return: VMK_OK <success> error code <failure>
-**
-*/
-static VMK_ReturnStatus
-sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
-{
-  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status;
-
-  SFVMK_NULL_PTR_CHECK(pAdapter);
-
-  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
-
-  status = sfvmk_stopNic(pAdapter);
-
-  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
-
-  return status;
-}
-
-/*! \brief Helper callback to reset NIC.
-**
-** \param[in]  cookie  pointer to sfvmk_adapter_t
-**
-** \return: None
-**
-*/
-static void
-sfvmk_uplinkResetHelper(vmk_AddrCookie data)
-{
-  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)data.ptr;
-  int rc;
-  unsigned int attempt;
-
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Reset Helper callback");
-
-  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
   SFVMK_ADAPTER_LOCK(pAdapter);
-
-  sfvmk_stopNic(pAdapter);
-  efx_nic_reset(pAdapter->pNic);
-  for (attempt = 0; attempt < 3; ++attempt) {
-   if ((rc = sfvmk_startNic(pAdapter)) == 0)
-     break;
-
-     vmk_DelayUsecs(100000);
-  }
-
-  SFVMK_ADAPTER_UNLOCK(pAdapter);
-  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
-}
-
-/*! \brief Fuction to submit driver reset request.
-**
-** \param[in]  pointer to sfvmk_adapter_t
-**
-** \return: VMK_OK <success> error code <failure>
-**
-*/
-VMK_ReturnStatus
-sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
-{
-  vmk_HelperRequestProps props;
-  VMK_ReturnStatus status;
-
-  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Submit request for Reset helper");
-
-  if (pAdapter->initState != SFVMK_STARTED) {
-    SFVMK_ERR(pAdapter, "Can't reset now, Driver is not in running state");
-   return VMK_FAILURE;
-  }
-
-  /* Create a request and submit */
-  props.requestMayBlock = VMK_FALSE;
-  props.tag = (vmk_AddrCookie)NULL;
-  props.cancelFunc = NULL;
-  props.worldToBill = VMK_INVALID_WORLD_ID;
-  status = vmk_HelperSubmitRequest(pAdapter->helper,
-                                   sfvmk_uplinkResetHelper,
-                                   (vmk_AddrCookie *)pAdapter,
-                                   &props);
-  if (status != VMK_OK) {
-     vmk_LogMessage("Failed to submit reset request to "
-                  "helper world queue (%x)", status);
-  }
-
-  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
-  return status;
-}
-
-/*! \brief NIC start function
-**
-** \param[in]  pointer to sfvmk_adapter_t
-**
-** \return: VMK_OK <success> error code <failure>
-**
-*/
-static VMK_ReturnStatus sfvmk_startNic(sfvmk_adapter_t *pAdapter)
-{
-  VMK_ReturnStatus status;
-  int rc;
-
-  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
-
-  if (pAdapter->initState == SFVMK_STARTED)
+  if (pAdapter->initState == SFVMK_STARTED) {
+    SFVMK_ADAPTER_UNLOCK(pAdapter);
     return VMK_OK;
+  }
 
-  if (pAdapter->initState != SFVMK_REGISTERED)
+  if (pAdapter->initState != SFVMK_REGISTERED) {
+    SFVMK_ADAPTER_UNLOCK(pAdapter);
     return VMK_FAILURE;
+  }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "Start NIC");
@@ -1395,9 +1281,11 @@ static VMK_ReturnStatus sfvmk_startNic(sfvmk_adapter_t *pAdapter)
 
   pAdapter->initState = SFVMK_STARTED;
 
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
+
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
-  return status;
+  return VMK_OK;
 
 sfvmk_tx_start_fail:
   sfvmk_rxStop(pAdapter);
@@ -1410,25 +1298,32 @@ sfvmk_ev_start_fail:
 sfvmk_intr_start_fail:
   efx_nic_fini(pAdapter->pNic);
 sfvmk_fail:
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
   return VMK_FAILURE;
 }
 
-/*! \brief NIC stop function
+/*! \brief uplink callback function to  Quiesce IO operations.
 **
-** \param[in]  pointer to sfvmk_adapter_t
+** \param[in]  cookie  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK <success> error code <failure>
 **
 */
-static VMK_ReturnStatus sfvmk_stopNic(sfvmk_adapter_t *pAdapter)
+static VMK_ReturnStatus
+sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 {
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Stop NIC");
+  SFVMK_ADAPTER_LOCK(pAdapter);
 
-  if (pAdapter->initState != SFVMK_STARTED)
+  if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_ADAPTER_UNLOCK(pAdapter);
     return VMK_FAILURE;
+  }
 
   pAdapter->initState = SFVMK_REGISTERED;
 
@@ -1449,8 +1344,78 @@ static VMK_ReturnStatus sfvmk_stopNic(sfvmk_adapter_t *pAdapter)
 
   efx_nic_fini(pAdapter->pNic);
 
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+
   return VMK_OK;
+}
+
+/*! \brief Helper callback to reset NIC.
+**
+** \param[in]  cookie  pointer to sfvmk_adapter_t
+**
+** \return: None
+**
+*/
+static void
+sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  int rc;
+  unsigned int attempt;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  sfvmk_uplinkQuiesceIO(cookie);
+  efx_nic_reset(pAdapter->pNic);
+  for (attempt = 0; attempt < 3; ++attempt) {
+   if ((rc = sfvmk_uplinkStartIO(cookie)) == 0)
+     break;
+
+     vmk_DelayUsecs(100000);
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+}
+
+/*! \brief Fuction to submit driver reset request.
+**
+** \param[in]  pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+VMK_ReturnStatus
+sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
+{
+  vmk_HelperRequestProps props;
+  VMK_ReturnStatus status;
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_ERR(pAdapter, "Can't reset now, Driver is not in running state");
+    return VMK_FAILURE;
+  }
+
+  /* Create a request and submit */
+  props.requestMayBlock = VMK_FALSE;
+  props.tag = (vmk_AddrCookie)NULL;
+  props.cancelFunc = NULL;
+  props.worldToBill = VMK_INVALID_WORLD_ID;
+  status = vmk_HelperSubmitRequest(pAdapter->helper,
+                                   sfvmk_uplinkResetHelper,
+                                   (vmk_AddrCookie *)pAdapter,
+                                   &props);
+  if (status != VMK_OK) {
+     SFVMK_ERR(pAdapter, "Failed to submit reset request to "
+                "helper world queue %s", vmk_StatusToString(status));
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return status;
 }
 
 /*! \brief It creates a spin lock with specified name and lock rank.

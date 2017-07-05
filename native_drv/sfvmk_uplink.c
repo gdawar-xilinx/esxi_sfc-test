@@ -354,14 +354,21 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
   SFVMK_NULL_PTR_CHECK(params);
 
   /* Firmware doesn't support different moderation settings
-      for different (rx/tx) event types, Only "txUsecs" parameter
-      would be considered if both the paramters are provided */
+      for different (rx/tx) event types.*/
   if (!(params->rxUsecs) && !(params->txUsecs))
     return VMK_BAD_PARAM;
-  else if ((params->rxUsecs) && !(params->txUsecs))
+  else if ((params->rxUsecs) && !(params->txUsecs)) {
+    /* rxUsecs param would be configured if txUsec is not provided */
     moderation = params->rxUsecs;
-  else
+    /* Update tx param as fw supports same moderation setting for both rx & tx */
+    params->txUsecs = params->rxUsecs;
+  }
+  else {
+    /* Only txUsecs parameter would be considered if both the paramters are provided */
     moderation = params->txUsecs;
+    /* Update rx param as fw supports same moderation setting for both rx & tx */
+    params->rxUsecs = params->txUsecs;
+  }
 
   for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
     status = sfvmk_evqModerate(pAdapter, qIndex, moderation);

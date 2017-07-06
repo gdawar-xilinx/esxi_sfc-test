@@ -30,6 +30,7 @@ extern void             sfvmk_driverUnregister(void);
 }
 
 #define SFVMK_PRIV_STATS_BUFFER_SZ    20480
+#define SFVMK_PRIV_STATS_ENTRY_LEN    128
 
 /* Offset in 256 bytes configuration address space */
 #define SFVMK_PCI_COMMAND             0x04
@@ -120,7 +121,7 @@ typedef struct sfvmk_adapter_s {
 
   vmk_DeviceID   deviceID;
 
-  /* World for preodic device stats collection */
+  /* World for periodic device stats collection */
   vmk_WorldID  worldId;
 
   /*uplink device inforamtion */

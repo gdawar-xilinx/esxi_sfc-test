@@ -33,6 +33,8 @@ static VMK_ReturnStatus sfvmk_allocQ(sfvmk_adapter_t *pAdapter,
 static int sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter);
 static void sfvmk_updateCableType(sfvmk_adapter_t *adapter);
 static void sfvmk_uplinkResetHelper(vmk_AddrCookie data);
+static VMK_ReturnStatus sfvmk_createWorld(sfvmk_adapter_t *pAdapter);
+static VMK_ReturnStatus sfvmk_workerThread(void *clientData);
 
 /****************************************************************************
 *                vmk_UplinkMessageLevelOps Handler                          *
@@ -968,43 +970,44 @@ sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
 ** \Return: VMK_OK
 */
 static VMK_ReturnStatus
-sfvmk_requestPrivStats(sfvmk_adapter_t *pAdapter, char *statsBuf)
+sfvmk_requestPrivStats(sfvmk_adapter_t *pAdapter, char *pStatsBuf)
 {
   uint32_t id;
-  int offset, count = 0;
-  const char *name;
+  vmk_ByteCount offset = 0;
+  const char *pEntryName;
 
-  offset = vmk_Sprintf(statsBuf, "\n");
-  statsBuf += offset;
-  count += offset;
+  offset = vmk_Sprintf(pStatsBuf, "\n");
+  pStatsBuf += offset;
   for (id = 0; id < EFX_MAC_NSTATS; id++) {
-    name = efx_mac_stat_name(pAdapter->pNic, id);
-    offset = vmk_Sprintf(statsBuf, "%s: %lu\n", name, pAdapter->adapterStats[id]);
+    pEntryName = efx_mac_stat_name(pAdapter->pNic, id);
+    vmk_StringFormat(pStatsBuf, SFVMK_PRIV_STATS_ENTRY_LEN, &offset, "%s: %lu\n",
+                      pEntryName, pAdapter->adapterStats[id]);
+
     if (offset >= SFVMK_PRIV_STATS_BUFFER_SZ) {
 	return VMK_EOVERFLOW;
     }
 
-    statsBuf += offset;
-    count += offset;
+    pStatsBuf += offset;
   }
 
-  //TODO: Fill the driver maintained Statisitics
+  /* TODO: Fill the driver maintained Statisitics */
   return VMK_OK;
 }
 
 /*! \brief Handler used by vmkernel to get uplink private stats length
 **
 ** \param[in]  cookie  struct holding driverData
-** \param[out] length  length of the private stats in bytes
+** \param[out] pLength  length of the private stats in bytes
 **
 ** \Return: VMK_OK
 */
 static VMK_ReturnStatus
-sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *length)
+sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *pLength)
 {
-  VMK_ASSERT(length != NULL);
 
-  *length = SFVMK_PRIV_STATS_BUFFER_SZ;
+  VMK_ASSERT(pLength != NULL);
+
+  *pLength = SFVMK_PRIV_STATS_BUFFER_SZ;
 
   return VMK_OK;
 }
@@ -1019,76 +1022,78 @@ sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *length)
 */
 static VMK_ReturnStatus
 sfvmk_privStatsGet(vmk_AddrCookie cookie,
-                    char *statsBuf, vmk_ByteCount length)
+                    char *pStatsBuf, vmk_ByteCount length)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
 
-  if (statsBuf) {
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  if (pStatsBuf) {
     SFVMK_ADAPTER_LOCK(pAdapter);
-    sfvmk_requestPrivStats(pAdapter, statsBuf);
+    sfvmk_requestPrivStats(pAdapter, pStatsBuf);
     SFVMK_ADAPTER_UNLOCK(pAdapter);
   }
 
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return VMK_OK;
 }
 
 /*! \brief uplink callback function to get the NIC stats
 **
 ** \param[in]  adapter     pointer to sfvmk_adapter_t
-** \param[out] nicStats    ptr to stats
+** \param[out] pNicStats    ptr to stats
 **
 ** \return: VMK_OK <success> error code <failure>
 **
 */
 static VMK_ReturnStatus
-sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *nicStats )
+sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats )
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
-
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "sfvmk_uplinkStatsGet entered");
 
   SFVMK_ADAPTER_LOCK(pAdapter);
 
-  vmk_Memset(nicStats, 0, sizeof(*nicStats));
+  vmk_Memset(pNicStats, 0, sizeof(*pNicStats));
 
-  nicStats->rxPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_UNICAST_PACKETS] +
+  pNicStats->rxPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_UNICAST_PACKETS] +
                      pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS] +
                      pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
 
-  nicStats->txPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_UNICAST_PACKETS] +
+  pNicStats->txPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_UNICAST_PACKETS] +
                      pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS] +
                      pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
 
-  nicStats->rxBytes = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_UNICAST_BYTES] +
+  pNicStats->rxBytes = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_UNICAST_BYTES] +
                       pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_MULTICAST_BYTES] +
                       pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_BROADCAST_BYTES];
 
-  nicStats->txBytes = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_UNICAST_BYTES] +
+  pNicStats->txBytes = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_UNICAST_BYTES] +
                       pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_MULTICAST_BYTES] +
                       pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_BROADCAST_BYTES];
 
-  nicStats->rxMulticastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS];
-  nicStats->txMulticastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS];
-  nicStats->rxBroadcastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
-  nicStats->txBroadcastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
-  nicStats->rxErrors = pAdapter->adapterStats[EFX_MAC_RX_ERRORS];
-  nicStats->txErrors = pAdapter->adapterStats[EFX_MAC_TX_ERRORS];
-  nicStats->collisions = pAdapter->adapterStats[EFX_MAC_TX_SGL_COL_PKTS] +
+  pNicStats->rxMulticastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS];
+  pNicStats->txMulticastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS];
+  pNicStats->rxBroadcastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
+  pNicStats->txBroadcastPkts = pAdapter->adapterStats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
+  pNicStats->rxErrors = pAdapter->adapterStats[EFX_MAC_RX_ERRORS];
+  pNicStats->txErrors = pAdapter->adapterStats[EFX_MAC_TX_ERRORS];
+  pNicStats->collisions = pAdapter->adapterStats[EFX_MAC_TX_SGL_COL_PKTS] +
                          pAdapter->adapterStats[EFX_MAC_TX_MULT_COL_PKTS] +
                          pAdapter->adapterStats[EFX_MAC_TX_EX_COL_PKTS] +
                          pAdapter->adapterStats[EFX_MAC_TX_LATE_COL_PKTS];
 
-  nicStats->rxFrameAlignErrors = pAdapter->adapterStats[EFX_MAC_RX_ALIGN_ERRORS];
-  nicStats->rxDrops = pAdapter->adapterStats[EFX_MAC_RX_NODESC_DROP_CNT];
-  nicStats->rxOverflowErrors = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_OVERFLOW];
-  nicStats->rxCRCErrors = pAdapter->adapterStats[EFX_MAC_RX_ALIGN_ERRORS];
-  nicStats->rxLengthErrors = pAdapter->adapterStats[EFX_MAC_RX_FCS_ERRORS] +
+  pNicStats->rxFrameAlignErrors = pAdapter->adapterStats[EFX_MAC_RX_ALIGN_ERRORS];
+  pNicStats->rxDrops = pAdapter->adapterStats[EFX_MAC_RX_NODESC_DROP_CNT];
+  pNicStats->rxOverflowErrors = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_OVERFLOW];
+  pNicStats->rxCRCErrors = pAdapter->adapterStats[EFX_MAC_VADAPTER_RX_BAD_PACKETS];
+  pNicStats->rxLengthErrors = pAdapter->adapterStats[EFX_MAC_RX_FCS_ERRORS] +
                              pAdapter->adapterStats[EFX_MAC_RX_JABBER_PKTS];
   SFVMK_ADAPTER_UNLOCK(pAdapter);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return VMK_OK;
 }
 
@@ -1279,6 +1284,13 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto sfvmk_tx_start_fail;
   }
 
+  status = sfvmk_createWorld(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "Failed to create world with error %s",
+              vmk_StatusToString(status));
+    goto sfvmk_world_create_fail;
+  }
+
   pAdapter->initState = SFVMK_STARTED;
 
   SFVMK_ADAPTER_UNLOCK(pAdapter);
@@ -1287,6 +1299,8 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 
   return VMK_OK;
 
+sfvmk_world_create_fail:
+  sfvmk_txStop(pAdapter);
 sfvmk_tx_start_fail:
   sfvmk_rxStop(pAdapter);
 sfvmk_rx_start_fail:
@@ -1326,6 +1340,13 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   }
 
   pAdapter->initState = SFVMK_REGISTERED;
+
+  /* Destroy worker thread. */
+  if (pAdapter->worldId) {
+    vmk_WorldDestroy(pAdapter->worldId);
+    vmk_WorldWaitForDeath(pAdapter->worldId);
+    pAdapter->worldId = 0;
+  }
 
   /* Stop the transmitter. */
   sfvmk_txStop(pAdapter);
@@ -1917,5 +1938,95 @@ sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter)
       pAdapter->intr.numIntrAlloc;
 
   return (efx_nic_set_drv_limits(pAdapter->pNic, &limits));
+}
+
+#define SFVMK_WORKER_TIMEOUT_MSEC 1000 /* 1 sec */
+
+/*! /brief: Worker thread for stats collection
+**
+** /param[in]: pClientData adapter pointer to sfvmk device
+**
+** /return:  VMK_OK on success ERRNO on failure
+*/
+static VMK_ReturnStatus
+sfvmk_workerThread(void *pClientData)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)pClientData;
+  VMK_ReturnStatus  status;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  do {
+    /* Collect MAC stats periodically */
+    if (pAdapter->initState == SFVMK_STARTED) {
+      uint64_t *pMacStats;
+
+      SFVMK_ADAPTER_LOCK(pAdapter);
+      status = sfvmk_macStatsUpdate(pAdapter);
+      if (status == 0) {
+        uint32_t idx;
+        pMacStats = (uint64_t *)pAdapter->port.macStats.pDecodeBuf;
+
+        /* Update driver copy of stats */
+	for (idx = 0; idx < EFX_MAC_NSTATS; idx++)
+          pAdapter->adapterStats[idx] = pMacStats[idx];
+      }
+
+      SFVMK_ADAPTER_UNLOCK(pAdapter);
+    }
+
+retry:
+    status = vmk_WorldWait(VMK_EVENT_NONE,
+                            VMK_LOCK_INVALID,
+                            SFVMK_WORKER_TIMEOUT_MSEC,
+                            "sfvmk_workerThread");
+
+    /* Spurious wakeups are possible. Therefore, the return
+     * status must be checked against VMK_WAIT_INTERRUPTED
+     * and then sleep for remaining time */
+    if (status == VMK_WAIT_INTERRUPTED)
+      goto retry;
+
+  } while (status != VMK_DEATH_PENDING);
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return VMK_OK;
+}
+
+/*! \brief: Function to create VMK world
+**
+** \param[in]  pAdapter pointer to adapter
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_createWorld(sfvmk_adapter_t *pAdapter)
+{
+  vmk_WorldProps sfvmk_worldProps;
+  VMK_ReturnStatus status = VMK_OK;
+
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  /* Worker thread initialization and creation. */
+  sfvmk_worldProps.moduleID = vmk_ModuleCurrentID;
+  sfvmk_worldProps.name = "sfvmk_workerThread";
+  sfvmk_worldProps.startFunction = sfvmk_workerThread;
+  sfvmk_worldProps.data =  (void*) pAdapter;
+  sfvmk_worldProps.schedClass = VMK_WORLD_SCHED_CLASS_DEFAULT;
+
+  /* In the previous releases, the vmk_WorldCreate() interface
+     used the module heap internally. */
+  sfvmk_worldProps.heapID = sfvmk_ModInfo.heapID;
+
+  status = vmk_WorldCreate(&sfvmk_worldProps, &pAdapter->worldId);
+  VMK_ASSERT(status == VMK_OK);
+  if (status != VMK_OK) {
+     SFVMK_ERR(pAdapter, "Failed to create worker thread %s",
+                vmk_StatusToString(status));
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return status;
 }
 

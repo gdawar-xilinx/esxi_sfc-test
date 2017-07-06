@@ -837,53 +837,6 @@ sfvmk_adapter_alloc_fail:
   return status;
 }
 
-/*! /brief: Worker thread for stats collection
-**
-** /param[in]: adapter pointer to sfvmk device
-**
-** /return:  VMK_OK on success ERRNO on failure
-*/
-#define SFVMK_WORKER_TIMEOUT_MSEC 1000 /* 1 sec */
-
-static VMK_ReturnStatus
-sfvmk_workerThread(void *clientData)
-{
-  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)clientData;
-  VMK_ReturnStatus  status;
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
-  SFVMK_NULL_PTR_CHECK(pAdapter);
-
-  do {
-    /* Collect MAC stats periodically */
-    if (pAdapter->initState == SFVMK_STARTED) {
-      uint64_t *macStats;
-
-      SFVMK_ADAPTER_LOCK(pAdapter);
-      status = sfvmk_macStatsUpdate(pAdapter);
-      if (status == 0) {
-        uint32_t idx;
-        macStats = (uint64_t *)pAdapter->port.macStats.decodeBuf;
-
-        /* Update driver copy of stats*/
-	for (idx = 0; idx < EFX_MAC_NSTATS; idx++)
-          pAdapter->adapterStats[idx] = macStats[idx];
-      }
-
-      SFVMK_ADAPTER_UNLOCK(pAdapter);
-    }
-
-    status = vmk_WorldWait(VMK_EVENT_NONE,
-                            VMK_LOCK_INVALID,
-                            SFVMK_WORKER_TIMEOUT_MSEC,
-                            "sfvmk_workerThread");
-
-  } while (status != VMK_DEATH_PENDING);
-
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DBG_DRIVER);
-  return VMK_OK;
-}
-
 /*! \brief: Callback routine for the device layer to notify the driver to
 ** bring up the specified device.
 **
@@ -895,16 +848,11 @@ static VMK_ReturnStatus
 sfvmk_startDevice(vmk_Device dev)
 {
   sfvmk_adapter_t *pAdapter = NULL;
-  vmk_WorldProps sfvmk_worldProps;
-  VMK_ReturnStatus status = VMK_OK;
+  VMK_ReturnStatus status;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_DRIVER);
   /* although the Native Driver document states that this callback should
   *  put the driver in the IO able state.
   *  Driver is moved into IO able state as part of UplinkStartIO call. */
-
-  SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_FUNCTION,
-               "sfvmk_StartDevice is invoked");
 
   status = vmk_DeviceGetAttachedDriverData(dev,
                                             (vmk_AddrCookie *)&pAdapter);
@@ -916,28 +864,11 @@ sfvmk_startDevice(vmk_Device dev)
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  vmk_LogMessage("StartDevice is invoked!");
-
-  /* Worker thread initialization and creation. */
-  sfvmk_worldProps.moduleID = vmk_ModuleCurrentID;
-  sfvmk_worldProps.name = "sfvmk_workerThread";
-  sfvmk_worldProps.startFunction = sfvmk_workerThread;
-  sfvmk_worldProps.data =  (void*) pAdapter;
-  sfvmk_worldProps.schedClass = VMK_WORLD_SCHED_CLASS_DEFAULT;
-
-  /* In the previous releases, the vmk_WorldCreate() interface
-     used the module heap internally. */
-  sfvmk_worldProps.heapID = sfvmk_ModInfo.heapID;
-
-  status = vmk_WorldCreate(&sfvmk_worldProps, &pAdapter->worldId);
-  VMK_ASSERT(status == VMK_OK);
-  if (status != VMK_OK) {
-     vmk_LogMessage("sfvmk driver: Failed to create worker thread");
-  }
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_DRIVER);
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DBG_DRIVER);
 
-  return status;
+  return VMK_OK;
 }
 
 /*! \brief: Callback routine for the device layer to notify the driver to
@@ -1030,13 +961,6 @@ sfvmk_detachDevice(vmk_Device dev)
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
   sfmvk_destroyHelper(pAdapter);
-
-  /* Destroy worker thread. */
-  if (pAdapter->worldId) {
-    vmk_WorldDestroy(pAdapter->worldId);
-    vmk_WorldWaitForDeath(pAdapter->worldId);
-    pAdapter->worldId = 0;
-  }
 
   sfvmk_destroyUplinkData(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);

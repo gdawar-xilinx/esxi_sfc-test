@@ -41,7 +41,7 @@ enum sfvmk_port_state {
 
 typedef struct sfvmk_hw_stats_s {
   efsys_mem_t	dmaBuf;
-  void		*decodeBuf;
+  void		*pDecodeBuf;
 }sfvmk_hw_stats_t;
 
 typedef struct sfvmk_port_s {

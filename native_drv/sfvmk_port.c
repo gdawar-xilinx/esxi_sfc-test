@@ -32,8 +32,7 @@ const uint8_t sfvmk_link_duplex[EFX_LINK_NMODES] = {
 };
 
 #define SFVMK_PHY_CAP_ALL_SPEEDS_MASK     \
-  ((1 << EFX_PHY_CAP_AN) |              \
-   (1 << EFX_PHY_CAP_40000FDX) |        \
+  ((1 << EFX_PHY_CAP_40000FDX) |        \
    (1 << EFX_PHY_CAP_10000FDX) |        \
    (1 << EFX_PHY_CAP_1000FDX) |         \
    (1 << EFX_PHY_CAP_1000HDX) |         \
@@ -85,10 +84,10 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
 
 /*! /brief  update the PHY link speed
 **
-** /param[in]  adapter  pointer to sfvmk_adapter_t
-** /param[in]  speed  link speed 
+** /param[in]  pAdapter  pointer to sfvmk_adapter_t
+** /param[in]  speed  link speed
 **
-** /result: VMK_OK on seccess, error no otherwise.
+** /result: VMK_OK on success, error no otherwise.
 **
 */
 VMK_ReturnStatus
@@ -111,22 +110,13 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
   advertisedCapabilities &= ~SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
   switch (speed) {
     case VMK_LINK_SPEED_40000_MBPS:
-      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                    "LINK: 40G FULL-DUPLEX");
       advertisedCapabilities |= 1 << EFX_PHY_CAP_40000FDX;
-      speed = VMK_LINK_SPEED_40000_MBPS;
       break;
     case VMK_LINK_SPEED_10000_MBPS:
-      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                    "LINK: 10G FULL-DUPLEX");
       advertisedCapabilities |= 1 << EFX_PHY_CAP_10000FDX;
-      speed = VMK_LINK_SPEED_10000_MBPS;
       break;
     case VMK_LINK_SPEED_1000_MBPS:
-      SFVMK_DBG(pAdapter, SFVMK_DBG_PORT, SFVMK_LOG_LEVEL_FUNCTION,
-                    "LINK: 1G FULL-DUPLEX");
       advertisedCapabilities |= 1 << EFX_PHY_CAP_1000FDX;
-      speed = VMK_LINK_SPEED_1000_MBPS;
       break;
     default:
       status = VMK_BAD_PARAM;
@@ -140,18 +130,15 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
     goto sfvmk_link_speed_set_fail;
   }
 
-  /* Fail if unsupported capabilities have been requested */
-  if (advertisedCapabilities & ~supportedCapabilities) {
-    status = VMK_NOT_SUPPORTED;
-    goto sfvmk_link_speed_set_fail;
-  }
-
   if (pAdapter->phy.advertising == advertisedCapabilities)
     goto sfvmk_link_speed_set_done;
 
   status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);
-  if (status != 0)
+  if (status != 0) {
+    SFVMK_ERR(pAdapter, "Error while setting PHY cap %s",
+               vmk_StatusToString(status));
     goto sfvmk_link_speed_set_fail;
+  }
 
   pAdapter->phy.linkSpeed = speed;
   pAdapter->phy.advertising = advertisedCapabilities;
@@ -159,7 +146,7 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
 sfvmk_link_speed_set_done:
   SFVMK_PORT_UNLOCK(pPort);
   return VMK_OK;
-  
+
 sfvmk_link_speed_set_fail:
   SFVMK_PORT_UNLOCK(pPort);
   return status;
@@ -329,10 +316,8 @@ int sfvmk_portStart(sfvmk_adapter_t *pAdapter)
 
   /* Update MAC stats by DMA every second */
   if ((rc = efx_mac_stats_periodic(pNic, &pPort->macStats.dmaBuf,
-                                   SFVMK_ONE_MILISEC, B_FALSE)) != 0) {
-    vmk_LogMessage("%s: stats start failed", __func__);
+                                    SFVMK_ONE_MILISEC, B_FALSE)) != 0)
     goto sfvmk_mac_stats_fail;
-  }
 
   /* Set the drain state, This may call MCDI */
   if ((rc = efx_mac_drain(pNic, B_FALSE)) != 0)

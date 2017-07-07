@@ -364,7 +364,7 @@ sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 
   pTxq = sfvmk_getTxqByLabel(pEvq, label);
 
-  VMK_ASSERT(pTxq != NULL, ("pTxq == NULL"));
+  SFVMK_NULL_PTR_CHECK(pTxq);
   VMK_ASSERT(pEvq->index == pTxq->evqIndex,
       ("pEvq->index != pTxq->evqIndex"));
 
@@ -383,7 +383,7 @@ sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 
   pEvq->txDone++;
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_FUNCTION,
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "id %d stop %d mask: %x delta:%d pending: %d, completed: %d, pTxq->next: %p, evq_pTxq: %p",
             id, stop, pTxq->ptrMask, delta, pTxq->pending,pTxq->completed, pTxq->next ,  &(pTxq->next));
 

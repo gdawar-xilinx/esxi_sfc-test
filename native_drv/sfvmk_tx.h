@@ -20,7 +20,7 @@
 
 #define NUM_TX_QUEUES_FOR_EVQ0 3
 
-// Number of transmit descriptors processed per batch
+/* Number of transmit descriptors processed per batch */
 #define SFVMK_TX_BATCH              64
 
 #define SFVMK_TXQ_UNBLOCK_LEVEL(entries)       (EFX_TXQ_LIMIT(entries) / 4)
@@ -49,25 +49,22 @@ enum sfvmk_txqState {
 };
 
 /*structure defining a dma segment */
-typedef struct sfvmk_dma_segment_s
-{
-   vmk_IOA ds_addr;
-   vmk_ByteCountSmall ds_len;
-}sfvmk_dma_segment_t;
+typedef struct sfvmk_dmaSegment_s {
+   vmk_IOA dsAddr;
+   vmk_ByteCountSmall dsLen;
+}sfvmk_dmaSegment_t;
 
 
-/*
- * Buffer mapping information for descriptors in flight.
- */
-typedef struct sfvmk_tx_mapping_s {
+/* Buffer mapping information for descriptors in flight */
+typedef struct sfvmk_txMapping_s {
 	vmk_PktHandle *pkt;
 	vmk_SgElem sgelem;
-}sfvmk_tx_mapping_t;
+}sfvmk_txMapping_t;
 
 typedef struct sfvmk_txq_s {
 
   struct sfvmk_adapter_s  *pAdapter;
-  vmk_Mutex       lock;
+  vmk_Mutex       lock VMK_ATTRIBUTE_L1_ALIGNED;
 
   vmk_uint32      tsoFwAssisted;
 
@@ -80,7 +77,7 @@ typedef struct sfvmk_txq_s {
   vmk_uint32      maxPktDesc;
   efsys_mem_t     mem;
 
-  sfvmk_tx_mapping_t   *pStmp;  /* Packets in flight. */
+  sfvmk_txMapping_t   *pStmp;  /* Packets in flight. */
   efx_desc_t      *pPendDesc;
   vmk_uint64      pendDescSize;
 

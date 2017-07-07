@@ -37,6 +37,7 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
                     "txq->initState != SFVMK_TXQ_INITIALIZED");
 
   /* Free the context arrays. */
+  sfvmk_memPoolFree(pTxq->pStmp, sizeof(sfvmk_txMapping_t) * pAdapter->txqEntries);
   sfvmk_memPoolFree(pTxq->pPendDesc , pTxq->pendDescSize);
 
   sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxqMem->pEsmBase, pTxqMem->ioElem.ioAddr,
@@ -108,7 +109,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   pTxq->pendDescSize = sizeof(efx_desc_t) * pAdapter->txqEntries;
 
   /* Allocate and initialise pkt DMA mapping array. */
-  pTxq->pStmp = sfvmk_memPoolAlloc(sizeof(struct sfvmk_tx_mapping_s) * pAdapter->txqEntries);
+  pTxq->pStmp = sfvmk_memPoolAlloc(sizeof(sfvmk_txMapping_t) * pAdapter->txqEntries);
   if (NULL == pTxq->pStmp) {
     SFVMK_ERR(pAdapter,"failed to allocate memory for stmp");
     goto sfvmk_stmp_alloc_fail;
@@ -131,7 +132,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
   return VMK_OK;
 
 sfvmk_mutex_fail:
-  sfvmk_memPoolFree(pTxq->pStmp, pAdapter->txqEntries);
+  sfvmk_memPoolFree(pTxq->pStmp, sizeof(sfvmk_txMapping_t) * pAdapter->txqEntries);
 sfvmk_stmp_alloc_fail:
   sfvmk_memPoolFree(pTxq->pPendDesc, pTxq->pendDescSize);
 sfvmk_pPendDesc_alloc_fail:
@@ -299,7 +300,7 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
 
   completed = pTxq->completed;
   while (completed != pTxq->pending) {
-    sfvmk_tx_mapping_t *pStmp;
+    sfvmk_txMapping_t *pStmp;
     unsigned int id;
 
     id = completed++ & pTxq->ptrMask;
@@ -368,7 +369,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   SFVMK_TXQ_LOCK(pTxq);
   SFVMK_EVQ_LOCK(pEvq);
 
-  VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_STARTED);
+  VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_STARTED,
+                 "pTxq->initState != SFVMK_TXQ_STARTED");
 
   pTxq->initState = SFVMK_TXQ_INITIALIZED;
 
@@ -403,7 +405,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     SFVMK_TXQ_LOCK(pTxq);
     SFVMK_EVQ_LOCK(pEvq);
 
-    VMK_ASSERT(pTxq->flushState != SFVMK_FLUSH_FAILED);
+    VMK_ASSERT(pTxq->flushState != SFVMK_FLUSH_FAILED,
+               "pTxq->flushState = SFVMK_FLUSH_FAILED");
 
     if (pTxq->flushState != SFVMK_FLUSH_DONE) {
       /* Flush timeout */
@@ -416,10 +419,10 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->pending = pTxq->added;
 
   sfvmk_txqComplete(pTxq, pEvq);
-  VMK_ASSERT(pTxq->completed == pTxq->added);
+  VMK_ASSERT(pTxq->completed == pTxq->added,
+             "pTxq->completed != pTxq->added");
 
   sfvmk_txqReap(pTxq);
-  VMK_ASSERT(pTxq->reaped == pTxq->completed);
 
   pTxq->added = 0;
   pTxq->pending = 0;
@@ -627,8 +630,8 @@ sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq)
 static void
 sfvmk_txqListPost(sfvmk_txq_t *pTxq)
 {
-  unsigned int old_added;
-  unsigned int block_level;
+  unsigned int oldAdded;
+  unsigned int blockLevel;
   unsigned int level;
   int rc;
   sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
@@ -639,9 +642,9 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   VMK_ASSERT(pTxq->nPendDesc <= pTxq->maxPktDesc, ("pTxq->nPendDesc too large"));
   VMK_ASSERT(!pTxq->blocked, ("pTxq->blocked"));
 
-  old_added = pTxq->added;
+  oldAdded = pTxq->added;
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-            "old_added: %d, reaped: %d", old_added, pTxq->reaped);
+            "oldAdded: %d, reaped: %d", oldAdded, pTxq->reaped);
 
   /* Post the fragment list. */
   rc = efx_tx_qdesc_post(pTxq->pCommonTxq, pTxq->pPendDesc, pTxq->nPendDesc,
@@ -654,7 +657,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
    */
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "added: %d, reaped: %d", pTxq->added, pTxq->reaped);
-  VMK_ASSERT(pTxq->added - old_added == pTxq->nPendDesc,
+  VMK_ASSERT(pTxq->added - oldAdded == pTxq->nPendDesc,
              ("efx_tx_qdesc_post() refragmented descriptors"));
 
   level = pTxq->added - pTxq->reaped;
@@ -667,13 +670,13 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
    * Set the block level to ensure there is space to generate a
    * large number of descriptors for TSO.
    */
-  block_level = EFX_TXQ_LIMIT(pTxq->entries) - pTxq->maxPktDesc;
+  blockLevel = EFX_TXQ_LIMIT(pTxq->entries) - pTxq->maxPktDesc;
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-        "TXQ_LIMIT: %d, max_pkt_dec: %d, block_level: %d",
-        EFX_TXQ_LIMIT(pTxq->entries), pTxq->maxPktDesc, block_level);
+        "TXQ_LIMIT: %d, max_pkt_dec: %d, blockLevel: %d",
+        EFX_TXQ_LIMIT(pTxq->entries), pTxq->maxPktDesc, blockLevel);
 
   /* Have we reached the block level? */
-  if (level < block_level) {
+  if (level < blockLevel) {
     SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
     return;
   }
@@ -681,7 +684,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   /* Reap, and check again */
   sfvmk_txqReap(pTxq);
   level = pTxq->added - pTxq->reaped;
-  if (level < block_level) {
+  if (level < blockLevel) {
     SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
     return;
   }
@@ -699,7 +702,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   vmk_CPUMemFenceWrite();
   sfvmk_txqReap(pTxq);
   level = pTxq->added - pTxq->reaped;
-  if (level < block_level) {
+  if (level < blockLevel) {
     vmk_CPUMemFenceWrite();
     /* Mark the queue as started */
     pTxq->blocked = 0;
@@ -720,7 +723,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
 ** \return: void
 */
 static inline void
-sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_tx_mapping_t **pStmp)
+sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_txMapping_t **pStmp)
 {
   SFVMK_DBG_FUNC_ENTRY(pTxq->pAdapter, SFVMK_DBG_TX);
   if (VMK_UNLIKELY(*pStmp == &pTxq->pStmp[pTxq->ptrMask]))
@@ -892,8 +895,8 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   vmk_DMAMapErrorInfo dmaMapErr;
   vmk_ByteCountSmall elemLength;
   int startId = id = (pTxq->added) & pTxq->ptrMask;
-  sfvmk_tx_mapping_t *pStmp = &pTxq->pStmp[id];
-  sfvmk_dma_segment_t *pDmaSeg = NULL;
+  sfvmk_txMapping_t *pStmp = &pTxq->pStmp[id];
+  sfvmk_dmaSegment_t *pDmaSeg = NULL;
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
@@ -907,7 +910,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
         "number of pkt segments: %d", numElems);
 
-  pDmaSeg = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(sfvmk_dma_segment_t)*numElems);
+  pDmaSeg = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(sfvmk_dmaSegment_t)*numElems);
   if(!pDmaSeg) {
     SFVMK_ERR(pAdapter, "Couldn't allocate memory for dma segments");
     return;
@@ -918,7 +921,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
 
     /* Get MA of pSgElemment and its length. */
     pSgElem = vmk_PktSgElemGet(pkt, i);
-    VMK_ASSERT(pSgElem != NULL);
+    SFVMK_NULL_PTR_CHECK(pSgElem);
 
     elemLength = pSgElem->length;
     SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
@@ -948,8 +951,8 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
                inAddr.addr, inAddr.length, mappedAddr.ioAddr, mappedAddr.length);
     }
 
-    pDmaSeg[i].ds_addr = mappedAddr.ioAddr;
-    pDmaSeg[i].ds_len = elemLength;
+    pDmaSeg[i].dsAddr = mappedAddr.ioAddr;
+    pDmaSeg[i].dsLen = elemLength;
   }
 
   if(vmk_PktIsLargeTcpPacket(pkt)) {
@@ -965,14 +968,14 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
                 "added: %d pStmp: %p, id: %d, &pTxq->pStmp[id]: %p",
                  pTxq->added, pStmp, id, &pTxq->pStmp[id]);
 
-      vmk_Memcpy(&pStmp->sgelem, &pDmaSeg[i], sizeof(sfvmk_dma_segment_t));
+      vmk_Memcpy(&pStmp->sgelem, &pDmaSeg[i], sizeof(sfvmk_dmaSegment_t));
       pStmp->pkt=NULL;
 
       desc = &pTxq->pPendDesc[i + vlanTagged];
       eop = (i == numElems - 1);
       efx_tx_qdesc_dma_create(pTxq->pCommonTxq,
-                        pDmaSeg[i].ds_addr ,
-                        pDmaSeg[i].ds_len,
+                        pDmaSeg[i].dsAddr ,
+                        pDmaSeg[i].dsLen,
                         eop,
                         desc);
       if(!eop)
@@ -1024,25 +1027,25 @@ err_ret:
 
 void sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
 {
-   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
-   if(!pTxq || !pTxq->pCommonTxq) {
-     SFVMK_ERR(pAdapter, "sfvmk_transmitPkt: Txq not initialized yet");
-     return;
-   }
-   unsigned int pushed = pTxq->added;
+  if(!pTxq || !pTxq->pCommonTxq) {
+    SFVMK_ERR(pAdapter, "sfvmk_transmitPkt: Txq not initialized yet");
+    return;
+  }
+  unsigned int pushed = pTxq->added;
 
-   sfvmk_populateTxDescriptor(pAdapter, pTxq, pkt, pktLen);
+  sfvmk_populateTxDescriptor(pAdapter, pTxq, pkt, pktLen);
 
-   if (pTxq->blocked) {
-     SFVMK_ERR(pAdapter, "Txq is blocked, returning");
-     return;
-   }
+  if (pTxq->blocked) {
+    SFVMK_ERR(pAdapter, "Txq is blocked, returning");
+    return;
+  }
 
-   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "added: %d, pushed: %d", pTxq->added, pushed);
-   if (pTxq->added != pushed)
-     efx_tx_qpush(pTxq->pCommonTxq, pTxq->added, pushed);
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "added: %d, pushed: %d", pTxq->added, pushed);
+  if (pTxq->added != pushed)
+    efx_tx_qpush(pTxq->pCommonTxq, pTxq->added, pushed);
 
-   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
 }
 

@@ -273,6 +273,7 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
     if (level <= SFVMK_TXQ_UNBLOCK_LEVEL(pTxq->entries)) {
       /* reaped must be in sync with blocked */
       sfvmk_txqReap(pTxq);
+      sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED);
       pTxq->blocked = 0;
     }
   }

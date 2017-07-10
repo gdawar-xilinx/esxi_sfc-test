@@ -532,22 +532,9 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
 
   SFVMK_ADAPTER_LOCK(pAdapter);
   /* Check if the request is for speed change */
-  if (pLinkStatus->speed >= VMK_LINK_SPEED_1000_MBPS) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-              "Update the link speed");
-
-    status = sfvmk_phyLinkSpeedSet(pAdapter, pLinkStatus->speed);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_UNLOCK(pAdapter);
-      goto sfvmk_link_state_done;
-    }
-
-  } else {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-              "unrecongnized options");
-
+  status = sfvmk_phyLinkSpeedSet(pAdapter, pLinkStatus->speed);
+  if (status != VMK_OK) {
     SFVMK_ADAPTER_UNLOCK(pAdapter);
-    status = VMK_BAD_PARAM;
     goto sfvmk_link_state_done;
   }
 

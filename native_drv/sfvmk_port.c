@@ -32,7 +32,8 @@ const uint8_t sfvmk_link_duplex[EFX_LINK_NMODES] = {
 };
 
 #define SFVMK_PHY_CAP_ALL_SPEEDS_MASK     \
-  ((1 << EFX_PHY_CAP_40000FDX) |        \
+  ((1 << EFX_PHY_CAP_AN) |              \
+   (1 << EFX_PHY_CAP_40000FDX) |        \
    (1 << EFX_PHY_CAP_10000FDX) |        \
    (1 << EFX_PHY_CAP_1000FDX) |         \
    (1 << EFX_PHY_CAP_1000HDX) |         \
@@ -115,6 +116,10 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
       break;
     case VMK_LINK_SPEED_1000_MBPS:
       advertisedCapabilities |= 1 << EFX_PHY_CAP_1000FDX;
+      break;
+    case VMK_LINK_SPEED_AUTO:
+      advertisedCapabilities |= supportedCapabilities &
+                                SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
       break;
     default:
       status = VMK_BAD_PARAM;

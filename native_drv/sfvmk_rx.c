@@ -215,6 +215,20 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
     if (pRxDesc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
       goto sfvmk_discard;
 
+    /* Read the length from the pseudo header for fragmented pkt */
+    if (pRxDesc->flags & EFX_PKT_PREFIX_LEN) {
+      int rc;
+      vmk_uint16 len=0;
+
+      rc = efx_pseudo_hdr_pkt_length_get(pRxq->pCommonRxq,
+              (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt),
+                 &len);
+      VMK_ASSERT(rc == 0, ("cannot get packet length: %d", rc));
+      pRxDesc->size = len;
+      SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
+                "rx_desc_size: %d", pRxDesc->size);
+    }
+
     switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
       case EFX_PKT_IPV4:
         pRxDesc->flags &=  ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);

@@ -215,7 +215,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
     if (pRxDesc->flags & (EFX_ADDR_MISMATCH | EFX_DISCARD))
       goto sfvmk_discard;
 
-    /* Read the length from the pseudo header if required */
+    /* Read the length from the pseudo header for fragmented pkt */
     if (pRxDesc->flags & EFX_PKT_PREFIX_LEN) {
       int rc;
       vmk_uint16 len=0;

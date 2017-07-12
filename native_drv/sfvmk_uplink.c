@@ -644,8 +644,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                   VMK_UPLINK_CAP_VLAN_RX_STRIP,  NULL);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter,"VLAN_RX_STRIP cap register failed with error 0x%x",
-              status);
+    SFVMK_ERR(pAdapter,"VLAN_RX_STRIP cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 
@@ -653,8 +653,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                 VMK_UPLINK_CAP_VLAN_TX_INSERT, NULL);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "VLAN_TX_INSERT cap register failed with error 0x%x",
-              status);
+    SFVMK_ERR(pAdapter, "VLAN_TX_INSERT cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 

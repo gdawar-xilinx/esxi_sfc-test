@@ -7,6 +7,11 @@
 #include "sfvmk.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
+#include "sfvmk_mgmtInterface.h"
+
+extern vmk_MgmtApiSignature mgmtSig;
+vmk_MgmtHandle mgmtHandle;
+vmk_HashTable sfvmk_vmkdevHashTable = VMK_INVALID_HASH_HANDLE;
 
 sfvmk_ModInfo_t sfvmk_ModInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
@@ -19,6 +24,13 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
 static void
 sfvmk_ModInfoCleanup(void)
 {
+  if (sfvmk_vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
+    vmk_HashDeleteAll(sfvmk_vmkdevHashTable);
+    if (vmk_HashIsEmpty(sfvmk_vmkdevHashTable)) {
+      vmk_HashRelease(sfvmk_vmkdevHashTable);
+    }
+  }
+
   if (sfvmk_ModInfo.driverID != NULL) {
     sfvmk_driverUnregister();
     sfvmk_ModInfo.driverID = NULL;
@@ -62,6 +74,8 @@ init_module(void)
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
   vmk_MemPoolProps memPoolProps;
+  vmk_HashProperties hashProps;
+  vmk_MgmtProps mgmtProps;
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
       /* size, alignment, count */
@@ -157,6 +171,40 @@ init_module(void)
                 vmk_StatusToString(status));
   }
 
+  hashProps.moduleID  = vmk_ModuleCurrentID;
+  hashProps.heapID    = sfvmk_ModInfo.heapID;
+  hashProps.keyType   = VMK_HASH_KEY_TYPE_STR;
+  hashProps.keyFlags  = VMK_HASH_KEY_FLAGS_LOCAL_COPY;
+  hashProps.keySize   = SFVMK_DEV_NAME_LEN;
+  hashProps.nbEntries = SFVMK_ADAPTER_TABLE_SIZE;
+  hashProps.acquire   = NULL;
+  hashProps.release   = NULL;
+
+  status = vmk_HashAlloc(&hashProps, &sfvmk_vmkdevHashTable);
+  if (status == VMK_OK) {
+    vmk_LogMessage("Allocation of sfvmk_vmkdevHashTable successful");
+  } else {
+    vmk_LogMessage("Initialization of sfvmk_vmkdevHashTable failed: %d",
+                      status);
+     goto err;
+  }
+
+  mgmtProps.modId = vmk_ModuleCurrentID;
+  mgmtProps.heapId = sfvmk_ModInfo.heapID;
+  mgmtProps.sig = &mgmtSig;
+  mgmtProps.cleanupFn = NULL;
+  mgmtProps.sessionAnnounceFn = NULL;
+  mgmtProps.sessionCleanupFn = NULL;
+  mgmtProps.handleCookie = 0;
+
+  status = vmk_MgmtInit(&mgmtProps, &mgmtHandle);
+  if (status == VMK_OK) {
+    vmk_LogMessage("Allocation of mgmtProps successful");
+  } else {
+    vmk_LogMessage("Initialization of mgmtProps failed: %d", status);
+     goto err;
+  }
+
 err:
   if (status != VMK_OK) {
     sfvmk_ModInfoCleanup();
@@ -177,6 +225,7 @@ cleanup_module(void)
 {
   SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_INFO,
               "Exit: -- Solarflare Native Driver -- ");
+  vmk_MgmtDestroy(mgmtHandle);
   sfvmk_ModInfoCleanup();
 
 }

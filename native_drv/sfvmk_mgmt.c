@@ -66,7 +66,62 @@ sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_mcdiRequest2_t *pMgmtMcdi)
 {
+  sfvmk_adapter_t *pAdapter = NULL;
+  efx_mcdi_req_t emr;
+  vmk_int8 *pMcdiBuf;
+  int rc;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Pointer to pAdapter is NULL");
+    rc = ENOENT;
+    goto sfvmk_dev_null;
+  }
+
+  if (pMgmtMcdi->inlen > SFVMK_MCDI_MAX_PAYLOAD ||
+      pMgmtMcdi->outlen > SFVMK_MCDI_MAX_PAYLOAD) {
+    SFVMK_ERR(pAdapter, "Invalid Length");
+    rc = EINVAL;
+    goto sfvmk_invalid_len;
+  }
+
+  pMcdiBuf = sfvmk_MemAlloc(SFVMK_MCDI_MAX_PAYLOAD);
+  if (pMcdiBuf == NULL) {
+    SFVMK_ERR(pAdapter, "Alloc failed for pMcdiBuf");
+    rc = ENOMEM;
+    goto sfvmk_alloc_failed;
+  }
+
+  memcpy(pMcdiBuf, pMgmtMcdi->payload, pMgmtMcdi->inlen);
+
+  emr.emr_cmd = pMgmtMcdi->cmd;
+  emr.emr_in_buf = pMcdiBuf;
+  emr.emr_in_length = pMgmtMcdi->inlen;
+
+  emr.emr_out_buf = pMcdiBuf;
+  emr.emr_out_length = pMgmtMcdi->outlen;
+
+  rc = sfvmk_mcdiIOHandler(pAdapter, &emr);
+  if (rc != VMK_OK) {
+    goto sfvmk_mcdi_fail;
+  }
+
+  pMgmtMcdi->host_errno = emr.emr_rc;
+  pMgmtMcdi->cmd = emr.emr_cmd;
+  pMgmtMcdi->outlen = emr.emr_out_length_used;
+  memcpy(pMgmtMcdi->payload, pMcdiBuf, pMgmtMcdi->outlen);
+
+  vmk_HeapFree(sfvmk_ModInfo.heapID, pMcdiBuf);
+
   return VMK_OK;
+
+sfvmk_mcdi_fail:
+  sfvmk_MemFree(pMcdiBuf);
+
+sfvmk_alloc_failed:
+sfvmk_dev_null:
+sfvmk_invalid_len:
+  return rc;
 }
 
 /*! \brief  A Mgmt callback to routine to post NVRAM req

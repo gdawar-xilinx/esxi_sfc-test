@@ -7,6 +7,8 @@
 #ifndef __SFVMK_MCDI_H__
 #define __SFVMK_MCDI_H__
 
+#define SFVMK_MCDI_MAX_PAYLOAD 0x400
+
 enum sfvmk_mcdiState {
   SFVMK_MCDI_UNINITIALIZED = 0,
   SFVMK_MCDI_INITIALIZED,
@@ -30,6 +32,8 @@ typedef struct sfvmk_mcdi_s {
 /* functions */
 void sfvmk_mcdiFini(struct sfvmk_adapter_s *pAdapter);
 int sfvmk_mcdiInit(struct sfvmk_adapter_s *pAdapter);
+int sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
+                        efx_mcdi_req_t *emr);
 
 #endif
 

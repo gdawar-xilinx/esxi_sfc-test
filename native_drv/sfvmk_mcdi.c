@@ -173,6 +173,55 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
   return;
 }
 
+/*! \brief Routine to post MCDI user request
+**
+** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
+** \param[in] pEmReq  mcdi command request
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+int
+sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
+                      efx_mcdi_req_t *pEmReq)
+{
+  const efx_nic_cfg_t *pNCfg = efx_nic_cfg_get(pAdapter->pNic);
+  sfvmk_mcdi_t *pMcdi = &pAdapter->mcdi;
+  int rc = VMK_OK;
+
+  if (pMcdi->state != SFVMK_MCDI_INITIALIZED) {
+    SFVMK_ERR(pAdapter,"MCDI State is not Initialized");
+    rc = ENODEV;
+    goto fail;
+  }
+
+  if (!(pNCfg->enc_features & EFX_FEATURE_MCDI)) {
+    SFVMK_ERR(pAdapter,"MCDI feature is not supported");
+    rc = ENOTSUP;
+    goto fail;
+  }
+
+  if (pEmReq->emr_in_length > SFVMK_MCDI_MAX_PAYLOAD ||
+      pEmReq->emr_out_length > SFVMK_MCDI_MAX_PAYLOAD ) {
+    SFVMK_ERR(pAdapter,"MCDI length is invalid");
+    rc = EINVAL;
+    goto fail;
+  }
+
+  if (!pEmReq->emr_in_buf || !pEmReq->emr_out_buf) {
+    SFVMK_ERR(pAdapter,"MCDI command buffer is NULL");
+    rc = EINVAL;
+    goto fail;
+  }
+
+  sfvmk_mcdiExecute((void *)pAdapter, pEmReq);
+
+  return VMK_OK;
+
+fail:
+  return rc;
+}
+
 /*! \brief Routine allocating resource for mcdi cmd handling and initializing
 **        mcdi module
 **

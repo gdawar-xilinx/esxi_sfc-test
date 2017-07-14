@@ -753,7 +753,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pEvqMem->ioElem.length = EFX_EVQ_SIZE(pEvq->entries);
   pEvqMem->esmHandle = pAdapter->dmaEngine;
 
-  status = sfvmk_mutexInit("evq", SFVMK_EVQ_LOCK_RANK, &pEvq->lock);
+  status = sfvmk_mutexInit("evq", &pEvq->lock);
   if (status != VMK_OK)
     goto sfvmk_mutex_failed;
 

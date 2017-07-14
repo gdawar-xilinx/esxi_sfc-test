@@ -755,7 +755,7 @@ sfvmk_attachDevice(vmk_Device dev)
   }
   sfvmk_updateSupportedCap(pAdapter);
 
-  status = sfvmk_mutexInit("adapterLock", SFVMK_ADAPTER_LOCK_RANK, &pAdapter->lock);
+  status = sfvmk_mutexInit("adapterLock", &pAdapter->lock);
   if(status != VMK_OK) {
     SFVMK_ERR(pAdapter, "failed in init adapter Lock, with err %s",
               vmk_StatusToString(status));

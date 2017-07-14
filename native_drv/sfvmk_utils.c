@@ -275,24 +275,23 @@ sfvmk_freeCoherentDMAMapping(vmk_DMAEngine engine, void *pVA,
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
 VMK_ReturnStatus
-sfvmk_mutexInit(const char *lckName, vmk_LockRank rank, vmk_Mutex *mutex)           // OUT: created lock
+sfvmk_mutexInit(const char *pLockName, vmk_Mutex *pMutex)           // OUT: created lock
 {
    vmk_MutexCreateProps lockProps;
    VMK_ReturnStatus status;
    lockProps.moduleID = vmk_ModuleCurrentID;
    lockProps.heapID = sfvmk_ModInfo.heapID;
-   vmk_NameFormat(&lockProps.className, "sfvmk-%s", lckName);
+   vmk_NameFormat(&lockProps.className, "sfvmk-%s", pLockName);
 
    lockProps.type = VMK_MUTEX;
-   lockProps.domain = sfvmk_ModInfo.lockDomain;
-   lockProps.rank = rank;
-   status = vmk_MutexCreate(&lockProps ,mutex);
+   lockProps.domain = VMK_LOCKDOMAIN_INVALID;
+   lockProps.rank = VMK_MUTEX_UNRANKED;
+   status = vmk_MutexCreate(&lockProps, pMutex);
    if (VMK_UNLIKELY(status != VMK_OK)) {
-      SFVMK_ERROR("Failed to create mutex (%s)", vmk_StatusToString(status));
+     SFVMK_ERROR("Failed to create mutex (%s)", vmk_StatusToString(status));
    }
 
    return status ;
-
 }
 
 /*! \brief It destroy mutex.

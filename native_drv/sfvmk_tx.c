@@ -115,7 +115,7 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
     goto sfvmk_stmp_alloc_fail;
   }
 
-  status = sfvmk_mutexInit("txq" ,SFVMK_TXQ_LOCK_RANK, &pTxq->lock);
+  status = sfvmk_mutexInit("txq", &pTxq->lock);
   if(status != VMK_OK)
     goto sfvmk_mutex_fail;
 

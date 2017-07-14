@@ -16,7 +16,7 @@ extern void sfvmk_destroyLock(vmk_Lock lock);
 
 /* mutex handler */
 VMK_ReturnStatus
-sfvmk_mutexInit(const char *lckName,vmk_LockRank rank,vmk_Mutex *mutex);
+sfvmk_mutexInit(const char *pLockName,vmk_Mutex *pMutex);
 void sfvmk_mutexDestroy(vmk_Mutex mutex);
 
 /* mempool handlers */

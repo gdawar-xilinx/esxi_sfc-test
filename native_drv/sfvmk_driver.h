@@ -50,15 +50,6 @@ extern vmk_HashTable sfvmk_vmkdevHashTable;
 extern int sfvmk_txRingEntries;
 extern int sfvmk_rxRingEntries;
 
-/* rank for mutex lock in different module */
-enum sfvmk_LckRank {
-  SFVMK_ADAPTER_LOCK_RANK = VMK_MUTEX_RANK_LOWEST,
-  SFVMK_PORT_LOCK_RANK,
-  SFVMK_TXQ_LOCK_RANK,
-  SFVMK_EVQ_LOCK_RANK,
-  SFVMK_MCDI_LOCK_RANK
-};
-
 /* adapter states */
 enum sfvmk_adapterState {
   SFVMK_UNINITIALIZED = 0,

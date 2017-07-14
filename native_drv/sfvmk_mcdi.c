@@ -252,7 +252,7 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_BUG(pMcdi->state != SFVMK_MCDI_INITIALIZED,
                   "MCDI already initialized");
 
-  status = sfvmk_mutexInit("mcdi" ,SFVMK_MCDI_LOCK_RANK, &pMcdi->lock);
+  status = sfvmk_mutexInit("mcdi", &pMcdi->lock);
   if (status != VMK_OK)
     goto lock_create_fail;
 

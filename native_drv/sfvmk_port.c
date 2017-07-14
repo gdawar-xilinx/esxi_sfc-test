@@ -394,7 +394,7 @@ VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
   pMacStatsBuf->esmHandle = pAdapter->dmaEngine;
   memset(pAdapter->adapterStats, 0, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
 
-  status = sfvmk_mutexInit("port", SFVMK_PORT_LOCK_RANK, &pPort->lock);
+  status = sfvmk_mutexInit("port", &pPort->lock);
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Failed to create lock for port. err: %s",
               vmk_StatusToString(status));

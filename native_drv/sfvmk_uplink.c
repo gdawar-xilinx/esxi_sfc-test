@@ -8,8 +8,6 @@
 
 /* default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
-/* JUMBO frame */
-#define SFVMK_JUMBO_FRAME 9000
 /* hardcoded max filter needs to revisit when implement multiQ */
 #define SFVMK_MAX_FILTER_PER_QUEUE 10
 
@@ -356,7 +354,7 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_NULL_PTR_CHECK(params);
 
-  /* Firmware doesn't support different moderation settings for different (rx/tx) event types. 
+  /* Firmware doesn't support different moderation settings for different (rx/tx) event types.
   Only txUsecs would be considered and rxUsecs value would be ignored */
   if (!(params->txUsecs))
     return VMK_BAD_PARAM;
@@ -918,50 +916,53 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status;
 
-  SFVMK_NULL_PTR_CHECK(pAdapter);
+  if (NULL == pAdapter) {
+    SFVMK_ERROR(" Null adapter ptr");
+    return VMK_BAD_PARAM;
+  }
+
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
   SFVMK_ADAPTER_LOCK(pAdapter);
   if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_ADAPTER_UNLOCK(pAdapter);
     SFVMK_ERR(pAdapter, "Adapter is not yet started");
     status = VMK_FAILURE;
-    goto sfvmk_fail;
+    goto sfvmk_done;
   }
+  SFVMK_ADAPTER_UNLOCK(pAdapter);
 
   /* nothing to be done if mtu is same as before */
   if (mtu == pAdapter->sharedData.mtu) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
               " same as old mtu");
     status = VMK_OK;
-    goto sfvmk_fail;
+    goto sfvmk_done;
   }
-  /* return error if mtu size more than jumbo frame */
-  else if (mtu > SFVMK_JUMBO_FRAME) {
-    SFVMK_ERR(pAdapter, "mtu[%d] is too big to handle", mtu);
-    status = VMK_BAD_PARAM;
-    goto sfvmk_fail;
-  }
+  /* not checking for mtu size validity as vmkernel check it before calling */
+  /* this callback */
   else {
     /* stopping io operation */
     status = sfvmk_uplinkQuiesceIO(pAdapter);
     if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "Failed in sfvmk_uplinkQuiesceIO, err %s",
                 vmk_StatusToString(status));
-      goto sfvmk_fail;
+      goto sfvmk_done;
     }
+
     SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
     pAdapter->sharedData.mtu = mtu;
     SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+
     status = sfvmk_uplinkStartIO( pAdapter);
     if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "Failed in sfvmk_uplinkStartIO, err %s",
                 vmk_StatusToString(status));
-      goto sfvmk_fail;;
+      goto sfvmk_done;;
     }
   }
 
-sfvmk_fail:
-  SFVMK_ADAPTER_UNLOCK(pAdapter);
+sfvmk_done:
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return status;
 

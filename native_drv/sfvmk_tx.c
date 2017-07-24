@@ -558,6 +558,13 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;
 
+  /* 
+   * bug72318: maxPktDesc has to be non-zero for sfvmk_txqReap to get invoked 
+   * within sfvmk_txqListPost. Keeping it at 100 for now till the time TSO 
+   *  feature is implemented.
+   */
+  pTxq->maxPktDesc = 100;
+
   SFVMK_TXQ_UNLOCK(pTxq);
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX, "qIndex[%d]", qIndex);

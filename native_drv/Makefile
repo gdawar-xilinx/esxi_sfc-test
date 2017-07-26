@@ -41,6 +41,9 @@ BUILD_NUMBER  = 4598673
 TARGET        = $(CURDIR)/build
 SCONS_TARGET  = $(CURDIR)/.build
 IMPORTED_CODE = $(CURDIR)/imported
+DOXYGEN       = $(CURDIR)/../doxygen
+DOXYGEN_TARGET= $(DOXYGEN)/doc
+ESXI_DOXY_CFG = $(DOXYGEN)/esxi_doxy.cfg
 
 # Map VIB acceptance level to canonical default signing-key file base name
 ACCEPT_LEVEL = $(shell grep acceptance-level $(SRC)/$(MANIFEST))
@@ -72,6 +75,11 @@ IMPORTED_FILES  = $(shell cat ${FILE})
 MAKEFILE_LIST   = $(IMPORTED_FILES)
 
 all: vib
+
+doc:
+	@mkdir $(DOXYGEN_TARGET)
+	@cd $(DOXYGEN_TARGET)
+	@doxygen $(ESXI_DOXY_CFG)
 
 imported/%:
 	@wget -q -O $@ $(V5_URL)/src/driver/common/$(@F)
@@ -107,6 +115,11 @@ clean_targets:
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
 
-cleanall: clean_imported clean_targets
+clean_doc:
+	@echo Cleaning out generated documents ...
+	@$(RM) -rf $(DOXYGEN_TARGET)
+	@echo Done.
 
-clean:    clean_targets
+cleanall: clean_imported clean_targets clean_doc
+
+clean:    clean_targets clean_doc

@@ -1079,14 +1079,28 @@ sfvmk_qstart_fail:
 VMK_ReturnStatus
 sfvmk_evqModerate(sfvmk_adapter_t *pAdapter, unsigned int index, unsigned int us)
 {
-  sfvmk_evq_t *pEvq = pAdapter->pEvq[index];
+  sfvmk_evq_t *pEvq = NULL;
+
+  if (NULL == pAdapter) {
+    SFVMK_ERR(pAdapter, "NULL adapter ptr");
+    return VMK_BAD_PARAM;
+  }
+
+  pEvq = pAdapter->pEvq[index];
+  if ((NULL == pEvq) || (pAdapter->evqCount <= index)) {
+    SFVMK_ERR(pAdapter, "NULL evq[%d] ptr", index);
+    return VMK_BAD_PARAM;
+  }
+
+  if (pEvq->initState != SFVMK_EVQ_STARTED) {
+    SFVMK_ERR(pAdapter, "evq is not yet started");
+    return VMK_FAILURE;
+  }
+
   const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
-
-  SFVMK_NULL_PTR_CHECK(pEvq);
-  SFVMK_NULL_PTR_CHECK(pNicCfg);
-
-  VMK_ASSERT_BUG(pEvq->initState == SFVMK_EVQ_STARTED,
-      "pEvq->initState != SFVMK_EVQ_STARTED");
+  if (NULL == pNicCfg) {
+    return VMK_BAD_PARAM;
+  }
 
   /* Parameter Validation */
   if (us > pNicCfg->enc_evq_timer_max_us) {

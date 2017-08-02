@@ -96,6 +96,7 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_uint32 speed)
   VMK_ReturnStatus status;
   vmk_uint32 supportedCapabilities;
   vmk_uint32 advertisedCapabilities;
+
   pPort = &pAdapter->port;
 
   SFVMK_PORT_LOCK(pPort);

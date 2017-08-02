@@ -521,7 +521,6 @@ static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
 static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
                                           vmk_LinkStatus *pLinkStatus)
 {
-
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status;
 
@@ -538,38 +537,13 @@ static VMK_ReturnStatus sfvmk_linkStatusSet(vmk_AddrCookie cookie,
 
   SFVMK_ADAPTER_UNLOCK(pAdapter);
 
-  /* Handle Link down request */
-  if (pLinkStatus->state == VMK_LINK_STATE_DOWN) {
-
-    /* If Link State is already down, no action required */
-    if (pAdapter->initState != SFVMK_STARTED) {
-      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                "Take no action, Link is already down");
-      status = VMK_OK;
-      goto sfvmk_link_state_done;
-    }
-
-    /* Call Uplink Quiesce IO to bring the link down */
-    status = sfvmk_uplinkQuiesceIO(pAdapter);
-    if (status != VMK_OK) {
-      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                "Link down failed, QuiesceIO failed");
-    }
-
-    goto sfvmk_link_state_done;
-  }
-
-  /* Handle Link UP request */
-  if (pAdapter->initState != SFVMK_STARTED) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-              "Bringing link UP");
-    status = sfvmk_uplinkStartIO(pAdapter);
-    goto sfvmk_link_state_done;
-  }
-
-  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  status = sfvmk_changeLinkState(pAdapter, pLinkStatus->state);
+  if (status != VMK_OK)
+    SFVMK_ERR(pAdapter, "Link change failed with error %s",
+              vmk_StatusToString(status));
 
 sfvmk_link_state_done:
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return status;
 }
 
@@ -1358,6 +1332,7 @@ static VMK_ReturnStatus
 sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  efx_link_mode_t linkMode = EFX_LINK_DOWN;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
@@ -1371,6 +1346,9 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   }
 
   pAdapter->initState = SFVMK_REGISTERED;
+
+  /* Set the operational link state DOWN */
+  sfvmk_macLinkUpdate(pAdapter, linkMode);
 
   /* Destroy worker thread. */
   if (pAdapter->worldId) {
@@ -1969,6 +1947,58 @@ sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter)
       pAdapter->intr.numIntrAlloc;
 
   return (efx_nic_set_drv_limits(pAdapter->pNic, &limits));
+}
+
+/*! \brief: Function to change link state
+**
+** \param[in]  pAdapter pointer to adapter
+** \param[in]  state    link state
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_changeLinkState(struct sfvmk_adapter_s *pAdapter, vmk_LinkState state)
+{
+  VMK_ReturnStatus status = VMK_OK;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  /* Handle Link down request */
+  if (state == VMK_LINK_STATE_DOWN) {
+
+    /* If Link State is already down, no action required */
+    if (pAdapter->initState != SFVMK_STARTED) {
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                "Take no action, Link is already down");
+      status = VMK_OK;
+      goto sfvmk_link_state_done;
+    }
+
+    /* Call Uplink Quiesce IO to bring the link down */
+    status = sfvmk_uplinkQuiesceIO(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "Link down failed with error %s",
+                vmk_StatusToString(status));
+    }
+
+    goto sfvmk_link_state_done;
+  }
+
+  /* Handle Link UP request */
+  if (pAdapter->initState != SFVMK_STARTED) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+              "Bringing link UP");
+    status = sfvmk_uplinkStartIO(pAdapter);
+    if (status != VMK_OK)
+      SFVMK_ERR(pAdapter, "Link UP failed with error %s",
+                vmk_StatusToString(status));
+    goto sfvmk_link_state_done;
+  }
+
+sfvmk_link_state_done:
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return status;
 }
 
 #define SFVMK_WORKER_TIMEOUT_MSEC 1000 /* 1 sec */

@@ -11,7 +11,7 @@
 #
 
 driver_name    = "sfvmk"
-driver_ver     = "0.1.0.121"
+driver_ver     = "0.1.0.122"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {
@@ -42,9 +42,6 @@ module_def = {
                          "sfvmk_uplink.c",
                          "sfvmk_port.c",
                          "sfvmk_ut.c",
-                         "sfvmk_nvram.c",
-                         "sfvmk_mgmt.c",
-                         "sfvmk_mgmtInterface.c",
                          "imported/ef10_ev.c",
                          "imported/ef10_filter.c",
                          "imported/ef10_intr.c",

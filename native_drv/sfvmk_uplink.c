@@ -739,8 +739,10 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
                                                vmk_Uplink uplink)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+#ifdef SFVMK_MGMT_SUPPORT_ENABLED
   sfvmk_devHashTable_t *pDevTblEntry;
   int status;
+#endif
 
   VMK_ASSERT(uplink != NULL);
   SFVMK_NULL_PTR_CHECK(pAdapter);
@@ -749,6 +751,7 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
   pAdapter->uplink = uplink;
   pAdapter->uplinkName = vmk_UplinkNameGet(pAdapter->uplink);
 
+#ifdef SFVMK_MGMT_SUPPORT_ENABLED
   pDevTblEntry = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(*pDevTblEntry));
   if (pDevTblEntry == NULL) {
      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
@@ -767,10 +770,11 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
               "Hash Key Insertion failed");
     vmk_HeapFree(sfvmk_ModInfo.heapID, pDevTblEntry);
   }
+#endif
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
           "%s Associted",  pAdapter->uplinkName.string);
-sfvmk_end:
+
   return sfvmk_registerIOCaps(pAdapter);
 }
 

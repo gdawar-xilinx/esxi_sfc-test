@@ -11,6 +11,9 @@
 /* hardcoded max filter needs to revisit when implement multiQ */
 #define SFVMK_MAX_FILTER_PER_QUEUE 10
 
+#define SFVMK_RESET_TIMEOUTMS      60000
+#define SFVMK_DEFAULT_TIMEOUTMS    5000
+
 /****************************************************************************
 *                Local Functions                                            *
 ****************************************************************************/
@@ -827,24 +830,32 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   uplinkQid = vmk_PktQueueIDGet(pkt);
   qid = vmk_UplinkQueueIDVal(uplinkQid);
 
-  if ((!qid) || (qid >= (maxTxQueues + maxRxQueues))) {
-   SFVMK_ERR(pAdapter,"Invalid QID %d, numTxQueue %d,  maxRxQueues: %d, device %s",
-			   qid,
-			   maxTxQueues,
-			   maxRxQueues,
-			   vmk_NameToString(&pAdapter->uplinkName));
+  if (pAdapter->initState != SFVMK_STARTED)
+  {
+    vmk_PktListReleaseAllPkts(pktList);
+    return VMK_OK;
+  }
 
-	/* TODO: need to see the pkt completion context and use appropriate function call */
-   vmk_PktListReleaseAllPkts(pktList);
-   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
-	return VMK_OK;
+  if ((!qid) || (qid >= (maxTxQueues + maxRxQueues))) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+              "Invalid QID %d, numTxQueue %d,  maxRxQueues: %d, device %s",
+              qid,
+              maxTxQueues,
+              maxRxQueues,
+              vmk_NameToString(&pAdapter->uplinkName));
+
+    /* TODO: need to see the pkt completion context and use appropriate function call */
+    vmk_PktListReleaseAllPkts(pktList);
+    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+    return VMK_OK;
   }
 
   /* cross over the rx queues */
   qid -= maxRxQueues;
 
   if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
-   SFVMK_ERR(pAdapter, "sfvmk_isTxqStopped returned TRUE");
+   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+             "sfvmk_isTxqStopped returned TRUE");
    /* TODO: need to see the pkt completion context and use appropriate function call */
    vmk_PktListReleaseAllPkts(pktList);
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
@@ -901,6 +912,7 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
+  vmk_UplinkSetWatchdogTimeout(pAdapter->uplink, SFVMK_RESET_TIMEOUTMS);
   SFVMK_ADAPTER_LOCK(pAdapter);
   if (pAdapter->initState != SFVMK_STARTED) {
     SFVMK_ADAPTER_UNLOCK(pAdapter);
@@ -941,6 +953,7 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
   }
 
 sfvmk_done:
+  vmk_UplinkSetWatchdogTimeout(pAdapter->uplink, SFVMK_DEFAULT_TIMEOUTMS);
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return status;
 
@@ -1397,15 +1410,17 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+  vmk_UplinkSetWatchdogTimeout(pAdapter->uplink, SFVMK_RESET_TIMEOUTMS);
 
   sfvmk_uplinkQuiesceIO(cookie);
   efx_nic_reset(pAdapter->pNic);
   for (attempt = 0; attempt < 3; ++attempt) {
-   if ((rc = sfvmk_uplinkStartIO(cookie)) == 0)
-     break;
+    if ((rc = sfvmk_uplinkStartIO(cookie)) == 0)
+      break;
 
-     vmk_DelayUsecs(100000);
+    vmk_WorldSleep(1000000);
   }
+  vmk_UplinkSetWatchdogTimeout(pAdapter->uplink, SFVMK_DEFAULT_TIMEOUTMS);
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 }

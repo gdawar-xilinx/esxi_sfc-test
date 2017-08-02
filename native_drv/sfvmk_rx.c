@@ -303,6 +303,9 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs)
   pAdapter = pRxq->pAdapter;
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
+  if (pRxq->initState != SFVMK_RXQ_STARTED)
+    return;
+
   batch = 0;
   rxfill = pRxq->added - pRxq->completed;
 
@@ -313,8 +316,8 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs)
 
     status = vmk_PktAllocForDMAEngine(mblkSize, pAdapter->dmaEngine, &pNewpkt);
     if (VMK_UNLIKELY(status != VMK_OK)) {
-      SFVMK_ERR(pAdapter, "failed to allocate pkt. err: %s",
-                vmk_StatusToString(status));
+      SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_INFO,
+                "failed to allocate pkt. err: %s", vmk_StatusToString(status));
       break;
     }
     pFrag = vmk_PktSgElemGet(pNewpkt, 0);
@@ -328,7 +331,8 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, unsigned int  numBufs)
     status = vmk_DMAMapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY,
                             &mapperIN, VMK_TRUE, &mapperOut, &dmaMapErr);
     if (status != VMK_OK) {
-      SFVMK_ERR(pAdapter, "Failed to map %p size %d to IO address, %s.",
+      SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_INFO,
+                "Failed to map %p size %d to IO address, %s.",
                 pNewpkt, mblkSize,vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
       vmk_PktRelease(pNewpkt);
       break;

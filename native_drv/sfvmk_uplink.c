@@ -821,6 +821,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   vmk_ByteCountSmall pktLen;
   vmk_int16 maxRxQueues;
   vmk_int16 maxTxQueues;
+  VMK_ReturnStatus status;
 
   maxRxQueues = pAdapter->queueInfo.maxRxQueues;
   maxTxQueues = pAdapter->queueInfo.maxTxQueues;
@@ -877,8 +878,12 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     goto sfvmk_release_pkt;
 	}
 
-   sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);
-   continue;
+    status = sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);
+    if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "failed to transmit pkt on txq[%d]", qid);
+      goto sfvmk_release_pkt;
+    }
+    continue;
 
 sfvmk_release_pkt:
    vmk_PktRelease(pkt);

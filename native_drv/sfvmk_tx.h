@@ -119,9 +119,9 @@ void sfvmk_txStop(struct sfvmk_adapter_s *pAdapter);
 VMK_ReturnStatus sfvmk_txStart(struct sfvmk_adapter_s *pAdapter);
 
 void sfvmk_txqFlushDone(struct sfvmk_txq_s *pTxq);
-void sfvmk_transmitPkt(struct sfvmk_adapter_s *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
+VMK_ReturnStatus sfvmk_transmitPkt(struct sfvmk_adapter_s *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
 void sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq);
-void sfvmk_populateTxDescriptor(struct sfvmk_adapter_s *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
+VMK_ReturnStatus sfvmk_populateTxDescriptor(struct sfvmk_adapter_s *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen);
 
 #endif /* __SFVMK_TX_H__ */
 

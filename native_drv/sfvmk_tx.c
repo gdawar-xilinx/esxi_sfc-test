@@ -888,7 +888,7 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq, vmk_PktHandle **ppPkt, vmk_ByteCountSm
 **
 */
 
-void
+VMK_ReturnStatus
 sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
 {
   int i=0;
@@ -920,7 +920,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   pDmaSeg = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(sfvmk_dmaSegment_t)*numElems);
   if(!pDmaSeg) {
     SFVMK_ERR(pAdapter, "Couldn't allocate memory for dma segments");
-    return;
+    return VMK_FAILURE;
   }
 
   for (i = 0; i < numElems; i++) {
@@ -1004,7 +1004,8 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
 
   vmk_HeapFree(sfvmk_ModInfo.heapID, pDmaSeg);
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
-  return;
+
+  return  VMK_OK;
 
 err_ret:
   vmk_HeapFree(sfvmk_ModInfo.heapID, pDmaSeg);
@@ -1020,6 +1021,8 @@ err_ret:
   }
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+
+  return VMK_FAILURE;
 }
 
 /*! \brief transmit the packet on the uplink interface
@@ -1032,21 +1035,27 @@ err_ret:
 ** \return: void
 */
 
-void sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
+VMK_ReturnStatus sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)
 {
+  VMK_ReturnStatus status;
+
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
   if(!pTxq || !pTxq->pCommonTxq) {
     SFVMK_ERR(pAdapter, "sfvmk_transmitPkt: Txq not initialized yet");
-    return;
+    return VMK_FAILURE;
   }
   unsigned int pushed = pTxq->added;
 
-  sfvmk_populateTxDescriptor(pAdapter, pTxq, pkt, pktLen);
+  status = sfvmk_populateTxDescriptor(pAdapter, pTxq, pkt, pktLen);
+  if (status != VMK_OK) {
+    SFVMK_ERR(pAdapter, "failed to populate tx desc");
+    return status;
+  }
 
   if (pTxq->blocked) {
-    SFVMK_ERR(pAdapter, "Txq is blocked, returning");
-    return;
+    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "Txq is blocked, returning");
+    return VMK_FAILURE;
   }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "added: %d, pushed: %d", pTxq->added, pushed);
@@ -1054,5 +1063,7 @@ void sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHan
     efx_tx_qpush(pTxq->pCommonTxq, pTxq->added, pushed);
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+
+  return VMK_OK;
 }
 

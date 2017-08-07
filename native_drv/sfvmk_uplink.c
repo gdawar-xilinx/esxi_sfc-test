@@ -716,10 +716,8 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
                                                vmk_Uplink uplink)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
-  sfvmk_devHashTable_t *pDevTblEntry;
+  sfvmk_devHashTable_t *pHashTblEntry;
   int status;
-#endif
 
   VMK_ASSERT(uplink != NULL);
   SFVMK_NULL_PTR_CHECK(pAdapter);
@@ -728,26 +726,25 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
   pAdapter->uplink = uplink;
   pAdapter->uplinkName = vmk_UplinkNameGet(pAdapter->uplink);
 
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
-  pDevTblEntry = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(*pDevTblEntry));
-  if (pDevTblEntry == NULL) {
-     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
-               "vmk_HeapAlloc failed for pDevTblEntry");
-     goto sfvmk_end;
+  pHashTblEntry = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(*pHashTblEntry));
+  if (pHashTblEntry == NULL) {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
+               "vmk_HeapAlloc failed for pHashTblEntry");
+    return VMK_NO_MEMORY;
   }
 
-  pDevTblEntry->vmkDevice = pAdapter->device;
-  pDevTblEntry->uplinkName = pAdapter->uplinkName.string;
+  pHashTblEntry->pAdapter = pAdapter;
+  pHashTblEntry->pUplinkName = pAdapter->uplinkName.string;
 
-  status = vmk_HashKeyInsert(sfvmk_vmkdevHashTable,
+  status = vmk_HashKeyInsert(sfvmk_ModInfo.vmkdevHashTable,
                              pAdapter->uplinkName.string,
-                             (vmk_HashValue) pDevTblEntry);
+                             (vmk_HashValue) pHashTblEntry);
   if (status != VMK_OK) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
-              "Hash Key Insertion failed");
-    vmk_HeapFree(sfvmk_ModInfo.heapID, pDevTblEntry);
+              "Hash Key Insertion failed, %s", vmk_StatusToString(status));
+    vmk_HeapFree(sfvmk_ModInfo.heapID, pHashTblEntry);
+    return status;
   }
-#endif
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
           "%s Associted",  pAdapter->uplinkName.string);
@@ -766,9 +763,31 @@ static VMK_ReturnStatus
 sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  sfvmk_devHashTable_t *pHashTblEntry;
+  int status;
+
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
   VMK_ASSERT_BUG(pAdapter->uplink != NULL);
+
+  status = vmk_HashKeyFind(sfvmk_ModInfo.vmkdevHashTable,
+                       pAdapter->uplinkName.string,
+                       (vmk_HashValue *)&pHashTblEntry);
+  if (status != VMK_OK) {
+     SFVMK_ERROR("%s: Failed to find node in vmkDevice "
+                  "table status: %s", pAdapter->uplinkName.string, vmk_StatusToString(status));
+     return status;
+  }
+
+  if (pHashTblEntry == NULL) {
+     SFVMK_ERROR("%s: No vmkDevice (node: %p)",
+                  pAdapter->uplinkName.string, pHashTblEntry);
+    status = VMK_NOT_FOUND;
+    return status;
+  }
+
+  vmk_HeapFree(sfvmk_ModInfo.heapID, pHashTblEntry);
+
   pAdapter->uplink = NULL;
 
   return VMK_OK;

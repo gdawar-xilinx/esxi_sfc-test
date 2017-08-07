@@ -44,8 +44,6 @@ extern void             sfvmk_driverUnregister(void);
 
 #define SFVMK_ADAPTER_TABLE_SIZE  64
 
-extern vmk_HashTable sfvmk_vmkdevHashTable;
-
 /* ring size for TX and RX */
 extern int sfvmk_txRingEntries;
 extern int sfvmk_rxRingEntries;
@@ -142,8 +140,8 @@ typedef struct sfvmk_adapter_s {
 
 /* Structure for device instance table  */
 typedef struct sfvmk_devHashTable_s {
-   vmk_uint8 *uplinkName;
-   vmk_Device vmkDevice;
+   vmk_uint8 *pUplinkName;
+   sfvmk_adapter_t *pAdapter;
 }sfvmk_devHashTable_t;
 
 extern VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *);

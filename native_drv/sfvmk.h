@@ -40,6 +40,8 @@ typedef struct {
   vmk_LockDomainID   lockDomain;
   vmk_DumpFileHandle dumpFile;
   vmk_ListLinks      adapterList;
+  vmk_MgmtHandle     mgmtHandle;
+  vmk_HashTable      vmkdevHashTable;
 } sfvmk_ModInfo_t;
 
 extern sfvmk_ModInfo_t sfvmk_ModInfo;

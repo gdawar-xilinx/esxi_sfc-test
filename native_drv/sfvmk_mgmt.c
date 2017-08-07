@@ -1,3 +1,10 @@
+/*************************************************************************
+ * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
+ * Use is subject to license terms.
+ *
+ * -- Solarflare Confidential
+ ************************************************************************/
+
 #include "efx_mcdi.h"
 #include "efx_regs_mcdi.h"
 #include "sfvmk_driver.h"
@@ -13,51 +20,38 @@
 static sfvmk_adapter_t *
 sfvmk_mgmtFindAdapter(sfvmk_mgmtDevInfo_t *pMgmtParm)
 {
-  sfvmk_adapter_t *pAdapter = NULL;
-  sfvmk_devHashTable_t *pDevTblEntry = NULL;
+  sfvmk_devHashTable_t *pHashTblEntry = NULL;
   int rc;
 
-  rc = vmk_HashKeyFind(sfvmk_vmkdevHashTable,
+  rc = vmk_HashKeyFind(sfvmk_ModInfo.vmkdevHashTable,
                        pMgmtParm->deviceName,
-                       (vmk_HashValue *)&pDevTblEntry);
+                       (vmk_HashValue *)&pHashTblEntry);
   if (rc != VMK_OK) {
-     SFVMK_ERROR("%s: Failed to find node in vmkDevice "
-                  "table status: 0x%x", pMgmtParm->deviceName, rc);
-     pMgmtParm->status = VMK_NOT_FOUND;
-     goto sfvmk_hash_lookup_fail;
+    SFVMK_ERROR("%s: Failed to find node in vmkDevice "
+                 "table status: %s", pMgmtParm->deviceName, vmk_StatusToString(rc));
+    goto end;
   }
 
-  if ((pDevTblEntry == NULL) || (pDevTblEntry->vmkDevice == NULL)) {
-     SFVMK_ERROR("%s: No vmkDevice (node: %p)",
-                  pMgmtParm->deviceName, pDevTblEntry);
-     pMgmtParm->status = VMK_NOT_FOUND;
-    goto sfvmk_invalid_dev_table;
+  if ((pHashTblEntry == NULL) || (pHashTblEntry->pAdapter == NULL)) {
+    SFVMK_ERROR("%s: No vmkDevice (node: %p)",
+                  pMgmtParm->deviceName, pHashTblEntry);
+    pMgmtParm->status = VMK_NOT_FOUND;
+    goto end;
   }
 
-  rc = vmk_DeviceGetAttachedDriverData(pDevTblEntry->vmkDevice,
-                                       (vmk_AddrCookie *)&pAdapter);
-  if (rc != VMK_OK) {
-     SFVMK_ERROR("%s: vmk_DeviceGetAttachedDriverData failed with "
-                  "status: 0x%x", pMgmtParm->deviceName, rc);
-     pMgmtParm->status = VMK_NOT_FOUND;
-     goto sfvmk_get_drv_data_fail;
-  }
+  return pHashTblEntry->pAdapter;
 
-  return pAdapter;
-
-sfvmk_get_drv_data_fail:
-sfvmk_invalid_dev_table:
-sfvmk_hash_lookup_fail:
+end:
   return NULL;
 }
 
 
-/*! \brief  A Mgmt callback to routine to post MCDI commands
+/*! \brief  A Mgmt callback routine to post MCDI commands
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in]  pDevIface   pointer to magm param
-** \param[in]  pMgmtMcdi   pointer to MCDI cmd struct
+** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pMgmtMcdi   pointer to MCDI cmd struct
 **
 ** \return: VMK_OK  <success>  error code <failure>
 */
@@ -125,12 +119,12 @@ sfvmk_invalid_len:
   return rc;
 }
 
-/*! \brief  A Mgmt callback to routine to post NVRAM req
+/*! \brief  A Mgmt callback routine to post NVRAM req
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in]  pDevIface   pointer to magm param
-** \param[in]  pCmd        pointer to NVRAM cmd struct
+** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pCmd        pointer to NVRAM cmd struct
 **
 ** \return: VMK_OK  <success>  error code <failure>
 */
@@ -275,10 +269,17 @@ sfvmk_fail:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in]  pDevIface   pointer to magm param
-** \param[in]  pVerInfo    pointer to version info struct
+** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pVerInfo    pointer to version info struct
 **
-** \return: VMK_OK  <success>  error code <failure>
+** \return: VMK_OK  <success>
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND:   In case of dev not found
+**     VMK_NOT_READY:   If get NVRAM version failed
+**     VMK_FAILURE:     If get MC Fw version failed
+**     VMK_BAD_PARAM:   Unknown version option
+**
 */
 int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
@@ -289,14 +290,18 @@ int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
   efx_nic_t *pNic = NULL;
   efx_nic_fw_info_t nicFwVer;
   efx_nvram_type_t nvramType;
+  vmk_ByteCount bytesCopied;
   vmk_uint32 subtype;
   vmk_uint16 nvramVer[4];
   int rc;
 
+  pDevIface->status = VMK_OK;
+
   pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
   if (!pAdapter) {
     SFVMK_ERROR("Pointer to pAdapter is NULL");
-    return ENOENT;
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
   }
 
   pNic = pAdapter->pNic;
@@ -308,12 +313,26 @@ int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
       break;
 
     case SFVMK_GET_FW_VERSION:
-      efx_nic_get_fw_version(pNic, &nicFwVer);
-      vmk_Sprintf(pVerInfo->version, "%u.%u.%u.%u",
-                   nicFwVer.enfi_mc_fw_version[0],
-                   nicFwVer.enfi_mc_fw_version[1],
-                   nicFwVer.enfi_mc_fw_version[2],
-                   nicFwVer.enfi_mc_fw_version[3]);
+      rc = efx_nic_get_fw_version(pNic, &nicFwVer);
+      if (rc != 0) {
+        SFVMK_ERR(pAdapter, "Get MC Firmware version failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = VMK_FAILURE;
+        goto end;
+      }
+
+      rc = vmk_StringFormat(pVerInfo->version, SFVMK_VER_MAX_CHAR_LEN,
+                            &bytesCopied, "%u.%u.%u.%u",
+                            nicFwVer.enfi_mc_fw_version[0],
+                            nicFwVer.enfi_mc_fw_version[1],
+                            nicFwVer.enfi_mc_fw_version[2],
+                            nicFwVer.enfi_mc_fw_version[3]);
+      if (rc != VMK_OK) {
+        SFVMK_ERR(pAdapter, "String format failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = VMK_FAILURE;
+        goto end;
+      }
 
       break;
 
@@ -323,19 +342,33 @@ int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
                     EFX_NVRAM_UEFIROM : EFX_NVRAM_BOOTROM;
 
       if ((rc = efx_nvram_get_version(pNic, nvramType, &subtype,
-                                       &nvramVer[0])) != 0)
-        return VMK_FAILURE;
+                                      &nvramVer[0])) != 0) {
+        SFVMK_ERR(pAdapter, "Get NVRAM Firmware version failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = VMK_NOT_READY;
+        goto end;
+      }
 
-      vmk_Sprintf(pVerInfo->version, "%u.%u.%u.%u",
-                   nvramVer[0], nvramVer[1],
-                   nvramVer[2], nvramVer[3]);
+      rc = vmk_StringFormat(pVerInfo->version, SFVMK_VER_MAX_CHAR_LEN,
+                            &bytesCopied, "%u.%u.%u.%u",
+                            nvramVer[0], nvramVer[1],
+                            nvramVer[2], nvramVer[3]);
+
+      if (rc != VMK_OK) {
+        SFVMK_ERR(pAdapter, "String format failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = VMK_FAILURE;
+        goto end;
+     }
 
       break;
 
     default:
-      return VMK_BAD_PARAM;
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
   }
 
+end:
   return VMK_OK;
 }
 

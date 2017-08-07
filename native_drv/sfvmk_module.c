@@ -9,11 +9,7 @@
 #include "sfvmk_ut.h"
 #include "sfvmk_mgmtInterface.h"
 
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
 extern vmk_MgmtApiSignature mgmtSig;
-vmk_MgmtHandle mgmtHandle;
-vmk_HashTable sfvmk_vmkdevHashTable = VMK_INVALID_HASH_HANDLE;
-#endif
 
 sfvmk_ModInfo_t sfvmk_ModInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
@@ -21,19 +17,23 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
    .logID            = VMK_INVALID_LOG_HANDLE,
    .logThrottledID   = VMK_INVALID_LOG_HANDLE,
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
+   .mgmtHandle       = NULL,
+   .vmkdevHashTable = VMK_INVALID_HASH_HANDLE,
 };
 
 static void
 sfvmk_ModInfoCleanup(void)
 {
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
-  if (sfvmk_vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
-    vmk_HashDeleteAll(sfvmk_vmkdevHashTable);
-    if (vmk_HashIsEmpty(sfvmk_vmkdevHashTable)) {
-      vmk_HashRelease(sfvmk_vmkdevHashTable);
+  if (sfvmk_ModInfo.mgmtHandle) {
+    vmk_MgmtDestroy(sfvmk_ModInfo.mgmtHandle);
+  }
+
+  if (sfvmk_ModInfo.vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
+    vmk_HashDeleteAll(sfvmk_ModInfo.vmkdevHashTable);
+    if (vmk_HashIsEmpty(sfvmk_ModInfo.vmkdevHashTable)) {
+      vmk_HashRelease(sfvmk_ModInfo.vmkdevHashTable);
     }
   }
-#endif
 
   if (sfvmk_ModInfo.driverID != NULL) {
     sfvmk_driverUnregister();
@@ -78,10 +78,8 @@ init_module(void)
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
   vmk_MemPoolProps memPoolProps;
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
   vmk_HashProperties hashProps;
   vmk_MgmtProps mgmtProps;
-#endif
 
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
@@ -178,7 +176,6 @@ init_module(void)
                 vmk_StatusToString(status));
   }
 
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
   hashProps.moduleID  = vmk_ModuleCurrentID;
   hashProps.heapID    = sfvmk_ModInfo.heapID;
   hashProps.keyType   = VMK_HASH_KEY_TYPE_STR;
@@ -188,13 +185,11 @@ init_module(void)
   hashProps.acquire   = NULL;
   hashProps.release   = NULL;
 
-  status = vmk_HashAlloc(&hashProps, &sfvmk_vmkdevHashTable);
-  if (status == VMK_OK) {
-    vmk_LogMessage("Allocation of sfvmk_vmkdevHashTable successful");
-  } else {
-    vmk_LogMessage("Initialization of sfvmk_vmkdevHashTable failed: %d",
-                      status);
-     goto err;
+  status = vmk_HashAlloc(&hashProps, &sfvmk_ModInfo.vmkdevHashTable);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of sfvmk_vmkdevHashTable failed: (%s)",
+                 vmk_StatusToString(status));
+    goto err;
   }
 
   mgmtProps.modId = vmk_ModuleCurrentID;
@@ -205,14 +200,12 @@ init_module(void)
   mgmtProps.sessionCleanupFn = NULL;
   mgmtProps.handleCookie = 0;
 
-  status = vmk_MgmtInit(&mgmtProps, &mgmtHandle);
-  if (status == VMK_OK) {
-    vmk_LogMessage("Allocation of mgmtProps successful");
-  } else {
-    vmk_LogMessage("Initialization of mgmtProps failed: %d", status);
-     goto err;
+  status = vmk_MgmtInit(&mgmtProps, &sfvmk_ModInfo.mgmtHandle);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of mgmtProps failed: (%s)",
+                 vmk_StatusToString(status));
+    goto err;
   }
-#endif
 
 err:
   if (status != VMK_OK) {
@@ -234,9 +227,6 @@ cleanup_module(void)
 {
   SFVMK_DEBUG(SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_INFO,
               "Exit: -- Solarflare Native Driver -- ");
-#ifdef SFVMK_MGMT_SUPPORT_ENABLED
-  vmk_MgmtDestroy(mgmtHandle);
-#endif
   sfvmk_ModInfoCleanup();
 
 }

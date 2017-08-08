@@ -1775,7 +1775,6 @@ VMK_ReturnStatus sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq
 
   if (pTxq->blocked) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "Txq is blocked, returning");
-    return VMK_FAILURE;
   }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "added: %d, pushed: %d", pTxq->added, pushed);

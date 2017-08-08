@@ -10,6 +10,104 @@
 #define SFVMK_TXQ_STOP_POLL_WAIT 100*SFVMK_ONE_MILISEC
 #define SFVMK_TXQ_STOP_POLL_TIMEOUT 20
 
+static int sfvmkTsoFwAssisted = SFVMK_FATSOV2;
+
+/*
+ * Size of preallocated TSO header buffers.  Larger blocks must be
+ * allocated from the heap.
+ */
+#define	TSOH_STD_SIZE	128
+
+/* At most half the descriptors in the queue at any time will refer to
+ * a TSO header buffer, since they must always be followed by a
+ * payload descriptor referring to an scatter gather element.
+ */
+#define	TSOH_COUNT(txqEntries)            ((txqEntries) / 2u)
+#define	TSOH_PER_PAGE                     (VMK_PAGE_SIZE / TSOH_STD_SIZE)
+#define	TSOH_PAGE_COUNT(txqEntries)       howmany(TSOH_COUNT(txqEntries), TSOH_PER_PAGE)
+
+/* TCP header flag bits */
+#define TH_FIN     0x01
+#define TH_PUSH    0x08
+
+/*
+ * Software "TSO".  Not quite as good as doing it in hardware, but
+ * still faster than segmenting in the stack.
+ */
+typedef struct sfvmk_tsoState_s {
+  /* Output position */
+  vmk_uint32 outLen;      /* Remaining length in current segment */
+  vmk_uint32 seqnum;      /* Current sequence number */
+  vmk_uint32 packetSpace; /* Remaining space in current packet */
+  vmk_uint32 segsSpace;   /* Remaining number of DMA segments
+                             for the packet (FATSOv2 only) */
+  /* Input position */
+  uint64_t dmaAddr;       /* DMA address of current position */
+  vmk_uint32 inLen;       /* Remaining length in current mbuf */
+
+  vmk_PktHandle *pkt;     /* Input packet */
+  uint16_t protocol;      /* Network protocol (after VLAN decap) */
+  vmk_uint32 nhOff;       /* Offset of network header */
+  vmk_uint32 tcphOff;     /* Offset of TCP header */
+  vmk_uint32 headerLen;   /* Number of bytes of header */
+  vmk_uint32 segSize;     /* TCP segment size */
+  vmk_int32 fwAssisted;   /* Use FW-assisted TSO */
+  uint16_t packetId;      /* IPv4 packet ID from the original packet */
+  uint8_t tcpFlags;       /* TCP flags */
+  efx_desc_t headerDesc;  /* Precomputed header descriptor for
+                           * FW-assisted TSO */
+}sfvmk_tsoState_t;
+
+
+/*! \brief TSO engine initialization. Allocate required buffers
+**         for TSO processing
+**
+** \param[in]  pTxq pointer to txq
+**
+** \return: VMK_OK on success, VMK_FAILURE otherwise
+*/
+static int
+sfvmk_tsoInit(sfvmk_txq_t *pTxq)
+{
+  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
+  unsigned int tsohPageCount = TSOH_PAGE_COUNT(pAdapter->txqEntries);
+  int i;
+
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "tsohPageCount: %d, VMK_PAGE_SIZE: %d, TSOH_PER_PAGE: %d",
+              tsohPageCount, VMK_PAGE_SIZE, TSOH_PER_PAGE);
+
+  /* Allocate TSO header buffers */
+  pTxq->pTsohBuffer = (efsys_mem_t *)sfvmk_memPoolAlloc(tsohPageCount * sizeof(efsys_mem_t));
+  if (NULL == pTxq->pTsohBuffer) {
+    SFVMK_ERR(pAdapter,"failed to allocate memory for TSO header buffers");
+    return VMK_FAILURE;
+  }
+
+  for (i = 0; i < tsohPageCount; i++) {
+    pTxq->pTsohBuffer[i].esmHandle  = pAdapter->dmaEngine;
+
+    /* Allocate and zero DMA space for TSO header buffers */
+    pTxq->pTsohBuffer[i].ioElem.length = VMK_PAGE_SIZE;
+    pTxq->pTsohBuffer[i].pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine,
+                                                  pTxq->pTsohBuffer[i].ioElem.length,
+                                                  &pTxq->pTsohBuffer[i].ioElem.ioAddr);
+    if(NULL == pTxq->pTsohBuffer[i].pEsmBase)
+      goto fail;
+  }
+
+  return VMK_OK;
+
+fail:
+  while (i-- > 0)
+    sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxq->pTsohBuffer[i].pEsmBase,
+                                 pTxq->pTsohBuffer[i].ioElem.ioAddr,
+                                 pTxq->pTsohBuffer[i].ioElem.length);
+  sfvmk_memPoolFree(pTxq->pTsohBuffer, tsohPageCount * sizeof(efsys_mem_t));
+  pTxq->pTsohBuffer = NULL;
+  return VMK_FAILURE;
+}
+
 /*! \brief It releases the resource required for txQ module.
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
@@ -35,6 +133,16 @@ sfvmk_txqFini(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   VMK_ASSERT_BUG(pTxq->initState == SFVMK_TXQ_INITIALIZED,
                     "txq->initState != SFVMK_TXQ_INITIALIZED");
+
+  if (pTxq->type == SFVMK_TXQ_IP_TCP_UDP_CKSUM) {
+    unsigned int tsohPageCount = TSOH_PAGE_COUNT(pAdapter->txqEntries);
+    int i=0;
+    for (; i < tsohPageCount; i++)
+      sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pTxq->pTsohBuffer[i].pEsmBase,
+                                   pTxq->pTsohBuffer[i].ioElem.ioAddr,
+                                   pTxq->pTsohBuffer[i].ioElem.length);
+    sfvmk_memPoolFree(pTxq->pTsohBuffer, tsohPageCount * sizeof(efsys_mem_t));
+  }
 
   /* Free the context arrays. */
   sfvmk_memPoolFree(pTxq->pStmp, sizeof(sfvmk_txMapping_t) * pAdapter->txqEntries);
@@ -115,6 +223,12 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, unsigned int txqIndex,
     goto sfvmk_stmp_alloc_fail;
   }
 
+  if (type == SFVMK_TXQ_IP_TCP_UDP_CKSUM &&
+    (status = sfvmk_tsoInit(pTxq)) != 0) {
+    SFVMK_ERR(pAdapter,"failed to initialize tso");
+    goto sfvmk_stmp_alloc_fail;
+  }
+
   status = sfvmk_mutexInit("txq", &pTxq->lock);
   if(status != VMK_OK)
     goto sfvmk_mutex_fail;
@@ -158,15 +272,29 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   vmk_uint32    qIndex;
   vmk_uint32    evqIndex = 0;
   int rc;
+  const efx_nic_cfg_t *pCfg = NULL;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
-
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
+  pCfg = efx_nic_cfg_get(pAdapter->pNic); 
   pIntr = &pAdapter->intr;
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
                     "intr->state != SFXGE_INTR_INITIALIZED");
+
+  pAdapter->tsoFwAssisted = sfvmkTsoFwAssisted;
+
+  if ((~pCfg->enc_features & EFX_FEATURE_FW_ASSISTED_TSO_V2) ||
+     (!pCfg->enc_fw_assisted_tso_v2_enabled))
+    pAdapter->tsoFwAssisted &= ~SFVMK_FATSOV2;
+  
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "enc_features: 0x%x, tso_v2_enabled: %d, tcp_header_offset_limit: %d,\
+              tsoFwAssisted: %d, max_tx_desc_size: %d", 
+              pCfg->enc_features, pCfg->enc_fw_assisted_tso_v2_enabled,
+              pCfg->enc_tx_tso_tcp_header_offset_limit, 
+              pAdapter->tsoFwAssisted, pCfg->enc_tx_dma_desc_size_max);
 
   pAdapter->txqCount = SFVMK_TXQ_NTYPES - 1 + pIntr->numIntrAlloc;
 
@@ -304,23 +432,31 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
     unsigned int id;
 
     id = completed++ & pTxq->ptrMask;
-    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-              "completed: %d, pending: %d, id: %d", completed, pTxq->pending, id);
-
     pStmp = &pTxq->pStmp[id];
+    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "completed: %d, pending: %d, id: %d, stmp: %p, isPkt: %d, pkt: %p", 
+              completed, pTxq->pending, id, pStmp, pStmp->isPkt, pStmp->u.pkt);
+
     if (pStmp->sgelem.ioAddr != 0) {
       SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
                "Unmapping frag at addr: %lx", pStmp->sgelem.ioAddr);
       vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_FROM_MEMORY, &pStmp->sgelem);
     }
 
-    if (pStmp->pkt) {
-      SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-               "Free pkt: %p", pStmp->pkt);
-      if(pTxq->initState == SFVMK_TXQ_STARTED)
-        vmk_NetPollQueueCompPkt(pEvq->netPoll, pStmp->pkt);
-      else
-        vmk_PktRelease(pStmp->pkt);
+    if(pStmp->isPkt) {
+      if(pStmp->u.pkt) {
+        SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                  "Free pkt: %p", pStmp->u.pkt);
+        if(pTxq->initState == SFVMK_TXQ_STARTED)
+          vmk_NetPollQueueCompPkt(pEvq->netPoll, pStmp->u.pkt);
+        else
+          vmk_PktRelease(pStmp->u.pkt);
+      }
+    }
+    else {
+      sfvmk_freeCoherentDMAMapping(pAdapter->dmaEngine, pStmp->u.hdrMem.pEsmBase,
+                                   pStmp->u.hdrMem.ioElem.ioAddr, 
+                                   pStmp->u.hdrMem.ioElem.length);
     }
   }
 
@@ -405,8 +541,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     SFVMK_TXQ_LOCK(pTxq);
     SFVMK_EVQ_LOCK(pEvq);
 
-    VMK_ASSERT(pTxq->flushState != SFVMK_FLUSH_FAILED,
-               "pTxq->flushState = SFVMK_FLUSH_FAILED");
+    if(pTxq->flushState == SFVMK_FLUSH_FAILED)
+      SFVMK_ERR(pAdapter, "pTxq->flushState = SFVMK_FLUSH_FAILED");
 
     if (pTxq->flushState != SFVMK_FLUSH_DONE) {
       /* Flush timeout */
@@ -419,8 +555,8 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->pending = pTxq->added;
 
   sfvmk_txqComplete(pTxq, pEvq);
-  VMK_ASSERT(pTxq->completed == pTxq->added,
-             "pTxq->completed != pTxq->added");
+  if(pTxq->completed != pTxq->added)
+    SFVMK_ERR(pAdapter, "pTxq->completed != pTxq->added");
 
   sfvmk_txqReap(pTxq);
 
@@ -463,6 +599,55 @@ void sfvmk_txStop(sfvmk_adapter_t *pAdapter)
   efx_tx_fini(pAdapter->pNic);
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+}
+
+/*! \brief Estimate maximum number of Tx descriptors required for TSO packet.
+**
+** \param[in] pAdapter       pointer to sfvmk_adapter_t
+** \param[in] type           tx queue type
+** \param[in] tsoFwAssisted  type of FW assisted tso
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+
+static unsigned int
+sfvmk_txMaxPktDesc(sfvmk_adapter_t *pAdapter,
+                   enum sfvmk_txqType type,
+                   unsigned int tsoFwAssisted)
+{
+  /* One descriptor for every input fragment */
+  unsigned int maxDesc = SFVMK_TX_MAPPING_MAX_SEG;
+  unsigned int swTsoMaxDesc;
+  unsigned int faTsov2MaxDesc = 0;
+
+  /* VLAN tagging Tx option descriptor may be required */
+  if (efx_nic_cfg_get(pAdapter->pNic)->enc_hw_tx_insert_vlan_enabled)
+    maxDesc++;
+
+  if (type == SFVMK_TXQ_IP_TCP_UDP_CKSUM) {
+    /*
+     * Plus header and payload descriptor for each output segment.
+     * Minus one since header fragment is already counted.
+     * Even if FATSO is used, we should be ready to fallback
+     * to do it in the driver.
+     */
+    swTsoMaxDesc = SFVMK_TSO_MAX_SEGS * 2 - 1;
+
+    /* FW assisted TSOv2 requires 3 (2 FATSO plus header) extra
+     * descriptors per superframe limited by number of DMA fetches
+     * per packet. The first packet header is already counted.
+     */
+    if (tsoFwAssisted & SFVMK_FATSOV2) {
+      faTsov2MaxDesc =
+          howmany(SFVMK_TX_MAPPING_MAX_SEG,
+            EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX - 1) *
+          (EFX_TX_FATSOV2_OPT_NDESCS + 1) - 1;
+    }
+
+    maxDesc += MAX(swTsoMaxDesc, faTsov2MaxDesc);
+  }
+
+  return (maxDesc);
 }
 
 /*! \brief creates txq module for a particular txq.
@@ -519,7 +704,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
       break;
 
     default:
-      VMK_ASSERT(0);
+      SFVMK_ERR(pAdapter, "default pTxq->type: %d",pTxq->type);
       flags = 0;
       break;
 
@@ -557,13 +742,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   pTxq->initState = SFVMK_TXQ_STARTED;
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;
-
-  /* 
-   * bug72318: maxPktDesc has to be non-zero for sfvmk_txqReap to get invoked 
-   * within sfvmk_txqListPost. Keeping it at 100 for now till the time TSO 
-   *  feature is implemented.
-   */
-  pTxq->maxPktDesc = 100;
+  pTxq->maxPktDesc = sfvmk_txMaxPktDesc(pAdapter, pTxq->type, tsoFwAssisted);
 
   SFVMK_TXQ_UNLOCK(pTxq);
 
@@ -645,30 +824,35 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
-  VMK_ASSERT(pTxq->nPendDesc != 0, ("pTxq->nPendDesc == 0"));
-  VMK_ASSERT(pTxq->nPendDesc <= pTxq->maxPktDesc, ("pTxq->nPendDesc too large"));
-  VMK_ASSERT(!pTxq->blocked, ("pTxq->blocked"));
+  if(pTxq->nPendDesc == 0)
+    SFVMK_ERR(pAdapter, "pTxq->nPendDesc == 0");
+  if(pTxq->nPendDesc > pTxq->maxPktDesc)
+    SFVMK_ERR(pAdapter, "pTxq->nPendDesc too large");
+  if(pTxq->blocked)
+    SFVMK_ERR(pAdapter, "pTxq->blocked");
 
   oldAdded = pTxq->added;
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-            "oldAdded: %d, reaped: %d", oldAdded, pTxq->reaped);
+  /*
+  ** SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+  **           "oldAdded: %d, reaped: %d", oldAdded, pTxq->reaped);
+  */
 
   /* Post the fragment list. */
   rc = efx_tx_qdesc_post(pTxq->pCommonTxq, pTxq->pPendDesc, pTxq->nPendDesc,
         pTxq->reaped, &pTxq->added);
-  VMK_ASSERT(rc == 0, ("efx_tx_qdesc_post() failed"));
+  if(rc != 0)
+    SFVMK_ERR(pAdapter, "efx_tx_qdesc_post() failed");
 
   /* If efx_tx_qdesc_post() had to refragment, our information about
    * buffers to free may be associated with the wrong
    * descriptors.
    */
-  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-            "added: %d, reaped: %d", pTxq->added, pTxq->reaped);
-  VMK_ASSERT(pTxq->added - oldAdded == pTxq->nPendDesc,
-             ("efx_tx_qdesc_post() refragmented descriptors"));
+  if(pTxq->added - oldAdded != pTxq->nPendDesc)
+    SFVMK_ERR(pAdapter, "efx_tx_qdesc_post() refragmented descriptors");
 
   level = pTxq->added - pTxq->reaped;
-  VMK_ASSERT(level <= pTxq->entries, ("overfilled TX queue"));
+  if(level > pTxq->entries)
+    SFVMK_ERR(pAdapter, "overfilled TX queue");
 
   /* Clear the fragment list. */
   pTxq->nPendDesc = 0;
@@ -679,8 +863,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
    */
   blockLevel = EFX_TXQ_LIMIT(pTxq->entries) - pTxq->maxPktDesc;
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-        "TXQ_LIMIT: %d, max_pkt_dec: %d, blockLevel: %d",
-        EFX_TXQ_LIMIT(pTxq->entries), pTxq->maxPktDesc, blockLevel);
+            "added: %d, reaped: %d, level: %d, blocklevel: %d", pTxq->added, pTxq->reaped, level, blockLevel);
 
   /* Have we reached the block level? */
   if (level < blockLevel) {
@@ -732,7 +915,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
 static inline void
 sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_txMapping_t **pStmp)
 {
-  SFVMK_DBG_FUNC_ENTRY(pTxq->pAdapter, SFVMK_DBG_TX);
+  //SFVMK_DBG_FUNC_ENTRY(pTxq->pAdapter, SFVMK_DBG_TX);
   if (VMK_UNLIKELY(*pStmp == &pTxq->pStmp[pTxq->ptrMask]))
     *pStmp = &pTxq->pStmp[0];
   else
@@ -740,7 +923,7 @@ sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_txMapping_t **pStmp)
 
   SFVMK_DBG(pTxq->pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "pStmp id: %ld", *pStmp - &pTxq->pStmp[0]);
-  SFVMK_DBG_FUNC_EXIT(pTxq->pAdapter, SFVMK_DBG_TX);
+  //SFVMK_DBG_FUNC_EXIT(pTxq->pAdapter, SFVMK_DBG_TX);
 }
 
 /*! \brief  insert vlan tag in the packet header
@@ -876,6 +1059,503 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq, vmk_PktHandle **ppPkt, vmk_ByteCountSm
   return 0;
 }
 
+/*! \brief  Print data members of tso structure
+**
+** \param[out] pTso        pointer to tso state structure
+**
+** \return: void
+**
+*/
+static void
+printTsoStruct(sfvmk_tsoState_t *pTso)
+{
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+    "outLen: %d, \
+    packetSpace: %u,\
+    segsSpace: %u,\
+    inLen: %u,\
+    pkt: %p,",
+    pTso->outLen,  
+    pTso->packetSpace,
+    pTso->segsSpace,  
+    pTso->inLen,  
+    pTso->pkt);
+}
+
+/*! \brief  Extract TSO information from packet headers 
+**          and prepare header descriptor for FATSOv2
+**
+** \param[in]  pTxq        pointer to txq
+** \param[out] pTso        pointer to tso state structure
+** \param[in]  pHdrDmaSeg  pointer to header dma segment
+** \param[in]  pkt         packet to be transmitted
+**
+** \return: void
+**
+*/
+static void 
+sfvmk_tsoStart(sfvmk_txq_t *pTxq,
+               sfvmk_tsoState_t *pTso,
+               const sfvmk_dmaSegment_t *pHdrDmaSeg,
+               vmk_PktHandle *pkt)
+{
+  const efx_nic_cfg_t *pCfg = efx_nic_cfg_get(pTxq->pAdapter->pNic);
+  VMK_ReturnStatus status;
+  vmk_Bool isTcp;
+  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
+  vmk_PktHeaderEntry *pL2HdrEntry = NULL;
+  vmk_PktHeaderEntry *pL3HdrEntry = NULL;
+  vmk_PktHeaderEntry *pL4HdrEntry = NULL;
+  void *pL3Hdr = NULL;
+  void *pL4Hdr = NULL;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
+  pTso->fwAssisted = pTxq->tsoFwAssisted;
+  pTso->pkt = pkt;
+
+  /* Find network protocol and header */
+  if((status = vmk_PktHeaderL2Find (pkt, &pL2HdrEntry, NULL)) != VMK_OK) {
+    SFVMK_ERR(pAdapter, "Unable to find L2 header: %s", vmk_StatusToString(status));
+    return; 
+  }
+    
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "L2 header entry: type: 0x%x, offset: %d, proto: 0x%04x, nextHdrOff: %d", 
+              pL2HdrEntry->type, pL2HdrEntry->offset,
+              sfvmk_swapBytes(pL2HdrEntry->nextHdrProto), pL2HdrEntry->nextHdrOffset);
+
+  pTso->protocol = sfvmk_swapBytes(pL2HdrEntry->nextHdrProto);
+  pTso->nhOff = pL2HdrEntry->nextHdrOffset;
+
+  /*
+  ** For a tagged packet (simulation mode), protocol and nextHdrOffset fields
+  ** are returned as expected
+  */
+#ifdef DEBUG_VLAN
+  if ((pL2HdrEntry->type == VMK_PKT_HEADER_L2_ETHERNET_802_1PQ) || 
+             (pL2HdrEntry->type == VMK_PKT_HEADER_L2_ETHERNET_802_1PQ)) {
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "Found tagged packet ");
+    if(VMK_OK != (status = vmk_PktHeaderDataGet(pkt, pL2HdrEntry, (void **)&pEh))) {
+      SFVMK_ERR(pAdapter, "Unable to fetch L2 header: %s", vmk_StatusToString(status));
+      return ; 
+    }
+
+    vmk_VLANHdr *veh = ((vmk_uint8 *)pEh) + SFVMK_VLAN_HDR_START_OFFSET;
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                "veh->type: 0x%04x, vlan id: %d", sfvmk_swapBytes(veh->type), VMK_VLAN_HDR_GET_VID(veh));
+    pTso->protocol = sfvmk_swapBytes(veh->type);
+    pTso->nhOff = sizeof(*veh);
+    vmk_PktHeaderDataRelease(pkt, pL2HdrEntry, (void *)pEh, VMK_FALSE);
+  } 
+#endif      
+
+  /* Find TCP header */
+  if ((pTso->protocol == VMK_ETH_TYPE_IPV4) || (pTso->protocol == VMK_ETH_TYPE_IPV6)) {
+    status = vmk_PktHeaderL3Find(pkt, &pL3HdrEntry, NULL);
+    if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "No L3 header found: %s", vmk_StatusToString(status));
+      return;
+    }
+    else
+    {
+      SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                  "l3 type: %x, offset: %d next proto: 0x%04x, offset: %d", 
+                  pL3HdrEntry->type, pL3HdrEntry->offset, 
+                  pL3HdrEntry->nextHdrProto, pL3HdrEntry->nextHdrOffset);
+
+      isTcp = (pL3HdrEntry->nextHdrProto == VMK_IP_PROTO_TCP) ? VMK_TRUE:VMK_FALSE;
+
+      if (isTcp) {
+        pTso->tcphOff = pL3HdrEntry->nextHdrOffset;
+        status = vmk_PktHeaderDataGet(pkt, pL3HdrEntry, (void **)&pL3Hdr);
+        if (status == VMK_OK) {
+          pTso->packetId = ((vmk_IPv4Hdr *)pL3Hdr)->identification;
+          if(pTso->protocol == VMK_ETH_TYPE_IPV6)
+            pTso->packetId = 0;
+
+          vmk_PktHeaderDataRelease(pkt, pL3HdrEntry, (void *)pL3Hdr, VMK_FALSE);
+        }
+      }
+      else {
+        SFVMK_ERR(pAdapter, "Non TCP packet in TSO handling");
+        return;
+      }
+    }
+  }
+  else {
+    SFVMK_ERR(pAdapter, "Non IP packet, protocol : %d", pTso->protocol);
+    return;
+  }
+
+  if (pTso->fwAssisted &&
+      VMK_UNLIKELY(pTso->tcphOff > pCfg->enc_tx_tso_tcp_header_offset_limit)) {
+    SFVMK_ERR(pAdapter, "tcp hdr offset: %d beyond limit: %d", 
+              pTso->tcphOff, pCfg->enc_tx_tso_tcp_header_offset_limit);
+    pTso->fwAssisted = 0;
+  }
+
+
+  if(pHdrDmaSeg->dsLen < pTso->tcphOff)
+    SFVMK_ERR(pAdapter, "network header is fragmented in hdr segment");
+  
+  status = vmk_PktHeaderL4Find(pkt, &pL4HdrEntry, NULL);
+  if (status == VMK_OK) {
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                "l4 type: %x, offset: %d next proto: 0x%04x, offset: %d", 
+                pL4HdrEntry->type, pL4HdrEntry->offset, 
+                sfvmk_swapBytes(pL4HdrEntry->nextHdrProto), pL4HdrEntry->nextHdrOffset);
+
+    status = vmk_PktHeaderDataGet(pkt, pL4HdrEntry, (void **)&pL4Hdr);
+    if (status == VMK_OK) {
+      /* this is complete header len */
+      pTso->headerLen = pTso->tcphOff + 4 * ((vmk_TCPHdr *)pL4Hdr)->dataOffset;
+      SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                  "tcp header len: %d, initial seq: %u, flags: 0x%x",
+                  pTso->headerLen, ((vmk_TCPHdr *)pL4Hdr)->seq, ((vmk_TCPHdr *)pL4Hdr)->flags);
+    }
+    else {
+      SFVMK_ERR(pAdapter, "Couldn't get L4 hdr data : %s", vmk_StatusToString(status));
+      return;
+    }
+  }
+
+  pTso->seqnum = vmk_BE32ToCPU(((vmk_TCPHdr *)pL4Hdr)->seq);
+
+  if(((vmk_TCPHdr *)pL4Hdr)->syn || ((vmk_TCPHdr *)pL4Hdr)->urg)
+    SFVMK_ERR(pAdapter, "incompatible TCP flag 0x%x on TSO packet",
+             ((vmk_TCPHdr *)pL4Hdr)->flags);
+  pTso->tcpFlags = ((vmk_TCPHdr *)pL4Hdr)->flags;
+
+  vmk_PktHeaderDataRelease(pkt, pL4HdrEntry, (void *)pL4Hdr, VMK_FALSE);
+  pTso->outLen = vmk_PktFrameLenGet(pkt) - pTso->headerLen;
+
+  if (pTso->fwAssisted) {
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                "hdr seg len: %d, headerLen: %d", pHdrDmaSeg->dsLen, pTso->headerLen);
+
+    if (pHdrDmaSeg->dsLen >= pTso->headerLen) {
+      efx_tx_qdesc_dma_create(pTxq->pCommonTxq,
+            pHdrDmaSeg->dsAddr,
+            pTso->headerLen,
+            VMK_FALSE,
+            &pTso->headerDesc);
+    }
+    else {
+      pTso->fwAssisted = 0;
+      SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                  "setting fwAssisted = 0");
+    }
+  }
+
+  printTsoStruct(pTso);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+}
+
+/*! \brief  form descriptors for the current fragment,
+**          until we reach the end of fragment or end-of-packet.
+**
+** \param[in]      pTxq        pointer to txq
+** \param[in]      pTso        pointer to tso state structure
+**
+** \return: void
+**
+*/
+static void
+sfvmk_tsoFillPktWithFragments(sfvmk_txq_t *pTxq,
+                              sfvmk_tsoState_t *pTso)
+{
+  efx_desc_t *desc;
+  int n;
+  uint64_t dmaAddr = pTso->dmaAddr;
+  vmk_Bool eop;
+  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+//  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
+
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "inlen: %u, pktSpace: %u", pTso->inLen, pTso->packetSpace);
+  if( (pTso->inLen <= 0) || (pTso->packetSpace <= 0)) {
+    SFVMK_ERR(pAdapter, "Invalid TSO input length: %d or packet space: %d",
+              pTso->inLen, pTso->packetSpace);
+    return;
+  }
+  
+  if (pTso->fwAssisted & SFVMK_FATSOV2) {
+    n = pTso->inLen;
+    pTso->outLen -= n;
+    pTso->seqnum += n;
+    pTso->inLen = 0;
+    if (n < pTso->packetSpace) {
+      pTso->packetSpace -= n;
+      pTso->segsSpace--;
+    } 
+    else {
+      pTso->packetSpace = pTso->segSize -
+          (n - pTso->packetSpace) % pTso->segSize;
+      pTso->segsSpace =
+          EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX - 1 -
+          (pTso->packetSpace != pTso->segSize);
+    }
+  } else {
+    n = MIN(pTso->inLen, pTso->packetSpace);
+    pTso->packetSpace -= n;
+    pTso->outLen -= n;
+    pTso->dmaAddr += n;
+    pTso->inLen -= n;
+  }
+
+  /*
+   * It is OK to use binary OR below to avoid extra branching
+   * since all conditions may always be checked.
+   */
+  eop = (pTso->outLen == 0) | (pTso->packetSpace == 0) |
+      (pTso->segsSpace == 0);
+  if(eop)
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "eop at id: %u", pTxq->nPendDesc);
+  desc = &pTxq->pPendDesc[pTxq->nPendDesc++];
+  efx_tx_qdesc_dma_create(pTxq->pCommonTxq, dmaAddr, n, eop, desc);
+//  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+}
+
+/*! \brief  generate a new header and prepare for the new packet
+**
+** \param[in]      pTxq        pointer to txq
+** \param[in]      pTso        pointer to tso state structure
+** \param[in,out]  pId         pointer to stmp array index
+**
+** \return: stmp array index
+**
+*/
+static int 
+sfvmk_tsoStartNewPacket(sfvmk_txq_t *pTxq,
+                        sfvmk_tsoState_t *pTso,
+                        uint32_t *pId)
+{
+  unsigned int id = *pId;
+  efx_desc_t *desc;
+  VMK_ReturnStatus status;
+  vmk_TCPHdr *pTcpHdr;
+  unsigned ip_length;
+  char *pHeader;
+  uint64_t dmaAddr;
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_TX);
+
+  if (pTso->fwAssisted & SFVMK_FATSOV2) {
+    /* Add 2 FATSOv2 option descriptors */
+    desc = &pTxq->pPendDesc[pTxq->nPendDesc];
+    efx_tx_qdesc_tso2_create(pTxq->pCommonTxq,
+           pTso->packetId,
+           pTso->seqnum,
+           pTso->segSize,
+           desc,
+           EFX_TX_FATSOV2_OPT_NDESCS);
+    desc += EFX_TX_FATSOV2_OPT_NDESCS;
+    pTxq->nPendDesc += EFX_TX_FATSOV2_OPT_NDESCS;
+    id = (id + EFX_TX_FATSOV2_OPT_NDESCS) & pTxq->ptrMask;
+
+    pTso->segsSpace =
+        EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX - 1;
+ 
+    /* Header DMA descriptor */
+    *desc = pTso->headerDesc;
+    pTxq->nPendDesc++;
+    id = (id + 1) & pTxq->ptrMask;
+  } 
+  else {
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+                "TSO Software implementation id: %d", id);
+    /* Allocate a DMA-mapped header buffer. */
+    if (VMK_LIKELY(pTso->headerLen <= TSOH_STD_SIZE)) {
+      unsigned int page_index = (id / 2) / TSOH_PER_PAGE;
+      unsigned int buf_index = (id / 2) % TSOH_PER_PAGE;
+
+      SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+                  "page_index: %d, buf_index: %d", page_index, buf_index);
+      pHeader = (pTxq->pTsohBuffer[page_index].pEsmBase +
+          buf_index * TSOH_STD_SIZE);
+      dmaAddr = (pTxq->pTsohBuffer[page_index].ioElem.ioAddr +
+            buf_index * TSOH_STD_SIZE);
+    } else {
+      sfvmk_txMapping_t *pStmp = &pTxq->pStmp[id];
+      efsys_mem_t *pHdrMem = &pStmp->u.hdrMem;
+
+      pHdrMem->ioElem.length = pTso->headerLen;
+      pHdrMem->pEsmBase = sfvmk_allocCoherentDMAMapping(pTxq->pAdapter->dmaEngine,
+                                             pHdrMem->ioElem.length,
+                                             &pHdrMem->ioElem.ioAddr);
+      SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+                  "pEsmBase: %p, len: %d", pHdrMem->pEsmBase, pHdrMem->ioElem.length);
+
+      if (VMK_UNLIKELY(NULL == pHdrMem->pEsmBase))
+        return VMK_NO_MEMORY;
+
+      pStmp->isPkt = VMK_FALSE;
+      pHeader = pHdrMem->pEsmBase;
+      dmaAddr = pHdrMem->ioElem.ioAddr;
+
+      pTxq->tsoLongHeaders++;
+    }
+
+    pTcpHdr = (vmk_TCPHdr *)(pHeader + pTso->tcphOff);
+
+    /* Copy and update the headers. */
+    if(VMK_OK != (status = vmk_PktCopyBytesOut(pHeader, pTso->headerLen, 
+                                               0, pTso->pkt)))
+      SFVMK_ERR(pTxq->pAdapter, "Unable to copy pkt bytes to buffer %s", 
+                vmk_StatusToString(status));
+    pTcpHdr->seq = vmk_CPUToBE32(pTso->seqnum);
+    pTso->seqnum += pTso->segSize;
+
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+                "outlen: %d, segSize: %d, flags: 0x%x",
+                pTso->outLen, pTso->segSize, pTcpHdr->flags);
+
+    if (pTso->outLen > pTso->segSize) {
+      /* This packet will not finish the TSO burst. */
+      ip_length = pTso->headerLen - pTso->nhOff + pTso->segSize;
+      pTcpHdr->flags &= ~(TH_FIN | TH_PUSH);
+    } 
+    else {
+      /* This packet will be the last in the TSO burst. */
+      ip_length = pTso->headerLen - pTso->nhOff + pTso->outLen;
+    }
+
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+                "seq: %u, ip_len: %d, tcp flags: 0x%x",
+                pTcpHdr->seq, ip_length, pTcpHdr->flags);
+
+    if (pTso->protocol == VMK_ETH_TYPE_IPV4) {
+      vmk_IPv4Hdr *pIpHdr = (vmk_IPv4Hdr *)(pHeader + pTso->nhOff);
+      pIpHdr->totalLength = vmk_CPUToBE16(ip_length);
+    } 
+    else if(pTso->protocol == VMK_ETH_TYPE_IPV6) {
+      vmk_IPv6Hdr *pIpHdr =
+        (vmk_IPv6Hdr *)(pHeader + pTso->nhOff);
+      pIpHdr->payloadLength = vmk_CPUToBE16(ip_length - sizeof(*pIpHdr));
+    }
+
+    /* Form a descriptor for this header. */
+    desc = &pTxq->pPendDesc[pTxq->nPendDesc++];
+    efx_tx_qdesc_dma_create(pTxq->pCommonTxq,
+          dmaAddr,
+          pTso->headerLen,
+          0,
+          desc);
+    id = (id + 1) & pTxq->ptrMask;
+
+    pTso->segsSpace = VMK_UINT32_MAX;
+  }
+  pTso->packetSpace = pTso->segSize;
+  pTxq->tsoPackets++;
+  *pId = id;
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DBG_TX);
+  return (0);
+}
+
+/*! \brief  TCP Segmentation Offload processing
+**
+** \param[in]  pTxq        pointer to txq
+** \param[in]  pkt         packet to be transmitted
+** \param[in]  pDmaSeg     pointer to array of pkt segments
+** \param[in]  nDmaSeg     number of pkt segments
+** \param[in]  vlanTagged  flag for vlan tag presence
+** \param[in]  tsoSegSize  MSS for TSO processing
+**
+** \return: descriptor index for the next entry to be added or -1
+**
+*/
+static int
+sfvmk_txQueueTso(sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, 
+      sfvmk_dmaSegment_t *pDmaSeg, vmk_uint16 nDmaSeg, 
+      vmk_uint16 vlanTagged, vmk_uint16 tsoSegSize)
+{
+  sfvmk_tsoState_t tso;
+  vmk_uint32 id;
+  vmk_uint32 numFatsoOptDesc=0;
+  vmk_uint32 skipped = 0;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_TX);
+
+  tso.segSize = tsoSegSize;
+  sfvmk_tsoStart(pTxq, &tso, pDmaSeg, pkt);
+
+  /* go over dma segments which include just headers */
+  while (pDmaSeg->dsLen + skipped <= tso.headerLen) {
+    skipped += pDmaSeg->dsLen;
+    --nDmaSeg;
+    VMK_ASSERT_BUG(nDmaSeg != 0, "No payload in TSO packet");
+    ++pDmaSeg;
+  }
+
+  /* first pDmaSeg is pointing to segment containing partial hdr and data */
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+             "skipped: %d, nDmaSeg: %d", skipped, nDmaSeg);
+
+  /* inLen will contain the data bytes in pDmaSeg */
+  tso.inLen = pDmaSeg->dsLen - (tso.headerLen - skipped);
+  /* dmaAddr will point to address of first data byte */
+  tso.dmaAddr = pDmaSeg->dsAddr + (tso.headerLen - skipped);
+
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, 
+              "inLen: %d, dmaAddr: %lx", tso.inLen, tso.dmaAddr);
+
+  id = (pTxq->added + vlanTagged) & pTxq->ptrMask;
+
+  if (VMK_UNLIKELY(sfvmk_tsoStartNewPacket(pTxq, &tso, &id)))
+    return (-1);
+
+  numFatsoOptDesc = (tso.fwAssisted & SFVMK_FATSOV2) ?
+                    EFX_TX_FATSOV2_OPT_NDESCS : 0;
+
+  while (1) {
+    sfvmk_tsoFillPktWithFragments(pTxq, &tso);
+    /* Exactly one DMA descriptor is added */
+    id = (id + 1) & pTxq->ptrMask;
+
+    SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "id: %d", id);
+    /* Move onto the next fragment? */
+    if (tso.inLen == 0) {
+      --nDmaSeg;
+      if (nDmaSeg == 0)
+        break;
+      ++pDmaSeg;
+      tso.inLen = pDmaSeg->dsLen;
+      tso.dmaAddr = pDmaSeg->dsAddr;
+    }
+    printTsoStruct(&tso);
+
+    /* End of packet? */
+    if ((tso.packetSpace == 0) | (tso.segsSpace == 0)) {
+      /* If the queue is now full due to tiny MSS,
+       * or we can't create another header, discard
+       * the remainder of the input buf but do not
+       * roll back the work we have done.
+       */
+      if (pTxq->nPendDesc + numFatsoOptDesc +
+          1 /* header */ + nDmaSeg > pTxq->maxPktDesc) {
+        pTxq->tsoPktDropTooMany++;
+        SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                    "pTxq->tsoPktDropTooMany: %lu", pTxq->tsoPktDropTooMany);
+        break;
+      }
+      if (VMK_UNLIKELY(sfvmk_tsoStartNewPacket(pTxq, &tso, &id))) {
+        pTxq->tsoPktDropNoRscr++;
+        SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                    "pTxq->tsoPktDropNoRscr: %lu", pTxq->tsoPktDropNoRscr);
+        break;
+      }
+    }
+  }
+
+  pTxq->tsoBursts++;
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "tsoBursts: %lu id: %d", pTxq->tsoBursts, id);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DBG_TX);
+  return (id);
+}
 
 /*! \brief fill the transmit buffer descriptor with pkt fragments
 **
@@ -884,7 +1564,7 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq, vmk_PktHandle **ppPkt, vmk_ByteCountSm
 ** \param[in]  pkt       packet to be transmitted
 ** \param[in]  pktLen    length of the packet to be transmitted
 **
-** \return: void
+** \return: VMK_OK in case of success, VMK_FAILURE otherwise
 **
 */
 
@@ -904,6 +1584,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   int startId = id = (pTxq->added) & pTxq->ptrMask;
   sfvmk_txMapping_t *pStmp = &pTxq->pStmp[id];
   sfvmk_dmaSegment_t *pDmaSeg = NULL;
+  VMK_ReturnStatus status;
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
@@ -913,10 +1594,17 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
      sfvmk_nextStmp(pTxq, &pStmp);
   }
 
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+        "id: %d, pTxq: %p, pStmp: %p, vlanTagged: %d", id, pTxq, pStmp, vlanTagged);
   numElems = vmk_PktSgArrayGet(pkt)->numElems;
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
         "number of pkt segments: %d", numElems);
 
+  /*
+  ** TODO: This allocation from heap can be replaced with stack if we can
+  ** safely estimate the upper limit on the number of SG elements that can
+  ** be generated for one packet
+  */
   pDmaSeg = vmk_HeapAlloc(sfvmk_ModInfo.heapID, sizeof(sfvmk_dmaSegment_t)*numElems);
   if(!pDmaSeg) {
     SFVMK_ERR(pAdapter, "Couldn't allocate memory for dma segments");
@@ -924,7 +1612,6 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   }
 
   for (i = 0; i < numElems; i++) {
-    VMK_ReturnStatus status;
 
     /* Get MA of pSgElemment and its length. */
     pSgElem = vmk_PktSgElemGet(pkt, i);
@@ -964,19 +1651,52 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
 
   if(vmk_PktIsLargeTcpPacket(pkt)) {
     vmk_uint16 tsoSegSize = vmk_PktGetLargeTcpPacketMss(pkt);
-    vmk_LogMessage("TSO handling required, mss: %d", tsoSegSize);
-    /*TODO: TSO processing*/
+    vmk_uint16 j=0;
+    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+              "TSO handling required, mss: %d", tsoSegSize);
+    status = sfvmk_txQueueTso(pTxq, pkt, pDmaSeg, numElems, vlanTagged, tsoSegSize);
+    if (status < 0)
+      goto err_ret;
+    else if (status < id) { /* wrap around condition */
+      int diff = (pTxq->ptrMask+1-id);
+      status = id + diff + status;
+      SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "WRAP AROUND, status: %d", status);
+    }
+
+    for(i=id;i<status;i++) {
+      /* for option descriptors, make sure txqComplete doesn't try clean-up */
+      pStmp->isPkt = VMK_TRUE;
+      pStmp->u.pkt = NULL;
+
+      if(status - i > numElems) {
+        SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                 "Bypassing id: %d for completion, pStmp: %p", i, pStmp);
+        pStmp->sgelem.ioAddr = 0;
+        sfvmk_nextStmp(pTxq, &pStmp);
+        continue;
+      }
+      vmk_Memcpy(&pStmp->sgelem, &pDmaSeg[j++], sizeof(sfvmk_dmaSegment_t));
+      if(i != status -1)
+        sfvmk_nextStmp(pTxq, &pStmp);
+    }
+    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+             "Filling pkt %p pStmp: %p, pStmp[%d]: %p", pkt, pStmp,
+             (status - 1) & pTxq->ptrMask,
+             &pTxq->pStmp[(status - 1) & pTxq->ptrMask]);
+    pStmp->u.pkt = pkt;
+    pStmp->isPkt = VMK_TRUE;    
   }
   else {
     for (i = 0; i < numElems; i++) {
       /* update the list of in-flight packets */
       id = (pTxq->added + i + vlanTagged) & pTxq->ptrMask;
       SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-                "added: %d pStmp: %p, id: %d, &pTxq->pStmp[id]: %p",
-                 pTxq->added, pStmp, id, &pTxq->pStmp[id]);
+                "added: %d pStmp: %p, id: %d, &pTxq->pStmp[id]: %p, pTxq: %p",
+                 pTxq->added, pStmp, id, &pTxq->pStmp[id], pTxq);
 
       vmk_Memcpy(&pStmp->sgelem, &pDmaSeg[i], sizeof(sfvmk_dmaSegment_t));
-      pStmp->pkt=NULL;
+      pStmp->u.pkt=NULL;
+      pStmp->isPkt = VMK_TRUE;
 
       desc = &pTxq->pPendDesc[i + vlanTagged];
       eop = (i == numElems - 1);
@@ -993,7 +1713,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
     if(pStmp) {
       SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
                 "Filling in pkt handle %p for id: %d", pkt, id);
-      pStmp->pkt = pkt;
+      pStmp->u.pkt = pkt;
     }
 
     pTxq->nPendDesc = numElems + vlanTagged;
@@ -1032,7 +1752,7 @@ err_ret:
 ** \param[in]  pkt       packet to be transmitted
 ** \param[in]  pktLen    length of the packet to be transmitted
 **
-** \return: void
+** \return: VMK_OK in case of success or VMK_FAILURE otherwise
 */
 
 VMK_ReturnStatus sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq, vmk_PktHandle *pkt, vmk_ByteCountSmall pktLen)

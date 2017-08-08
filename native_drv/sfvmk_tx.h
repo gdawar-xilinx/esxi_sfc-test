@@ -25,6 +25,28 @@
 
 #define SFVMK_TXQ_UNBLOCK_LEVEL(entries)       (EFX_TXQ_LIMIT(entries) / 4)
 
+/* Considering MAX pkt size of TSO pkt as 64K and buffer size as 2K*/
+
+/* Maximum number of DMA segments needed to map largest TSO packet.
+ * With TSO, the pkt length may be just over 64K, divided into 2K mbuf
+ * clusters taking into account that the first may be not 2K cluster
+ * boundary aligned.
+ * Packet header may be split into two segments because of, for example,
+ * VLAN header insertion.
+ */
+/* FIXME: set the correct value SFVMK_TX_MAPPING_MAX_SEG */
+#define SFVMK_TX_MAPPING_MAX_SEG  (2 + 32 + 1) 
+#define  howmany(x, y)  (((x)+((y)-1))/(y))
+
+/* Maximum size of TSO packet */
+#define  SFVMK_TSO_MAX_SIZE    (65535)
+
+/*
+ * Maximum number of segments to be created for a TSO packet.
+ * Allow for a reasonable minimum MSS of 512.
+ */
+#define  SFVMK_TSO_MAX_SEGS    howmany(SFVMK_TSO_MAX_SIZE, 512)
+
 /*txq type */
 enum sfvmk_txqType {
   SFVMK_TXQ_NON_CKSUM = 0,
@@ -55,10 +77,16 @@ typedef struct sfvmk_dmaSegment_s {
 }sfvmk_dmaSegment_t;
 
 
-/* Buffer mapping information for descriptors in flight */
+/*
+ * Buffer mapping information for descriptors in flight.
+ */
 typedef struct sfvmk_txMapping_s {
-	vmk_PktHandle *pkt;
-	vmk_SgElem sgelem;
+  union {
+    vmk_PktHandle *pkt;
+    efsys_mem_t hdrMem;
+  } u;
+  vmk_SgElem sgelem;
+  vmk_Bool isPkt;
 }sfvmk_txMapping_t;
 
 typedef struct sfvmk_txq_s {
@@ -80,6 +108,7 @@ typedef struct sfvmk_txq_s {
   sfvmk_txMapping_t   *pStmp;  /* Packets in flight. */
   efx_desc_t      *pPendDesc;
   vmk_uint64      pendDescSize;
+  efsys_mem_t    *pTsohBuffer;
 
   efx_txq_t       *pCommonTxq;
   vmk_Name        mtxLckName;
@@ -103,6 +132,14 @@ typedef struct sfvmk_txq_s {
   ** FW-assisted tagging is used
   */
   vmk_uint16        hwVlanTci;
+
+  /* Statistics */
+  vmk_uint64     tsoBursts;
+  vmk_uint64     tsoPackets;
+  vmk_uint64     tsoLongHeaders;
+  vmk_uint64     tsoPktDropTooMany;
+  vmk_uint64     tsoPktDropNoRscr;
+
   struct sfvmk_txq_s    *next;
 }sfvmk_txq_t;
 

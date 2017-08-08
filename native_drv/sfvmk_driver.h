@@ -39,7 +39,6 @@ extern void             sfvmk_driverUnregister(void);
 
 #define SFVMK_NDESCS                  1024
 
-#define SFVMK_FATSOV1 (1 << 0)
 #define SFVMK_FATSOV2 (1 << 1)
 
 #define SFVMK_ADAPTER_TABLE_SIZE  64

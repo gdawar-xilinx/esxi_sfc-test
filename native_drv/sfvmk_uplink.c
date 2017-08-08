@@ -580,13 +580,12 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                 vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
-  /* TODO : following caps will be enabled in subsequent code drop */
-#if 0
   /* Driver supports IPv4 TCP and UDP checksum offload */
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                 VMK_UPLINK_CAP_IPV4_CSO, NULL);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter,"IPv4_CSO cap register failed with error 0x%x", status);
+    SFVMK_ERR(pAdapter,"IPv4_CSO cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 
@@ -594,7 +593,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                 VMK_UPLINK_CAP_IPV6_CSO, NULL);
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
-    SFVMK_ERR(pAdapter, "IPv6_CSO cap register failed with error 0x%x", status);
+    SFVMK_ERR(pAdapter, "IPv6_CSO cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 
@@ -602,7 +602,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                 VMK_UPLINK_CAP_IPV4_TSO, NULL);
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
-    SFVMK_ERR(pAdapter, "IPv4_TSO cap register failed with error 0x%x", status);
+    SFVMK_ERR(pAdapter, "IPv4_TSO cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 
@@ -610,12 +611,12 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                   VMK_UPLINK_CAP_IPV6_TSO, NULL);
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
-    SFVMK_ERR(pAdapter,"IPv6_TSO cap register failed with error 0x%x", status);
+    SFVMK_ERR(pAdapter,"IPv6_TSO cap register failed with error %s",
+              vmk_StatusToString(status));
     VMK_ASSERT(0);
   }
 
-#endif
-  /* Driver supports VLAN RX offload (tag stripping) */
+ /* Driver supports VLAN RX offload (tag stripping) */
   status = vmk_UplinkCapRegister(pAdapter->uplink,
                                   VMK_UPLINK_CAP_VLAN_RX_STRIP,  NULL);
   if (status != VMK_OK) {
@@ -885,10 +886,17 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "RxQ: %d, TxQ: %d, qid: %d", maxRxQueues, maxTxQueues, qid);
 
+  if(vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt)) {
+  /* TODO: implement queue mapping for later use  */
+	  qid = SFVMK_TXQ_IP_TCP_UDP_CKSUM;
+     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "pkt: %p moved to qid: %d", pkt, qid);
+  }
+
   VMK_PKTLIST_ITER_STACK_DEF(iter);
   for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
    vmk_PktListIterRemovePkt(iter, &pkt);
-   VMK_ASSERT(pkt);
+   SFVMK_NULL_PTR_CHECK(pkt);
 
    pktLen = vmk_PktFrameLenGet(pkt);
    if (pktLen > SFVMK_MAX_PKT_SIZE) {

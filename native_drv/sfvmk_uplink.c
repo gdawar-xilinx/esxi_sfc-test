@@ -886,13 +886,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "RxQ: %d, TxQ: %d, qid: %d", maxRxQueues, maxTxQueues, qid);
 
-  if(vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt)) {
-  /* TODO: implement queue mapping for later use  */
-	  qid = SFVMK_TXQ_IP_TCP_UDP_CKSUM;
-     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "pkt: %p moved to qid: %d", pkt, qid);
-  }
-
   VMK_PKTLIST_ITER_STACK_DEF(iter);
   for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
    vmk_PktListIterRemovePkt(iter, &pkt);
@@ -905,7 +898,14 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     goto sfvmk_release_pkt;
 	}
 
-    status = sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);
+   if(vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt)) {
+     /* TODO: implement queue mapping for later use  */
+	  qid = SFVMK_TXQ_IP_TCP_UDP_CKSUM;
+     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+            "pkt: %p moved to qid: %d", pkt, qid);
+   }
+
+   status = sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);
     if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "failed to transmit pkt on txq[%d]", qid);
       goto sfvmk_release_pkt;

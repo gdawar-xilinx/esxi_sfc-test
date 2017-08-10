@@ -50,7 +50,7 @@ end:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pDevIface   pointer to mgmt param
 ** \param[in/out]  pMgmtMcdi   pointer to MCDI cmd struct
 **
 ** \return: VMK_OK  <success>  error code <failure>
@@ -123,7 +123,7 @@ sfvmk_invalid_len:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pDevIface   pointer to mgmt param
 ** \param[in/out]  pCmd        pointer to NVRAM cmd struct
 **
 ** \return: VMK_OK  <success>  error code <failure>
@@ -131,7 +131,7 @@ sfvmk_invalid_len:
 int sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_nvram_cmd_t *pCmd)
+                        sfvmk_nvramCmd_t *pCmd)
 {
   sfvmk_adapter_t *pAdapter = NULL;
   vmk_int8 *pNvramBuf = NULL;
@@ -269,7 +269,7 @@ sfvmk_fail:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to magm param
+** \param[in/out]  pDevIface   pointer to mgmt param
 ** \param[in/out]  pVerInfo    pointer to version info struct
 **
 ** \return: VMK_OK  <success>
@@ -369,6 +369,61 @@ int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
   }
 
 end:
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback for Get/Set Link state
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface   pointer to mgmt param
+** \param[in/out]  pLinkOps   pointer to link ops structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtLinkStatusUpdate(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_linkStatus_t *pLinkOps)
+{
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback for Get/Set Link speed and autoneg
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface    pointer to mgmt param
+** \param[in/out]  pLinkSpeed   pointer to speed and autoneg
+**                              param structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtLinkSpeedUpdate(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_linkSpeed_t *pLinkSpeed)
+{
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback to Get/Set intr moderation settings
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface  pointer to mgmt param
+** \param[in/out]  pIntrMod   pointer to intr moderation structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_intrCoalsParam_t *pIntrMod)
+{
   return VMK_OK;
 }
 

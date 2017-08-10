@@ -24,21 +24,30 @@
  ** consistency with other examples, we'll choose a new
  ** value here.
  **
- ** SFVMK_CB_MCDI_REQUEST_2: For invoking MCDI callback
+ ** SFVMK_CB_MCDI_REQUEST_2:     For invoking MCDI callback
  **
- ** SFVMK_CB_NVRAM_REQUEST:  NVRAM operations callback
+ ** SFVMK_CB_NVRAM_REQUEST:      NVRAM operations callback
  **
- ** SFVMK_CB_VERINFO_GET:    Callback to retrieve various
- **                          version info.
+ ** SFVMK_CB_VERINFO_GET:        Callback to retrieve various
+ **                              version info.
+ **
+ ** SFVMK_CB_LINK_STATUS_UPDATE: Get or Set the Link state
+ **
+ ** SFVMK_CB_LINK_SPEED_UPDATE:  Get/Set the link speed and autoneg
+ **
+ ** SFVMK_CB_INTR_MODERATION:    Change Interrupt Moderation settings
  **
  */
-enum SFVMK_MGMT_CB_TYPES {
+typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST_2 = (VMK_MGMT_RESERVED_CALLBACKS + 1),
   SFVMK_CB_NVRAM_REQUEST,
   SFVMK_CB_VERINFO_GET,
- // SFVMK_CB_VPD_REQUEST,
+  SFVMK_CB_LINK_STATUS_UPDATE,
+  SFVMK_CB_LINK_SPEED_UPDATE,
+  SFVMK_CB_INTR_MODERATION,
+  /*TODO: SFVMK_CB_VPD_REQUEST */
   SFVMK_CB_MAX
-};
+}sfvmk_mgmtCbTypes_t;
 
 /*
  * The total number of callbacks
@@ -120,7 +129,26 @@ typedef struct sfvmk_mcdiRequest2_s {
 /* NVRAM Command */
 #define SFVMK_NVRAM_MAX_PAYLOAD 32*1024
 
-typedef	struct sfvmk_nvram_cmd_s {
+/*! \brief struct sfvmk_nvramCmd_s for performing
+ **        NVRAM operations
+ **
+ ** op[in]         Operation type (Size/Read/write/flash/ver_get/ver_set)
+ **
+ ** type[in]       Type of NVRAM
+ **
+ ** offset[in]     Location of NVRAM where to start
+ **                read/write
+ **
+ ** size[in/out]    Size of buffer, should be <= SFVMK_NVRAM_MAX_PAYLOAD
+ **
+ ** subtype[out]    NVRAM subtype, part of get NVRAM version
+ **
+ ** version[in/out] Version info
+ **
+ ** data[in/out]    NVRAM data for read/write
+ **
+ */
+typedef	struct sfvmk_nvramCmd_s {
   vmk_uint32 op;
   vmk_uint32 type;
   vmk_uint32 offset;
@@ -128,16 +156,104 @@ typedef	struct sfvmk_nvram_cmd_s {
   vmk_uint32 subtype;
   vmk_uint16 version[4];		/* get/set_ver */
   vmk_uint8 data[SFVMK_NVRAM_MAX_PAYLOAD];	/* read/write */
-} sfvmk_nvram_cmd_t;
+} sfvmk_nvramCmd_t;
 
-
+/*! \brief Get size of NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_READ
+ **
+ **         type: Set NVRAM partition type
+ **
+ **  [out]
+ **
+ **         size: Return the size of NVRAM partition type
+ **
+ */
 #define	SFVMK_NVRAM_OP_SIZE		0x00000001
+
+/*! \brief Read data from NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_READ
+ **
+ **         type: Set NVRAM partition type
+ **
+ **         size: size of data requested
+ **
+ **  [out]
+ **
+ **         size: New size
+ **
+ **         data: NVRAM data after read from H/W
+ **
+ */
 #define	SFVMK_NVRAM_OP_READ		0x00000002
+
+/*! \brief Write data into NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_WRITE
+ **
+ **         type: Set NVRAM partition type
+ **
+ **         size: size of data
+ **
+ **         data: NVRAM data to write into H/W
+ **
+ **  [out]
+ **
+ **         size: Actaul len written into H/W
+ **
+ */
 #define	SFVMK_NVRAM_OP_WRITE		0x00000003
+
+/*! \brief Erase NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_ERASE
+ **
+ **         type: Set NVRAM partition type
+ **
+ */
 #define	SFVMK_NVRAM_OP_ERASE		0x00000004
+
+/*! \brief Get NVRAM partition version
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_GET
+ **
+ **         type: Set NVRAM partition type
+ **
+ **  [out]
+ **
+ **         version: Version of partition type requested
+ **
+ **         subtype: Subtype veriosn (Optional)
+ **
+ */
 #define	SFVMK_NVRAM_OP_GET_VER		0x00000005
+
+/*! \brief Set NVRAM partition version
+ **
+ **  [in]
+ **
+ **         op:  SFVMK_NVRAM_OP_SET
+ **
+ **         type: Set NVRAM partition type
+ **
+ **         version: Version of partition type
+ **                  to update
+ **
+ */
 #define	SFVMK_NVRAM_OP_SET_VER		0x00000006
 
+/** NVRAM Partition Types */
 #define	SFVMK_NVRAM_TYPE_BOOTROM        0x00000001
 #define	SFVMK_NVRAM_TYPE_BOOTROM_CFG    0x00000002
 #define	SFVMK_NVRAM_TYPE_MC             0x00000003
@@ -169,6 +285,131 @@ typedef struct sfvmk_versionInfo_s {
 #define SFVMK_GET_FW_VERSION   0x00000002
 #define SFVMK_GET_ROM_VERSION  0x00000004
 #define SFVMK_GET_UEFI_VERSION 0x00000008
+
+/*! \brief General commands to perform Get/Set operations
+ **
+ **  SFVMK_MGMT_DEV_OPS_GET: Generic command to Get data
+ **
+ **  SFVMK_MGMT_DEV_OPS_SET: Generic command to Set device param
+ **
+ */
+typedef enum sfvmk_mgmtDevOps_e {
+  SFVMK_MGMT_DEV_OPS_GET = 1,
+  SFVMK_MGMT_DEV_OPS_SET,
+  SFVMK_MGMT_DEV_OPS_INVALID
+}sfvmk_mgmtDevOps_t;
+
+/*! \brief struct sfvmk_linkStatus_s for get or
+ **        set link state
+ **
+ **  type[in]       Type of operation (Get/Set)
+ **
+ **  state[in/out]  Retrieve the Current link state
+ **                 if operation type is Get.
+ **                 If operation type is Set and
+ **                 state = TRUE,  Bring Link UP
+ **                 state = FALSE, Bring link down
+ **
+ */
+typedef struct sfvmk_linkStatus_s {
+  sfvmk_mgmtDevOps_t type;
+  vmk_Bool state;
+}sfvmk_linkStatus_t;
+
+#define SFVMK_LINK_SPEED_10_MBPS    10
+#define SFVMK_LINK_SPEED_100_MBPS   100
+#define SFVMK_LINK_SPEED_1000_MBPS  1000
+#define SFVMK_LINK_SPEED_10000_MBPS 10000
+#define SFVMK_LINK_SPEED_40000_MBPS 40000
+
+/*! \brief struct sfvmk_linkSpeed_s for get or
+ **        set link speed and autoneg
+ **
+ **  type[in]        Type of operation (Get/Set)
+ **
+ **  speed[in/out]   Current link speed
+ **
+ **  autoNeg[in/out] Get/Set autoNeg
+ **
+ **  Please Note: in case of set
+ **    1. if autoneg is true then speed is ignored.
+ **
+ **    2. if autoneg is false, then speed MUST be filled.
+ **
+ **    In case of get, if autoneg is true, speed value
+ **    indicates the link speed at that instant.
+ **
+ */
+typedef struct sfvmk_linkSpeed_s {
+  sfvmk_mgmtDevOps_t   type;
+  vmk_uint32           speed;
+  vmk_Bool             autoNeg;
+}sfvmk_linkSpeed_t;
+
+/*! \brief struct sfvmk_intrCoalsParam_s for
+ **         Interrupt coalesce parameters
+ **
+ ** type[in]  Command type (Get/Set)
+ **
+ ** rxUsecs[in/out] number of microseconds to wait
+ **          for Rx, before interrupting
+ **
+ ** rxMaxFrames[in/out] maximum number of (Rx) frames
+ **              to wait for, before interrupting
+ **
+ ** txUsecs[in/out] number of microseconds to wait
+ **          for completed Tx, before interrupting
+ **
+ ** txMaxFrames[in/out] maximum number of completed (Tx)
+ **              frames to wait for, before interrupting
+ **
+ ** useAdaptiveRx[in/out] Use adaptive Rx coalescing
+ **
+ ** useAdaptiveTx[in/out] Use adaptive Tx coalescing
+ **
+ ** rateSampleInterval[in/out] Rate sampling interval
+ **
+ ** pktRateLowWatermark[in/out] Low packet rate watermark
+ **
+ ** pktRateHighWatermark[in/out] High packet rate watermark
+ **
+ ** rxUsecsLow[in/out] Rx usecs low
+ **
+ ** rxFramesLow[in/out] Rx frames low
+ **
+ ** txUsecsLow[in/out] Tx usecs low
+ **
+ ** txFramesLow[in/out] Tx frames low
+ **
+ ** rxUsecsHigh[in/out] Rx usecs high
+ **
+ ** rxFramesHigh[in/out] Rx frames high
+ **
+ ** txUsecsHigh[in/out] Tx usecs high
+ **
+ ** txFramesHigh[in/out] Tx frames high
+ **
+ */
+typedef struct sfvmk_intrCoalsParam_s {
+  sfvmk_mgmtDevOps_t type;
+  vmk_uint32 rxUsecs;
+  vmk_uint32 rxMaxFrames;
+  vmk_uint32 txUsecs;
+  vmk_uint32 txMaxFrames;
+  vmk_Bool useAdaptiveRx;
+  vmk_Bool useAdaptiveTx;
+  vmk_uint32 rateSampleInterval;
+  vmk_uint32 pktRateLowWatermark;
+  vmk_uint32 pktRateHighWatermark;
+  vmk_uint32 rxUsecsLow;
+  vmk_uint32 rxFramesLow;
+  vmk_uint32 txUsecsLow;
+  vmk_uint32 txFramesLow;
+  vmk_uint32 rxUsecsHigh;
+  vmk_uint32 rxFramesHigh;
+  vmk_uint32 txUsecsHigh;
+  vmk_uint32 txFramesHigh;
+}sfvmk_intrCoalsParam_t;
 
 #ifdef VMKERNEL
 /**
@@ -238,12 +479,27 @@ int sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
 int sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_nvram_cmd_t *pNvrCmd);
+                        sfvmk_nvramCmd_t *pNvrCmd);
 
 int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_versionInfo_t *pVerInfo);
+
+int sfvmk_mgmtLinkStatusUpdate(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_linkStatus_t *pLinkOps);
+
+int sfvmk_mgmtLinkSpeedUpdate(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_linkSpeed_t *pLinkSpeed);
+
+int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_intrCoalsParam_t *pIntrMod);
 #else
 /*
  * This section is where callback definitions, as visible to
@@ -256,6 +512,9 @@ int sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtMcdiCallback NULL
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtVerInfoCallback NULL
+#define sfvmk_mgmtLinkStatusUpdate NULL
+#define sfvmk_mgmtLinkSpeedUpdate NULL
+#define sfvmk_mgmtIntrModeration NULL
 #endif /* VMKERNEL */
 
 #endif

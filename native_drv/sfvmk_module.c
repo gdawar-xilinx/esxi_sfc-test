@@ -9,7 +9,7 @@
 #include "sfvmk_ut.h"
 #include "sfvmk_mgmtInterface.h"
 
-extern vmk_MgmtApiSignature mgmtSig;
+extern vmk_MgmtApiSignature driverMgmtSig;
 
 sfvmk_ModInfo_t sfvmk_ModInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
@@ -194,7 +194,7 @@ init_module(void)
 
   mgmtProps.modId = vmk_ModuleCurrentID;
   mgmtProps.heapId = sfvmk_ModInfo.heapID;
-  mgmtProps.sig = &mgmtSig;
+  mgmtProps.sig = &driverMgmtSig;
   mgmtProps.cleanupFn = NULL;
   mgmtProps.sessionAnnounceFn = NULL;
   mgmtProps.sessionCleanupFn = NULL;

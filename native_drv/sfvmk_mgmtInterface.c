@@ -16,19 +16,18 @@
  * This file is intended to be compiled for both user-space
  * and kernel-space builds.
  */
-vmk_MgmtCallbackInfo mgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
+vmk_MgmtCallbackInfo driverMgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
   {
       .location = VMK_MGMT_CALLBACK_KERNEL,
       .callback = sfvmk_mgmtMcdiCallback,
       .synchronous = 1, /* 0 indicates asynchronous */
       .numParms = 2,
-      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of flagFromUser */
-                     sizeof(sfvmk_mcdiRequest2_t)},  /* the size of mgmtParm */
-      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,      /* flagFromUser is an input parameter */
-                     VMK_MGMT_PARMTYPE_INOUT},  /*
-                                                 * mgmtParm is both an input and
-                                                 * output parameter
-                                                 */
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_mcdiRequest2_t)},  /* the size of sfvmk_mcdiRequest2_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT}, /* Both Parameters from user is an input 
+                                                  and output parameter */
+
       .callbackId = SFVMK_CB_MCDI_REQUEST_2,
   },
 
@@ -37,13 +36,12 @@ vmk_MgmtCallbackInfo mgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
       .callback = sfvmk_mgmtNVRAMCallback,
       .synchronous = 1, /* 0 indicates asynchronous */
       .numParms = 2,
-      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of flagFromUser */
-                     sizeof(sfvmk_nvram_cmd_t)},  /* the size of mgmtParm */
-      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,      /* flagFromUser is an input parameter */
-                     VMK_MGMT_PARMTYPE_INOUT},  /*
-                                                 * mgmtParm is both an input and
-                                                 * output parameter
-                                                 */
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_nvramCmd_t)},    /* the size of sfvmk_nvramCmd_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
       .callbackId = SFVMK_CB_NVRAM_REQUEST,
   },
 
@@ -52,15 +50,57 @@ vmk_MgmtCallbackInfo mgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
       .callback = sfvmk_mgmtVerInfoCallback,
       .synchronous = 1, /* 0 indicates asynchronous */
       .numParms = 2,
-      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of flagFromUser */
-                     sizeof(sfvmk_versionInfo_t)},  /* the size of mgmtParm */
-      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,      /* flagFromUser is an input parameter */
-                     VMK_MGMT_PARMTYPE_INOUT},  /*
-                                                 * mgmtParm is both an input and
-                                                 * output parameter
-                                                 */
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_versionInfo_t)},  /* the size of sfvmk_versionInfo_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
       .callbackId = SFVMK_CB_VERINFO_GET,
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtLinkStatusUpdate,
+      .synchronous = 1, /* 0 indicates asynchronous */
+      .numParms = 2,
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_linkStatus_t)},  /* the size of sfvmk_linkStatus_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
+      .callbackId = SFVMK_CB_LINK_STATUS_UPDATE,
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtLinkSpeedUpdate,
+      .synchronous = 1, /* 0 indicates asynchronous */
+      .numParms = 2,
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_linkSpeed_t)},  /* the size of sfvmk_linkSpeed_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
+      .callbackId = SFVMK_CB_LINK_SPEED_UPDATE,
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtIntrModeration,
+      .synchronous = 1, /* 0 indicates asynchronous */
+      .numParms = 2,
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_intrCoalsParam_t)},  /* the size of sfvmk_intrCoalsParam_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
+      .callbackId = SFVMK_CB_INTR_MODERATION,
   }
+
 };
 
 /*
@@ -68,7 +108,7 @@ vmk_MgmtCallbackInfo mgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
  * management interface that will be used.  It contains a name, vendor, version,
  * and a description of the callbacks that the interface contains.
  */
-vmk_MgmtApiSignature mgmtSig = {
+vmk_MgmtApiSignature driverMgmtSig = {
    /*
     * The version specifies the version of this interface.  Only callers that
     * have the same major number are considered compatible.  The VMKAPI
@@ -107,5 +147,5 @@ vmk_MgmtApiSignature mgmtSig = {
     * fully describe each individual callback that can be invoked by
     * the interface in this API signature.
     */
-   .callbacks = mgmtCallbacks,
+   .callbacks = driverMgmtCallbacks,
 };

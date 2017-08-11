@@ -295,6 +295,7 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
               pCfg->enc_features, pCfg->enc_fw_assisted_tso_v2_enabled,
               pCfg->enc_tx_tso_tcp_header_offset_limit, 
               pAdapter->tsoFwAssisted, pCfg->enc_tx_dma_desc_size_max);
+  pAdapter->txDmaDescMaxSize = pCfg->enc_tx_dma_desc_size_max;
 
   pAdapter->txqCount = SFVMK_TXQ_NTYPES - 1 + pIntr->numIntrAlloc;
 
@@ -1283,10 +1284,10 @@ sfvmk_tsoFillPktWithFragments(sfvmk_txq_t *pTxq,
   }
   
   if (pTso->fwAssisted & SFVMK_FATSOV2) {
-    n = pTso->inLen;
+    n = MIN(pTso->inLen, pAdapter->txDmaDescMaxSize);
     pTso->outLen -= n;
     pTso->seqnum += n;
-    pTso->inLen = 0;
+    pTso->inLen -= n;
     if (n < pTso->packetSpace) {
       pTso->packetSpace -= n;
       pTso->segsSpace--;
@@ -1697,6 +1698,8 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
       vmk_Memcpy(&pStmp->sgelem, &pDmaSeg[i], sizeof(sfvmk_dmaSegment_t));
       pStmp->u.pkt=NULL;
       pStmp->isPkt = VMK_TRUE;
+
+      /*TODO: handle pDmaSeg[i].dsLen > enc_tx_dma_desc_size_max */
 
       desc = &pTxq->pPendDesc[i + vlanTagged];
       eop = (i == numElems - 1);

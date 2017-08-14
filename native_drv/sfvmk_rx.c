@@ -16,7 +16,7 @@
 /* refill low watermark */
 #define RX_REFILL_THRESHOLD(_entries)   (EFX_RXQ_LIMIT(_entries) * 9 / 10)
 #define SFVMK_MIN_PKT_SIZE 60
-
+#if 0
 /* hash key */
 static uint8_t sfvmk_toepKey[] = {
   0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
@@ -25,7 +25,7 @@ static uint8_t sfvmk_toepKey[] = {
   0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
   0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa
 };
-
+#endif
 void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
                      struct sfvmk_rxSwDesc_s *pRxDesc,
                      unsigned int qIndex);
@@ -728,7 +728,7 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
   /* we need extra space to align to the cache line */
   reserved = pAdapter->rxBufferSize + CACHE_LINE_SIZE;
   /* Set up the scale table.  Enable all hash types and hash insertion. */
-
+#if 0
   for (qIndex = 0; qIndex < SFVMK_RX_SCALE_MAX; qIndex++)
     pAdapter->rxIndirTable[qIndex] = qIndex % pAdapter->rxqCount;
 
@@ -747,7 +747,7 @@ int sfvmk_rxStart( sfvmk_adapter_t *pAdapter)
     SFVMK_ERR(pAdapter, "failed to set RSS Key");
     goto sfvmk_fail;
   }
-
+#endif
   /* Start the receive queue(s). */
   for (qIndex = 0; qIndex < pAdapter->rxqCount ; qIndex++) {
     if ((rc = sfvmk_rxqStart(pAdapter, qIndex)) != 0) {
@@ -771,7 +771,6 @@ sfvmk_default_rxq_set_fail:
 sfvmk_rxq_start_fail:
   while (--qIndex >= 0)
     sfvmk_rxqStop(pAdapter, qIndex);
-sfvmk_fail:
   efx_rx_fini(pAdapter->pNic);
 
   return (rc);

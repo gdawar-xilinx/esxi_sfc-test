@@ -309,6 +309,8 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 
   evqMax = MIN(limits.edl_max_rxq_count ,
                 (limits.edl_max_txq_count - SFVMK_TXQ_NTYPES +1));
+  /* TODO: hardcoing to 1 event queue will be removed after multiq support */
+  evqMax = 1;
 
   if (pAdapter->maxRssChannels > 0)
     evqMax = MIN(evqMax, pAdapter->maxRssChannels);

@@ -82,9 +82,9 @@ sfvmk_stripVlanHdr(sfvmk_adapter_t *pAdapter, vmk_PktHandle *pPkt)
   SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
             "vlanid: %d , vlanPrio: %d", vlanId, vlanPrio);
   ret = vmk_PktVlanIDSet(pPkt, vlanId);
-  VMK_ASSERT(ret == VMK_OK);
+  VMK_ASSERT_BUG((ret == VMK_OK),"(ret == VMK_OK) is False");
   ret = vmk_PktPrioritySet(pPkt, vlanPrio);
-  VMK_ASSERT(ret == VMK_OK);
+  VMK_ASSERT_BUG((ret == VMK_OK),"(ret == VMK_OK) is False");
 
   /* strip off the vlan header */
   vmk_Memmove(pFrameVa + SFVMK_VLAN_HDR_SIZE, pFrameVa, SFVMK_VLAN_HDR_START_OFFSET);
@@ -129,7 +129,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   elem.ioAddr = pRxDesc->ioAddr;
   elem.length = pRxDesc->size;
   status = vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY, &elem);
-  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
 
   /* Initialize the pkt len for vmk_PktPushHeadroom to work */
   vmk_PktFrameLenSet(pPkt, pRxDesc->size);
@@ -222,7 +222,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
       rc = efx_pseudo_hdr_pkt_length_get(pRxq->pCommonRxq,
               (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt),
                  &len);
-      VMK_ASSERT(rc == 0, ("cannot get packet length: %d", rc));
+      VMK_ASSERT_BUG(rc == 0, "cannot get packet length: %d", rc);
       pRxDesc->size = len;
       SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
                 "rx_desc_size: %d", pRxDesc->size);
@@ -255,7 +255,7 @@ sfvmk_discard:
     elem.ioAddr = pRxDesc->ioAddr;
     elem.length = pRxDesc->size;
     status = vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY, &elem);
-    VMK_ASSERT(status == VMK_OK);
+    VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
 
     vmk_PktRelease(pPkt);
     pRxDesc->pPkt = NULL;

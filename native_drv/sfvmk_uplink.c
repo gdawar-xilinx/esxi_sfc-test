@@ -569,7 +569,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "SG_TX cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports scatter-gather entries spanning multiple pages */
@@ -578,7 +578,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"MULTI_PAGE_SG cap register failed with error %s",
                 vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
   /* Driver supports IPv4 TCP and UDP checksum offload */
   status = vmk_UplinkCapRegister(pAdapter->uplink,
@@ -586,7 +586,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"IPv4_CSO cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports IPv6 TCP and UDP checksum offload */
@@ -595,7 +595,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
     SFVMK_ERR(pAdapter, "IPv6_CSO cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports IPv4 TCP segmentation offload (TSO) */
@@ -604,7 +604,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
     SFVMK_ERR(pAdapter, "IPv4_TSO cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports IPv6 TCP segmentation offload (TSO) */
@@ -613,7 +613,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
     SFVMK_ERR(pAdapter,"IPv6_TSO cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
  /* Driver supports VLAN RX offload (tag stripping) */
@@ -622,7 +622,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter,"VLAN_RX_STRIP cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports VLAN TX Offload (tag insertion) */
@@ -631,7 +631,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "VLAN_TX_INSERT cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports getting and setting message level */
@@ -641,7 +641,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Message Level cap register failed with error %s ",
              vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports getting and setting RX/TX ring params */
@@ -650,7 +650,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "Ring Parameters cap register failed with error %s",
               vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Driver supports changing link status */
@@ -659,7 +659,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    if (status != VMK_OK) {
      SFVMK_ERR(pAdapter, "link status cap register failed with error %s",
                vmk_StatusToString(status));
-     VMK_ASSERT(0);
+     VMK_ASSERT_BUG(0);
    }
 
    /* Register Pause Params capability */
@@ -669,7 +669,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "Flow Control cap register failed with error 0x%s",
                 vmk_StatusToString(status));
-      VMK_ASSERT(0);
+      VMK_ASSERT_BUG(0);
    }
 
   /* Driver supports getting and setting cable type */
@@ -678,7 +678,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    if (status != VMK_OK) {
       SFVMK_ERR(pAdapter,"Cable Type cap register failed with error %s",
                 vmk_StatusToString(status));
-      VMK_ASSERT(0);
+      VMK_ASSERT_BUG(0);
    }
 
    /* Register private stats capability */
@@ -687,7 +687,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    if (status != VMK_OK) {
       SFVMK_ERR(pAdapter,
                 "PRIV_STATS cap register failed with error 0x%x", status);
-      VMK_ASSERT(0);
+      VMK_ASSERT_BUG(0);
    }
 
    /* Register coalace param capability */
@@ -696,7 +696,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
    if (status != VMK_OK) {
       SFVMK_ERR(pAdapter, "COALESCE_PARAMS cap register failed, err :%s",
                 vmk_StatusToString(status));
-      VMK_ASSERT(0);
+      VMK_ASSERT_BUG(0);
    }
 
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
@@ -720,9 +720,9 @@ static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie cookie,
   sfvmk_devHashTable_t *pHashTblEntry;
   int status;
 
-  VMK_ASSERT(uplink != NULL);
+  VMK_ASSERT_BUG((uplink != NULL),"(uplink != NULL) is False");
   SFVMK_NULL_PTR_CHECK(pAdapter);
-  VMK_ASSERT(pAdapter->uplink == NULL);
+  VMK_ASSERT_BUG((pAdapter->uplink == NULL),"(pAdapter->uplink == NULL) is False");
 
   pAdapter->uplink = uplink;
   pAdapter->uplinkName = vmk_UplinkNameGet(pAdapter->uplink);
@@ -1055,7 +1055,7 @@ static VMK_ReturnStatus
 sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *pLength)
 {
 
-  VMK_ASSERT(pLength != NULL);
+  VMK_ASSERT_BUG((pLength != NULL),"(pLength != NULL) is False");
 
   *pLength = SFVMK_PRIV_STATS_BUFFER_SZ;
 
@@ -1340,6 +1340,8 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
               vmk_StatusToString(status));
     goto sfvmk_world_create_fail;
   }
+
+  sfvmk_updateCableType(pAdapter);
 
   pAdapter->initState = SFVMK_STARTED;
 
@@ -1897,8 +1899,6 @@ sfvmk_initUplinkData(sfvmk_adapter_t * pAdapter)
   const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
   SFVMK_NULL_PTR_CHECK(pNicCfg);
 
-  sfvmk_updateCableType(pAdapter);
-
   status = sfvmk_createLock(sfvmk_ModInfo.driverName.string, VMK_SPINLOCK_RANK_HIGHEST-1,
                             &pAdapter->shareDataLock);
   if (status != VMK_OK) {
@@ -2128,7 +2128,7 @@ sfvmk_createWorld(sfvmk_adapter_t *pAdapter)
   sfvmk_worldProps.heapID = sfvmk_ModInfo.heapID;
 
   status = vmk_WorldCreate(&sfvmk_worldProps, &pAdapter->worldId);
-  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
   if (status != VMK_OK) {
      SFVMK_ERR(pAdapter, "Failed to create worker thread %s",
                 vmk_StatusToString(status));

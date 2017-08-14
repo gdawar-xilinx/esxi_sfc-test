@@ -184,7 +184,7 @@ sfvmk_MemAlloc(vmk_uint32 size)
 static inline void
 sfvmk_MemFree(void *memPtr)
 {
-  VMK_ASSERT(memPtr);
+  VMK_ASSERT_BUG(memPtr);
   vmk_HeapFree(sfvmk_ModInfo.heapID, memPtr);
 }
 

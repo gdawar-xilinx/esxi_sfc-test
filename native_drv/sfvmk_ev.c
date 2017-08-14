@@ -220,9 +220,9 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
   /* update rxdesc */
   for (; id != stop; id = (id + 1) & pRxq->ptrMask) {
     pRxDesc = &pRxq->pQueue[id];
-    VMK_ASSERT(pRxDesc->flags == EFX_DISCARD);
+    VMK_ASSERT_BUG((pRxDesc->flags == EFX_DISCARD),"(pRxDesc->flags == EFX_DISCARD) is False");
     pRxDesc->flags = flags;
-    VMK_ASSERT(size < (1 << 16), ("size > (1 << 16)"));
+    VMK_ASSERT_BUG(size < (1 << 16), "size > (1 << 16)");
     pRxDesc->size = (uint16_t)size;
   }
 
@@ -572,7 +572,7 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq, boolean_t eop)
 
       next = pTxq->next;
       pTxq->next = NULL;
-      VMK_ASSERT(pTxq->evqIndex == index);
+      VMK_ASSERT_BUG((pTxq->evqIndex == index),"(pTxq->evqIndex == index) is False");
 
       if (pTxq->pending != pTxq->completed)
         sfvmk_txqComplete(pTxq, pEvq);
@@ -610,10 +610,10 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
     goto sfvmk_fail;
   }
 
-  VMK_ASSERT(pEvq->rxDone == 0);
-  VMK_ASSERT(pEvq->txDone == 0);
-  VMK_ASSERT(pEvq->txq == NULL);
-  VMK_ASSERT(pEvq->txqs == &pEvq->txq);
+  VMK_ASSERT_BUG((pEvq->rxDone == 0),"(pEvq->rxDone == 0) is False");
+  VMK_ASSERT_BUG((pEvq->txDone == 0),"(pEvq->txDone == 0) is False");
+  VMK_ASSERT_BUG((pEvq->pTxq == NULL),"(pEvq->txq == NULL) is False");
+  VMK_ASSERT_BUG((pEvq->pTxqs == &pEvq->pTxq),"(pEvq->txqs == &pEvq->txq) is False");
 
   /* Poll the queue */
   efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);

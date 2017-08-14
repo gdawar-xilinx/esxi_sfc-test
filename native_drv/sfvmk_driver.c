@@ -347,7 +347,7 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
   pAdapter->evqMax = MIN(txqAllocated - (SFVMK_TXQ_NTYPES - 1),
                           pAdapter->evqMax);
 
-  VMK_ASSERT(pAdapter->evqMax <= evqMax);
+  VMK_ASSERT_BUG((pAdapter->evqMax <= evqMax),"(pAdapter->evqMax <= evqMax) is False");
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_DBG,
               "max txq = %d\t max rxq = %d\t max evq = %d",
@@ -898,9 +898,9 @@ sfvmk_scanDevice(vmk_Device device)
 
   pDeviceID = &pAdapter->deviceID;
   status = vmk_NameInitialize(&busName, VMK_LOGICAL_BUS_NAME);
-  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
   status = vmk_BusTypeFind(&busName, &pDeviceID->busType);
-  VMK_ASSERT(status == VMK_OK);
+  VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
 
   status = vmk_LogicalCreateBusAddress(sfvmk_ModInfo.driverID,
                      pAdapter->device,

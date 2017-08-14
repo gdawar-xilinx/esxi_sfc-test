@@ -133,7 +133,7 @@ sfvmk_memPoolFree(void *va, vmk_uint64 size)
   status = vmk_VA2MA((vmk_VA)va, size, &ma);
   if (status != VMK_OK) {
     SFVMK_ERROR("vmk_VA2MA failed: %s", vmk_StatusToString(status));
-    VMK_ASSERT(0);
+    VMK_ASSERT_BUG(0);
   }
 
   /* Unmap */

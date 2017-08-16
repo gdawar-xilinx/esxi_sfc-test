@@ -37,6 +37,8 @@
  **
  ** SFVMK_CB_INTR_MODERATION:    Change Interrupt Moderation settings
  **
+ ** SFVMK_CB_PCI_INFO_GET:       Get PCI BDF and device information
+ **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST_2 = (VMK_MGMT_RESERVED_CALLBACKS + 1),
@@ -45,6 +47,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_LINK_STATUS_UPDATE,
   SFVMK_CB_LINK_SPEED_UPDATE,
   SFVMK_CB_INTR_MODERATION,
+  SFVMK_CB_PCI_INFO_GET,
   /*TODO: SFVMK_CB_VPD_REQUEST */
   SFVMK_CB_MAX
 }sfvmk_mgmtCbTypes_t;
@@ -67,6 +70,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
 #define SFVMK_VER_MAX_CHAR_LEN 128
 #define SFVMK_MGMT_COOKIE               (0)
 #define SFVMK_DEV_NAME_LEN           (10)
+#define SFVMK_PCI_BDF_LEN 16
 
 /*! \brief Management dev interface structure
  **
@@ -411,6 +415,28 @@ typedef struct sfvmk_intrCoalsParam_s {
   vmk_uint32 txFramesHigh;
 }sfvmk_intrCoalsParam_t;
 
+/*! \brief struct sfvmk_pciInfo_s to
+ **        PCI BDF and device information
+ **
+ ** pciBDF[out]       Buffer to retrieve the PCI BDF string
+ **
+ ** vendorId[out]     PCI Vendor ID
+ **
+ ** deviceId[out]     PCI device ID
+ **
+ ** subVendorId[out]  PCI sub vendor ID
+ **
+ ** subDeviceId[out]  PCI sub device ID
+ **
+ */
+typedef struct sfvmk_pciInfo_s {
+  char  pciBDF[SFVMK_PCI_BDF_LEN];
+  vmk_uint16 vendorId;
+  vmk_uint16 deviceId;
+  vmk_uint16 subVendorId;
+  vmk_uint16 subDeviceId;
+} __attribute__((__packed__))  sfvmk_pciInfo_t;
+
 #ifdef VMKERNEL
 /**
  * These are the definitions of prototypes as viewed from
@@ -500,6 +526,11 @@ int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_intrCoalsParam_t *pIntrMod);
+
+int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_pciInfo_t *pPciInfo);
 #else
 /*
  * This section is where callback definitions, as visible to
@@ -515,6 +546,7 @@ int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtLinkStatusUpdate NULL
 #define sfvmk_mgmtLinkSpeedUpdate NULL
 #define sfvmk_mgmtIntrModeration NULL
+#define sfvmk_mgmtPCIInfoCallback NULL
 #endif /* VMKERNEL */
 
 #endif

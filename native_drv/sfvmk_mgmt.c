@@ -427,3 +427,21 @@ int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to Get PCI BDF and PCI device information
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface  pointer to mgmt param
+** \param[in/out]  pPciInfo   pointer to sfvmk_pciInfo_s structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_pciInfo_t *pPciInfo)
+{
+  return VMK_OK;
+}
+

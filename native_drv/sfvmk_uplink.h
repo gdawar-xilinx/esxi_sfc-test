@@ -29,7 +29,7 @@
 
 VMK_ReturnStatus sfvmk_initUplinkData(struct sfvmk_adapter_s * pAdapter);
 VMK_ReturnStatus sfvmk_destroyUplinkData(struct sfvmk_adapter_s *pAdapter);
-void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState);
+void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState, vmk_uint32 qIndex);
 VMK_ReturnStatus sfvmk_changeLinkState(struct sfvmk_adapter_s *pAdapter, vmk_LinkState state);
 
 #endif /* __SFVMK_RX_H__ */

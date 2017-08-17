@@ -1223,34 +1223,27 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
 ** \return:    Nothing
 **
 */
-void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState)
+void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState, vmk_uint32 qIndex)
 {
   vmk_UplinkSharedQueueData *queueData;
-  vmk_uint16 i;
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
   SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
   queueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
 
-  for (i=0; i<pAdapter->queueInfo.maxTxQueues; i++) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_FUNCTION,
-             "queueData flags: %x", queueData[i].flags);
-   if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
-    queueData[i].state = qState;
-   }
+  if (queueData[qIndex].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+    queueData[qIndex].state = qState;
   }
 
   SFVMK_SHARED_AREA_END_WRITE(pAdapter);
 
-  for (i=0; i<pAdapter->queueInfo.maxTxQueues; i++) {
-   if (queueData[i].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+  if (queueData[qIndex].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
     if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
-      vmk_UplinkQueueStop(pAdapter->uplink, queueData[i].qid);
+      vmk_UplinkQueueStop(pAdapter->uplink, queueData[qIndex].qid);
     }
     else {
-       vmk_UplinkQueueStart(pAdapter->uplink, queueData[i].qid);
+       vmk_UplinkQueueStart(pAdapter->uplink, queueData[qIndex].qid);
     }
-   }
   }
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);

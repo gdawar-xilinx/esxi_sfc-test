@@ -53,6 +53,9 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
                                   efx_link_mode_t linkMode )
 {
   vmk_UplinkSharedData *pSharedData = &pAdapter->sharedData;
+  vmk_UplinkSharedQueueInfo *pQueueInfo = NULL;
+  vmk_uint16 index; 
+
 
   if (NULL == pSharedData)
     return;
@@ -75,9 +78,11 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
             pSharedData->link.speed, pSharedData->link.duplex);
 
   vmk_UplinkUpdateLinkState(pAdapter->uplink, &pAdapter->sharedData.link);
-
-  sfvmk_updateQueueStatus(pAdapter, pSharedData->link.state?
-                          VMK_UPLINK_QUEUE_STATE_STARTED:VMK_UPLINK_QUEUE_STATE_STOPPED);
+  pQueueInfo = &pAdapter->queueInfo;
+  
+  for( index =0; index < pQueueInfo->maxTxQueues; index++)
+    sfvmk_updateQueueStatus(pAdapter, pSharedData->link.state? VMK_UPLINK_QUEUE_STATE_STARTED:
+                            VMK_UPLINK_QUEUE_STATE_STOPPED, index);
   return;
 }
 

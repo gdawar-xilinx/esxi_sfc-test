@@ -59,6 +59,22 @@ typedef struct sfvmk_tsoState_s {
 }sfvmk_tsoState_t;
 
 
+/*! \brief local function to convert common txq to uplink txq
+**    
+**
+** \param[in]  common txq Index 
+**
+** \return: uplink txq Index 
+*/
+vmk_uint32 getSharedTxqID(vmk_uint32 qIndex)
+{
+  
+  if (qIndex >= 2)
+    return 0;
+  else
+    return (qIndex - 2);
+}
+
 /*! \brief TSO engine initialization. Allocate required buffers
 **         for TSO processing
 **
@@ -387,6 +403,7 @@ static void
 sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
 {
   struct sfvmk_adapter_s *pAdapter = pTxq->pAdapter;
+  vmk_uint32 uplinkQIndex = 0;
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
   if (VMK_UNLIKELY(pTxq->initState != SFVMK_TXQ_STARTED))
@@ -403,7 +420,8 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
     if (level <= SFVMK_TXQ_UNBLOCK_LEVEL(pTxq->entries)) {
       /* reaped must be in sync with blocked */
       sfvmk_txqReap(pTxq);
-      sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED);
+      uplinkQIndex = getSharedTxqID(pTxq->txqIndex);
+      sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, uplinkQIndex);
       pTxq->blocked = 0;
     }
   }
@@ -820,6 +838,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   unsigned int oldAdded;
   unsigned int blockLevel;
   unsigned int level;
+  vmk_uint32 uplinkQIndex;
   int rc;
   sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
 
@@ -881,8 +900,9 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   }
 
   pTxq->blocked = 1;
+  uplinkQIndex = getSharedTxqID(pTxq->txqIndex);
   /* Mark the queue as stopped */
-  sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED);
+  sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED, uplinkQIndex);
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "Marked queue as stopped as level: %d", level);
 
@@ -897,7 +917,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
     vmk_CPUMemFenceWrite();
     /* Mark the queue as started */
     pTxq->blocked = 0;
-    sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED);
+    sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, uplinkQIndex);
 
     SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
               "Marked queue as started as level: %d", level);

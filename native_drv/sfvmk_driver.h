@@ -136,6 +136,7 @@ typedef struct sfvmk_adapter_s {
   /* VMK helper for scheduling a Adapter Reset */
   vmk_Helper helper;
   vmk_uint32      txDmaDescMaxSize;
+  vmk_Bool        isRxCsumEnabled;
 }sfvmk_adapter_t;
 
 /* Structure for device instance table  */

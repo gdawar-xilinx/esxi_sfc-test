@@ -1163,7 +1163,10 @@ sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Not Supported");
+            "Called for Cap: %d", uplinkCap);
+  if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) || (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
+    pAdapter->isRxCsumEnabled = VMK_TRUE; 
+  }
   return VMK_OK;
 }
 
@@ -1183,7 +1186,10 @@ sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "Not Supported");
+            "Called for Cap: %d", uplinkCap);
+  if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) || (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
+    pAdapter->isRxCsumEnabled = VMK_FALSE; 
+  }
 
   return VMK_OK;
 }

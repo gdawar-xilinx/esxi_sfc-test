@@ -230,10 +230,12 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
 
     switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
       case EFX_PKT_IPV4:
-        pRxDesc->flags &=  ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
+        if(!pAdapter->isRxCsumEnabled)
+          pRxDesc->flags &=  ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
         break;
       case EFX_PKT_IPV6:
-        pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
+        if(!pAdapter->isRxCsumEnabled)
+          pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
         break;
       case 0:
         break;
@@ -496,6 +498,7 @@ VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
   pIntr = &pAdapter->intr;
 
   pAdapter->rxqCount = pIntr->numIntrAlloc;
+  pAdapter->isRxCsumEnabled = VMK_TRUE;
 
   VMK_ASSERT_BUG(pIntr->state == SFVMK_INTR_INITIALIZED,
                   "intr->state != SFXGE_INTR_INITIALIZED");

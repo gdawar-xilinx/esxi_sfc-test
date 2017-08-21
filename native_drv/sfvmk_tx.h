@@ -35,7 +35,7 @@
  * VLAN header insertion.
  */
 /* FIXME: set the correct value SFVMK_TX_MAPPING_MAX_SEG */
-#define SFVMK_TX_MAPPING_MAX_SEG  (2 + 32 + 1) 
+#define SFVMK_TX_MAPPING_MAX_SEG  (2 + 32 + 1)
 #define  howmany(x, y)  (((x)+((y)-1))/(y))
 
 /* Maximum size of TSO packet */

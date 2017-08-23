@@ -445,3 +445,20 @@ int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to Get and set VPD information
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface  pointer to mgmt param
+** \param[in/out]  pVpdInfo   pointer to sfvmk_vpdInfo_s structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_vpdInfo_t *pVpdInfo)
+{
+  return VMK_OK;
+}

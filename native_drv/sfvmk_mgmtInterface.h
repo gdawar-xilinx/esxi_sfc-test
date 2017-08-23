@@ -39,6 +39,8 @@
  **
  ** SFVMK_CB_PCI_INFO_GET:       Get PCI BDF and device information
  **
+ ** SFVMK_CB_VPD_REQUEST:        Get or Set VPD information
+ **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST_2 = (VMK_MGMT_RESERVED_CALLBACKS + 1),
@@ -48,7 +50,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_LINK_SPEED_UPDATE,
   SFVMK_CB_INTR_MODERATION,
   SFVMK_CB_PCI_INFO_GET,
-  /*TODO: SFVMK_CB_VPD_REQUEST */
+  SFVMK_CB_VPD_REQUEST,
   SFVMK_CB_MAX
 }sfvmk_mgmtCbTypes_t;
 
@@ -71,6 +73,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
 #define SFVMK_MGMT_COOKIE               (0)
 #define SFVMK_DEV_NAME_LEN           (10)
 #define SFVMK_PCI_BDF_LEN 16
+#define SFVMK_VPD_MAX_PAYLOAD 0x100
 
 /*! \brief Management dev interface structure
  **
@@ -437,6 +440,28 @@ typedef struct sfvmk_pciInfo_s {
   vmk_uint16 subDeviceId;
 } __attribute__((__packed__))  sfvmk_pciInfo_t;
 
+/*! \brief struct sfvmk_vpdInfo_s to get
+ **        and set VPD info
+ **
+ ** vpdOp[in]           VPD operation type Get/Set
+ **
+ ** vpdTag[in]          VPD tag type
+ **
+ ** vpdKeyword[in]      VPD keyword
+ **
+ ** vpdLen[in/out]      Length of VPD Data
+ **
+ ** vpdPayload[in/out]  VPD data buffer
+ **
+ */
+typedef struct sfvmk_vpdInfo_s {
+  sfvmk_mgmtDevOps_t  vpdOp;
+  vmk_uint8   vpdTag;
+  vmk_uint16  vpdKeyword;
+  vmk_uint8   vpdLen; /* In or out */
+  vmk_uint8   vpdPayload[SFVMK_VPD_MAX_PAYLOAD]; /* In or out */
+} __attribute__((__packed__)) sfvmk_vpdInfo_t;
+
 #ifdef VMKERNEL
 /**
  * These are the definitions of prototypes as viewed from
@@ -531,6 +556,11 @@ int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_pciInfo_t *pPciInfo);
+
+int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_vpdInfo_t *pVpdInfo);
 #else
 /*
  * This section is where callback definitions, as visible to
@@ -547,6 +577,7 @@ int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtLinkSpeedUpdate NULL
 #define sfvmk_mgmtIntrModeration NULL
 #define sfvmk_mgmtPCIInfoCallback NULL
+#define sfvmk_mgmtVPDInfoCallback NULL
 #endif /* VMKERNEL */
 
 #endif

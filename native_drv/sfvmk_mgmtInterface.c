@@ -114,6 +114,20 @@ vmk_MgmtCallbackInfo driverMgmtCallbacks[SFVMK_MGMT_CB_TOTAL] = {
                                                  is only outout */
 
       .callbackId = SFVMK_CB_PCI_INFO_GET,
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtVPDInfoCallback,
+      .synchronous = 1, /* 0 indicates asynchronous */
+      .numParms = 2,
+      .parmSizes = { sizeof(sfvmk_mgmtDevInfo_t),     /* the size of sfvmk_mgmtDevInfo_t */
+                     sizeof(sfvmk_vpdInfo_t)},  /* the size of sfvmk_vpdInfo_t */
+      .parmTypes = { VMK_MGMT_PARMTYPE_INOUT,
+                     VMK_MGMT_PARMTYPE_INOUT},  /* Both Parameters from user is an input
+                                                  and output parameter */
+
+      .callbackId = SFVMK_CB_VPD_REQUEST,
   }
 
 };

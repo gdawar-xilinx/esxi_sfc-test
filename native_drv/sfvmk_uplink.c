@@ -858,9 +858,10 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   }
 
   if ((!qid) || (qid >= (maxTxQueues + maxRxQueues))) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-              "Invalid QID %d, numTxQueue %d,  maxRxQueues: %d, device %s",
+    SFVMK_ERR(pAdapter,
+              "Invalid QID %d, uplinkQID: %p, numTxQueue %d,  maxRxQueues: %d, device %s",
               qid,
+              uplinkQid,
               maxTxQueues,
               maxRxQueues,
               vmk_NameToString(&pAdapter->uplinkName));

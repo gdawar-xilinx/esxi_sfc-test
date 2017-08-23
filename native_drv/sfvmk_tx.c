@@ -69,7 +69,7 @@ typedef struct sfvmk_tsoState_s {
 vmk_uint32 getSharedTxqID(vmk_uint32 qIndex)
 {
   
-  if (qIndex >= 2)
+  if (qIndex <= 2)
     return 0;
   else
     return (qIndex - 2);

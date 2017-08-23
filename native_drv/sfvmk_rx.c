@@ -116,6 +116,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   int flags ;
   VMK_ReturnStatus status;
   vmk_SgElem elem;
+  vmk_uint32 len;
 
   if (qIndex >=  pAdapter->intr.numIntrAlloc)
     return ;
@@ -132,7 +133,8 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
 
   /* Initialize the pkt len for vmk_PktPushHeadroom to work */
-  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
+  len = pRxDesc->size;
+  vmk_PktFrameLenSet(pPkt, len);
 
   /* if prefix header is present, remove it */
   status = vmk_PktPushHeadroom(pPkt, pAdapter->rxPrefixSize);
@@ -157,7 +159,8 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   }
 
   /* set pkt len */
-  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
+  if(len != pRxDesc->size)
+    vmk_PktFrameLenSet(pPkt, pRxDesc->size);
 
   /* Convert checksum flags */
   if (flags & EFX_CKSUM_TCPUDP)

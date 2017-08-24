@@ -19,7 +19,7 @@
 
 /* Size of heap to be allocated */
 /* TBD: Add a function to calculate the Heap Size */
-#define SFC_HEAP_EST		(2 * VMK_MEGABYTE)
+#define SFVMK_HEAP_EST  (2 * VMK_MEGABYTE)
 
 /* Define it to include  Unit test code.
 TBD : Move it to Makefile */
@@ -49,10 +49,11 @@ sfvmk_MemAlloc(vmk_uint32 size)
 static inline void
 sfvmk_MemFree(void *memPtr)
 {
-   VMK_ASSERT(memPtr);
-   vmk_HeapFree(sfvmk_ModInfo.heapID, memPtr);
+  VMK_ASSERT(memPtr);
+  vmk_HeapFree(sfvmk_ModInfo.heapID, memPtr);
 }
 
+/* to handle endianness */
 #define sfvmk_LE64ToCPU(x)      ((uint64_t)(x))
 #define sfvmk_LE32ToCPU(x)      ((uint32_t)(x))
 #define sfvmk_CPUToLE32(x)      ((uint32_t)(x))

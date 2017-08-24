@@ -4,8 +4,6 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
-
 #include "sfvmk.h"
 #include "sfvmk_ut.h"
 
@@ -21,8 +19,8 @@ static void
 sfvmk_ModInfoCleanup(void)
 {
    if (sfvmk_ModInfo.driverID != NULL) {
-      sfvmk_DriverUnregister();
-      sfvmk_ModInfo.driverID = NULL;
+    sfvmk_driverUnregister();
+    sfvmk_ModInfo.driverID = NULL;
    }
    if (sfvmk_ModInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
       vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
@@ -42,17 +40,14 @@ sfvmk_ModInfoCleanup(void)
    }
 }
 
-/************************************************************************
- * init_module --
- *
- * @brief   This is the driver module entry point that gets invoked
- * automatically when this module is loaded.
- *
- * @param  None
- *
- * @return 0 <Success> or 1 <Failure>
- *
- ************************************************************************/
+/*! \brief This is the driver module entry point that gets invoked
+**         automatically when this module is loaded.
+**
+** \param  None
+**
+** \return: 0 <success> or 1 <failure>
+**
+*/
 int
 init_module(void)
 {
@@ -65,7 +60,7 @@ init_module(void)
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
       /* size, alignment, count */
-      { SFC_HEAP_EST, 1, 1},
+      { SFVMK_HEAP_EST, 1, 1},
       { vmk_LogHeapAllocSize(), 1, 1 },
       { vmk_LockDomainAllocSize(), 1, 1 },
       { vmk_SpinlockAllocSize(VMK_SPINLOCK), 1, 2}
@@ -132,7 +127,7 @@ init_module(void)
   /* 5. MemPool - TBD */
 
   /* Register Driver with with device layer */
-  status = sfvmk_DriverRegister();
+  status = sfvmk_driverRegister();
 
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
@@ -148,18 +143,14 @@ init_module(void)
   return status;
 }
 
-/************************************************************************
- * cleanup_module --
- *
- * @brief: This is the module entry point that gets called automatically when
- * this module is unloaded.
- *
- * @param  None
- *
- * @return None
- *
- ************************************************************************/
-
+/*! \brief This is the  module exit point that gets invoked
+**         automatically when this module is unloaded.
+**
+** \param  None
+**
+** \return: None
+**
+*/
 void
 cleanup_module(void)
 {

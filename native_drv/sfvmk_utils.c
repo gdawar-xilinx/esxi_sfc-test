@@ -4,26 +4,18 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
+#include "sfvmk_driver.h"
 
-
-#include "sfvmk.h"
-
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_CreateLock --
- *
- * @brief It creates a spin lock with specified name and lock rank.
- *
- * @param[in]  lockName  brief name for the spinlock
- * @param[in]  rank      lock rank)
- * @param[out] lock      lock pointer to create
- *
- * @result: VMK_OK on success, and lock created. Error code if otherwise.
- *
- *-----------------------------------------------------------------------------*/
-
+/*! \brief It creates a spin lock with specified name and lock rank.
+**
+** \param[in]  lockName  brief name for the spinlock
+** \param[in]  rank      lock rank)
+** \param[out] lock      lock pointer to create
+**
+** \return: VMK_OK on success, and lock created. Error code if otherwise.
+*/
 VMK_ReturnStatus
-sfvmk_CreateLock(const char *lockName,
+sfvmk_createLock(const char *lockName,
                        vmk_LockRank rank,
                        vmk_Lock *lock)
 {
@@ -47,20 +39,15 @@ sfvmk_CreateLock(const char *lockName,
    return status;
 }
 
-/**-----------------------------------------------------------------------------
- *
- * sfvmk_DestroyLock --
- *
- * @brief It destroys the spin lock.
- *
- * @param[in,out] lock  lock pointer to create
- *
- * @result  None
- *
- *-----------------------------------------------------------------------------*/
+/*! \brief It destroys the spin lock.
+**
+** \param[in] lock  vmk_lock to destory
+**
+** \return  void
+*/
 
 void
-sfvmk_DestroyLock(vmk_Lock lock)
+sfvmk_destroyLock(vmk_Lock lock)
 {
   if (lock) {
     vmk_SpinlockDestroy(lock);

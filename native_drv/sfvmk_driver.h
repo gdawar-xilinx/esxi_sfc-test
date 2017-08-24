@@ -7,8 +7,9 @@
 
 #ifndef __SFVMK_DRIVER_H__
 #define __SFVMK_DRIVER_H__
+#include "sfvmk.h"
 
-extern VMK_ReturnStatus sfvmk_DriverRegister(void);
-extern void             sfvmk_DriverUnregister(void);
+extern VMK_ReturnStatus sfvmk_driverRegister(void);
+extern void             sfvmk_driverUnregister(void);
 
 #endif /* __SFVMK_DRIVER_H__ */

@@ -9,6 +9,7 @@
 #include "efx_regs_mcdi.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_nvram.h"
+#include "sfvmk_vpd.h"
 #include "sfvmk_mgmtInterface.h"
 
 /*! \brief  Get adapter pointer based on hash.
@@ -488,6 +489,11 @@ end:
 ** \param[in/out]  pVpdInfo   pointer to sfvmk_vpdInfo_s structure
 **
 ** \return VMK_OK
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND:      In case of dev not found
+**     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
+**                         input param
 **
 */
 int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
@@ -495,5 +501,58 @@ int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_vpdInfo_t *pVpdInfo)
 {
+  sfvmk_adapter_t *pAdapter = NULL;
+  int              rc;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pVpdInfo) {
+    SFVMK_ERROR("pVpdInfo: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Pointer to pAdapter is NULL");
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  switch (pVpdInfo->vpdOp) {
+    case SFVMK_MGMT_DEV_OPS_GET:
+      if ((rc = sfvmk_vpdGetInfo(pAdapter, &pVpdInfo->vpdPayload[0],
+                     SFVMK_VPD_MAX_PAYLOAD, pVpdInfo->vpdTag,
+                     pVpdInfo->vpdKeyword, &pVpdInfo->vpdLen)) != VMK_OK) {
+        SFVMK_ERR(pAdapter, "Get VPD data failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = rc;
+        goto end;
+      }
+
+      break;
+    case SFVMK_MGMT_DEV_OPS_SET:
+      if ((rc = sfvmk_vpdSetInfo(pAdapter, &pVpdInfo->vpdPayload[0],
+                               pVpdInfo->vpdTag, pVpdInfo->vpdKeyword,
+                               pVpdInfo->vpdLen)) != VMK_OK) {
+        SFVMK_ERR(pAdapter, "Set VPD data failed with error %s",
+                  vmk_StatusToString(rc));
+        pDevIface->status = rc;
+        goto end;
+      }
+
+      break;
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+end:
   return VMK_OK;
 }
+

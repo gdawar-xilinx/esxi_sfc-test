@@ -428,13 +428,55 @@ int sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
 ** \param[in/out]  pPciInfo   pointer to sfvmk_pciInfo_s structure
 **
 ** \return VMK_OK
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_BAD_PARAM:      Null Pointer passed in parameter
+**     VMK_NOT_FOUND:      In case of dev not found
+**     VMK_NOT_FAILURE:    String copy failed
 **
 */
 int sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_pciInfo_t *pPciInfo)
+                        vmk_MgmtEnvelope      *pEnvelope,
+                        sfvmk_mgmtDevInfo_t   *pDevIface,
+                        sfvmk_pciInfo_t       *pPciInfo)
 {
+  sfvmk_adapter_t *pAdapter = NULL;
+  int              rc;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pPciInfo) {
+    SFVMK_ERROR("pPciInfo: NULL pointer passed as input param");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Pointer to pAdapter is NULL");
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  rc = vmk_StringCopy(pPciInfo->pciBDF, pAdapter->pciDeviceName.string,
+                 SFVMK_PCI_BDF_LEN);
+  if (rc != VMK_OK) {
+    SFVMK_ERR(pAdapter, "String copy failed with error %s",
+                  vmk_StatusToString(rc));
+    pDevIface->status = VMK_FAILURE;
+    goto end;
+  }
+
+  pPciInfo->vendorId = pAdapter->pciDeviceID.vendorID;
+  pPciInfo->deviceId = pAdapter->pciDeviceID.deviceID;
+  pPciInfo->subVendorId = pAdapter->pciDeviceID.subVendorID;
+  pPciInfo->subDeviceId = pAdapter->pciDeviceID.subDeviceID;
+
+end:
   return VMK_OK;
 }
 

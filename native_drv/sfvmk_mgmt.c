@@ -140,143 +140,122 @@ end:
 ** \param[in/out]  pDevIface   pointer to mgmt param
 ** \param[in/out]  pCmd        pointer to NVRAM cmd struct
 **
-** \return: VMK_OK  <success>  error code <failure>
+** \return: VMK_OK  <success>
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND:      In case of dev not found
+**     VMK_NOT_SUPPORTED:  Operation not supported
+**     VMK_NO_SPACE:       Insufficient space
+**     VMK_BAD_PARAM:      Unknown option or NULL input param
+**
 */
 int sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
+                        vmk_MgmtEnvelope    *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_nvramCmd_t *pCmd)
+                        sfvmk_nvramCmd_t    *pCmd)
 {
-  sfvmk_adapter_t *pAdapter = NULL;
-  vmk_int8 *pNvramBuf = NULL;
-  efx_nic_t *pNic;
-  efx_nvram_type_t type;
-  int rc;
+  sfvmk_adapter_t               *pAdapter = NULL;
+  efx_nic_t                     *pNic;
+  efx_nvram_type_t               type;
+  int                            rc;
+  static const efx_nvram_type_t  nvramTypes[] = {
+    [SFVMK_NVRAM_TYPE_BOOTROM]  = EFX_NVRAM_BOOTROM,
+    [SFVMK_NVRAM_TYPE_BOOTROM_CFG]  = EFX_NVRAM_BOOTROM_CFG,
+    [SFVMK_NVRAM_TYPE_MC]  = EFX_NVRAM_MC_FIRMWARE,
+    [SFVMK_NVRAM_TYPE_MC_GOLDEN]  = EFX_NVRAM_MC_GOLDEN,
+    [SFVMK_NVRAM_TYPE_PHY]  = EFX_NVRAM_PHY,
+    [SFVMK_NVRAM_TYPE_NULL_PHY]  = EFX_NVRAM_NULLPHY,
+    [SFVMK_NVRAM_TYPE_FPGA]  = EFX_NVRAM_FPGA,
+    [SFVMK_NVRAM_TYPE_FCFW]  = EFX_NVRAM_FCFW,
+    [SFVMK_NVRAM_TYPE_CPLD]  = EFX_NVRAM_CPLD,
+    [SFVMK_NVRAM_TYPE_FPGA_BACKUP]  = EFX_NVRAM_FPGA_BACKUP,
+    [SFVMK_NVRAM_TYPE_UEFIROM]  = EFX_NVRAM_UEFIROM,
+    [SFVMK_NVRAM_TYPE_DYNAMIC_CFG]  = EFX_NVRAM_DYNAMIC_CFG,
+  };
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pCmd) {
+    SFVMK_ERROR("pCmd :NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  rc = pDevIface->status = VMK_OK;
+
+  if (pCmd->type > SFVMK_NVRAM_TYPE_DYNAMIC_CFG) {
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
 
   pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
   if (!pAdapter) {
     SFVMK_ERROR("Pointer to pAdapter is NULL");
-    rc = ENOENT;
-    goto sfvmk_fail;
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
   }
 
   pNic = pAdapter->pNic;
+  type = nvramTypes[pCmd->type];
 
-  switch (pCmd->type) {
-    case SFVMK_NVRAM_TYPE_BOOTROM:
-      type = EFX_NVRAM_BOOTROM;
-      break;
-    case SFVMK_NVRAM_TYPE_BOOTROM_CFG:
-      type = EFX_NVRAM_BOOTROM_CFG;
-      break;
-    case SFVMK_NVRAM_TYPE_MC:
-      type = EFX_NVRAM_MC_FIRMWARE;
-      break;
-    case SFVMK_NVRAM_TYPE_MC_GOLDEN:
-      type = EFX_NVRAM_MC_GOLDEN;
-      if (pCmd->op == SFVMK_NVRAM_OP_WRITE ||
-          pCmd->op == SFVMK_NVRAM_OP_ERASE ||
-          pCmd->op == SFVMK_NVRAM_OP_SET_VER) {
-        rc = ENOTSUP;
-        goto sfvmk_fail;
-      }
-      break;
-    case SFVMK_NVRAM_TYPE_PHY:
-      type = EFX_NVRAM_PHY;
-      break;
-    case SFVMK_NVRAM_TYPE_NULL_PHY:
-      type = EFX_NVRAM_NULLPHY;
-      break;
-    case SFVMK_NVRAM_TYPE_FPGA: /* PTP timestamping FPGA */
-      type = EFX_NVRAM_FPGA;
-      break;
-    case SFVMK_NVRAM_TYPE_FCFW:
-      type = EFX_NVRAM_FCFW;
-      break;
-    case SFVMK_NVRAM_TYPE_CPLD:
-      type = EFX_NVRAM_CPLD;
-      break;
-    case SFVMK_NVRAM_TYPE_FPGA_BACKUP:
-      type = EFX_NVRAM_FPGA_BACKUP;
-      break;
-    case SFVMK_NVRAM_TYPE_UEFIROM:
-      type = EFX_NVRAM_UEFIROM;
-      break;
-    case SFVMK_NVRAM_TYPE_DYNAMIC_CFG:
-      type = EFX_NVRAM_DYNAMIC_CFG;
-      break;
-    default:
-      rc = EINVAL;
-      goto sfvmk_fail;
-  }
-
-  if (pCmd->size > sizeof (pCmd->data)) {
-    rc = ENOSPC;
-    goto sfvmk_fail;
+  if (type == EFX_NVRAM_MC_GOLDEN &&
+      (pCmd->op == SFVMK_NVRAM_OP_WRITE ||
+       pCmd->op == SFVMK_NVRAM_OP_ERASE ||
+       pCmd->op == SFVMK_NVRAM_OP_SET_VER)) {
+    pDevIface->status = VMK_NOT_SUPPORTED;
+    goto end;
   }
 
   switch (pCmd->op) {
     case SFVMK_NVRAM_OP_SIZE:
-    {
-      size_t size;
-      if ((rc = efx_nvram_size(pNic, type, &size)) != 0)
-        goto sfvmk_nvram_op_failed;
-      pCmd->size = (uint32_t)size;
+      rc = efx_nvram_size(pNic, type, (size_t *)&pCmd->size);
       break;
-    }
     case SFVMK_NVRAM_OP_READ:
+      if (pCmd->size > sizeof (pCmd->data)) {
+        SFVMK_ERR(pAdapter, "Invalid data chunk size, OP %d", pCmd->op);
+        pDevIface->status = VMK_NO_SPACE;
+        goto end;
+      }
+
+      rc = sfvmk_nvram_rw(pAdapter, pCmd->data, &pCmd->size,
+                               pCmd->offset, type, VMK_FALSE);
+      break;
     case SFVMK_NVRAM_OP_WRITE:
-    {
-       boolean_t write = B_FALSE;
+      if (pCmd->size > sizeof (pCmd->data)) {
+        SFVMK_ERR(pAdapter, "Invalid data chunk size, OP %d", pCmd->op);
+        pDevIface->status = VMK_NO_SPACE;
+        goto end;
+      }
 
-       pNvramBuf = sfvmk_MemAlloc(SFVMK_NVRAM_MAX_PAYLOAD);
-       if (pNvramBuf == NULL) {
-         rc = ENOMEM;
-         goto sfvmk_alloc_failed;
-       }
-
-       if (pCmd->op == SFVMK_NVRAM_OP_WRITE) {
-         write = B_TRUE;
-         memcpy(pNvramBuf, pCmd->data, pCmd->size);
-       }
-
-       if ((rc = sfvmk_nvram_rw(pAdapter, pNvramBuf, pCmd->size,
-                                pCmd->offset, type, write)) != 0)
-         goto sfvmk_nvram_rw_failed;
-
-       if (pCmd->op == SFVMK_NVRAM_OP_READ)
-         memcpy(pCmd->data, pNvramBuf, pCmd->size);
-
-       sfvmk_MemFree(pNvramBuf);
-       break;
-    }
+      rc = sfvmk_nvram_rw(pAdapter, pCmd->data, &pCmd->size,
+                               pCmd->offset, type, VMK_TRUE);
+      break;
     case SFVMK_NVRAM_OP_ERASE:
-      if ((rc = sfvmk_nvram_erase(pAdapter, type)) != 0)
-        goto sfvmk_nvram_op_failed;
+      rc = sfvmk_nvram_erase(pAdapter, type);
       break;
     case SFVMK_NVRAM_OP_GET_VER:
-      if ((rc = efx_nvram_get_version(pNic, type, &pCmd->subtype,
-          &pCmd->version[0])) != 0)
-        goto sfvmk_nvram_op_failed;
+      rc = efx_nvram_get_version(pNic, type,
+                       &pCmd->subtype, &pCmd->version[0]);
       break;
     case SFVMK_NVRAM_OP_SET_VER:
-      if ((rc = efx_nvram_set_version(pNic, type,
-          &pCmd->version[0])) != 0)
-        goto sfvmk_nvram_op_failed;
+      rc = efx_nvram_set_version(pNic, type, &pCmd->version[0]);
       break;
     default:
-      rc = ENOTSUP;
-      goto sfvmk_fail;
+      pDevIface->status = VMK_NOT_SUPPORTED;
+      goto end;
   }
 
-  return 0;
+  if (rc != VMK_OK) {
+    SFVMK_ERR(pAdapter, "Operation = %d failed with error %s",
+              pCmd->op, vmk_StatusToString(rc));
+    pDevIface->status = rc;
+  }
 
-sfvmk_nvram_rw_failed:
-  sfvmk_MemFree(pNvramBuf);
-sfvmk_nvram_op_failed:
-sfvmk_alloc_failed:
-sfvmk_fail:
-  return rc;
+end:
+  return VMK_OK;
 }
 
 /*! \brief  A Mgmt callback to various Version info

@@ -33,7 +33,7 @@ typedef struct sfvmk_mcdi_s {
 void sfvmk_mcdiFini(struct sfvmk_adapter_s *pAdapter);
 int sfvmk_mcdiInit(struct sfvmk_adapter_s *pAdapter);
 int sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
-                        efx_mcdi_req_t *emr);
+                        efx_mcdi_req_t *pEmReq);
 
 #endif
 

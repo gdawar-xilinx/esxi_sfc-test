@@ -45,78 +45,92 @@ end:
   return NULL;
 }
 
-
 /*! \brief  A Mgmt callback routine to post MCDI commands
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to mgmt param
-** \param[in/out]  pMgmtMcdi   pointer to MCDI cmd struct
-**
-** \return: VMK_OK  <success>  error code <failure>
-*/
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface   pointer to mgmt param
+ ** \param[in/out]  pMgmtMcdi   pointer to MCDI cmd struct
+ **
+ ** \return: VMK_OK  <success>
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_NO_MEMORY:      Alloc failed for local buffer
+ **     VMK_NOT_READY:      MCDI is not initialized
+ **     VMK_NOT_SUPPORTED:  MCDI feature not supported
+ **     VMK_BAD_PARAM:      Invalid payload size or input param
+ **     VMK_RETRY:          A communication error has happened,
+ **                         Retry after MC reboot
+ **
+ */
 int
-sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
+sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
+                        vmk_MgmtEnvelope     *pEnvelope,
+                        sfvmk_mgmtDevInfo_t  *pDevIface,
                         sfvmk_mcdiRequest2_t *pMgmtMcdi)
 {
   sfvmk_adapter_t *pAdapter = NULL;
-  efx_mcdi_req_t emr;
-  vmk_int8 *pMcdiBuf;
-  int rc;
+  efx_mcdi_req_t   emr;
+  int              rc;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pMgmtMcdi) {
+    SFVMK_ERROR("pMgmtMcdi: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
 
   pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
   if (!pAdapter) {
     SFVMK_ERROR("Pointer to pAdapter is NULL");
-    rc = ENOENT;
-    goto sfvmk_dev_null;
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
   }
 
   if (pMgmtMcdi->inlen > SFVMK_MCDI_MAX_PAYLOAD ||
       pMgmtMcdi->outlen > SFVMK_MCDI_MAX_PAYLOAD) {
     SFVMK_ERR(pAdapter, "Invalid Length");
-    rc = EINVAL;
-    goto sfvmk_invalid_len;
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
   }
-
-  pMcdiBuf = sfvmk_MemAlloc(SFVMK_MCDI_MAX_PAYLOAD);
-  if (pMcdiBuf == NULL) {
-    SFVMK_ERR(pAdapter, "Alloc failed for pMcdiBuf");
-    rc = ENOMEM;
-    goto sfvmk_alloc_failed;
-  }
-
-  memcpy(pMcdiBuf, pMgmtMcdi->payload, pMgmtMcdi->inlen);
 
   emr.emr_cmd = pMgmtMcdi->cmd;
-  emr.emr_in_buf = pMcdiBuf;
+  emr.emr_in_buf = (vmk_uint8 *)pMgmtMcdi->payload;
   emr.emr_in_length = pMgmtMcdi->inlen;
 
-  emr.emr_out_buf = pMcdiBuf;
+  emr.emr_out_buf = (vmk_uint8 *)pMgmtMcdi->payload;
   emr.emr_out_length = pMgmtMcdi->outlen;
 
   rc = sfvmk_mcdiIOHandler(pAdapter, &emr);
   if (rc != VMK_OK) {
-    goto sfvmk_mcdi_fail;
+    SFVMK_ERR(pAdapter, "MCDI command failed %s",
+              vmk_StatusToString(rc));
+    pDevIface->status = rc;
+    goto end;
+  }
+
+  if (emr.emr_rc) {
+    if (emr.emr_out_length_used)
+      pMgmtMcdi->flags |= EFX_MCDI_REQUEST_ERROR;
+    else {
+      pDevIface->status = VMK_RETRY;
+      goto end;
+    }
   }
 
   pMgmtMcdi->host_errno = emr.emr_rc;
   pMgmtMcdi->cmd = emr.emr_cmd;
   pMgmtMcdi->outlen = emr.emr_out_length_used;
-  memcpy(pMgmtMcdi->payload, pMcdiBuf, pMgmtMcdi->outlen);
 
-  vmk_HeapFree(sfvmk_ModInfo.heapID, pMcdiBuf);
-
+end:
   return VMK_OK;
-
-sfvmk_mcdi_fail:
-  sfvmk_MemFree(pMcdiBuf);
-
-sfvmk_alloc_failed:
-sfvmk_dev_null:
-sfvmk_invalid_len:
-  return rc;
 }
 
 /*! \brief  A Mgmt callback routine to post NVRAM req

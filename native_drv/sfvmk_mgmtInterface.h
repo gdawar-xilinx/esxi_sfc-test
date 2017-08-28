@@ -89,7 +89,7 @@ typedef struct sfvmk_mgmtDevInfo_s {
 
 #define SFVMK_MCDI_MAX_PAYLOAD_ARRAY 255
 
-/*! \brief struct efx_mcdi_request2_s - Parameters for %EFX_MCDI_REQUEST2 sub-command
+/*! \brief struct efx_mcdi_request2_s - Parameters for EFX_MCDI_REQUEST2 sub-command
  **
  ** cmd[in] MCDI command type number.
  **
@@ -99,37 +99,37 @@ typedef struct sfvmk_mgmtDevInfo_s {
  **	On return, the length used for the response, in bytes.
  **
  ** flags[out] Flags for the command or response.  The only flag defined
- **	at present is %EFX_MCDI_REQUEST_ERROR.  If this is set on return,
+ **	at present is EFX_MCDI_REQUEST_ERROR.  If this is set on return,
  **	the MC reported an error.
  **
- ** host_errno[out] On return, if %EFX_MCDI_REQUEST_ERROR is included in @flags,
+ ** host_errno[out] On return, if EFX_MCDI_REQUEST_ERROR is included in flags,
  **	the suggested VMK error code for the error.
  **
  ** payload[in/out] On entry, the MCDI command parameters.  On return, the response.
  **
  ** If the driver detects invalid parameters or a communication failure
- ** with the MC, the MGMT calback interface will return -1, errno will be set
+ ** with the MC, the MGMT calback interface will return VMK_OK, errno will be set
  ** accordingly, and none of the fields will be valid.  If the MC reports
- ** an error, the MGMT calback interface call will return 0 but @flags will
- ** include the %EFX_MCDI_REQUEST_ERROR flag.  The MC error code can then
- ** be found in @payload (if @outlen was sufficiently large) and a suggested
- ** VMK error code can be found in @host_errno.
+ ** an error, the MGMT calback interface call will return VMK_OK but flags will
+ ** include the EFX_MCDI_REQUEST_ERROR flag.  The MC error code can then
+ ** be found in payload (if outlen was sufficiently large) and a suggested
+ ** VMK error code can be found in host_errno.
  **
- ** %EFX_MCDI_REQUEST2 fully supports both MCDIv1 and v2.
+ ** EFX_MCDI_REQUEST2 fully supports both MCDIv1 and v2.
  **
  */
 typedef struct sfvmk_mcdiRequest2_s {
-  vmk_uint16 cmd;
-  vmk_uint16 inlen;
-  vmk_uint16 outlen;
-  vmk_uint16 flags;
-  vmk_uint32 host_errno;
+  vmk_uint16  cmd;
+  vmk_uint16  inlen;
+  vmk_uint16  outlen;
+  vmk_uint16  flags;
+  vmk_uint32  host_errno;
   /*
    * The maximum payload length is 0x400 (MCDI_CTL_SDU_LEN_MAX_V2) - 4 bytes
    * = 255 x 32 bit words as MCDI_CTL_SDU_LEN_MAX_V2 doesn't take account of
    * the space required by the V1 header, which still exists in a V2 command.
    */
-  vmk_uint32 payload[SFVMK_MCDI_MAX_PAYLOAD_ARRAY];
+  vmk_uint32  payload[SFVMK_MCDI_MAX_PAYLOAD_ARRAY];
 } __attribute__((__packed__)) sfvmk_mcdiRequest2_t;
 #define EFX_MCDI_REQUEST_ERROR	0x0001
 

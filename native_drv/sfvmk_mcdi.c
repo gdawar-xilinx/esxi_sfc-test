@@ -104,7 +104,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
 
   SFVMK_MCDI_LOCK(pMcdi);
 
-  VMK_ASSERT_BUG((pMcdi->state == SFVMK_MCDI_INITIALIZED) ,
+  VMK_ASSERT_BUG((pMcdi->state == SFVMK_MCDI_INITIALIZED),
                     "MCDI not initialized");
 
   /* Issue request and poll for completion. */
@@ -186,31 +186,24 @@ sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
                       efx_mcdi_req_t *pEmReq)
 {
   const efx_nic_cfg_t *pNCfg = efx_nic_cfg_get(pAdapter->pNic);
-  sfvmk_mcdi_t *pMcdi = &pAdapter->mcdi;
-  int rc = VMK_OK;
-
-  if (pMcdi->state != SFVMK_MCDI_INITIALIZED) {
-    SFVMK_ERR(pAdapter,"MCDI State is not Initialized");
-    rc = ENODEV;
-    goto fail;
-  }
+  sfvmk_mcdi_t        *pMcdi = &pAdapter->mcdi;
+  int                  rc = VMK_OK;
 
   if (!(pNCfg->enc_features & EFX_FEATURE_MCDI)) {
     SFVMK_ERR(pAdapter,"MCDI feature is not supported");
-    rc = ENOTSUP;
+    rc = VMK_NOT_SUPPORTED;
     goto fail;
   }
 
-  if (pEmReq->emr_in_length > SFVMK_MCDI_MAX_PAYLOAD ||
-      pEmReq->emr_out_length > SFVMK_MCDI_MAX_PAYLOAD ) {
-    SFVMK_ERR(pAdapter,"MCDI length is invalid");
-    rc = EINVAL;
+  if (pMcdi->state != SFVMK_MCDI_INITIALIZED) {
+    SFVMK_ERR(pAdapter,"MCDI State is not Initialized");
+    rc = VMK_NOT_READY;
     goto fail;
   }
 
   if (!pEmReq->emr_in_buf || !pEmReq->emr_out_buf) {
     SFVMK_ERR(pAdapter,"MCDI command buffer is NULL");
-    rc = EINVAL;
+    rc = VMK_BAD_PARAM;
     goto fail;
   }
 

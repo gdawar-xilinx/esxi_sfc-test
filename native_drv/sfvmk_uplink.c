@@ -842,6 +842,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   vmk_int16 maxRxQueues;
   vmk_int16 maxTxQueues;
   VMK_ReturnStatus status;
+  vmk_Bool isQueueStopped = VMK_FALSE;
 
   maxRxQueues = pAdapter->queueInfo.maxRxQueues;
   maxTxQueues = pAdapter->queueInfo.maxTxQueues;
@@ -878,10 +879,8 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
    SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
              "sfvmk_isTxqStopped returned TRUE");
+   isQueueStopped = VMK_TRUE;
    /* TODO: need to see the pkt completion context and use appropriate function call */
-   vmk_PktListReleaseAllPkts(pktList);
-   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
-   return VMK_BUSY;
   }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
@@ -904,6 +903,13 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 	  qid = SFVMK_TXQ_IP_TCP_UDP_CKSUM;
      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "pkt: %p moved to qid: %d", pkt, qid);
+   }
+
+   if(VMK_UNLIKELY((VMK_TRUE == isQueueStopped) && (pAdapter->pTxq[qid]->blocked))) {
+     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+             "Queue blocked, returning");
+     vmk_PktListIterInsertPktBefore(iter, pkt);
+     return VMK_BUSY;
    }
 
    status = sfvmk_transmitPkt(pAdapter, pAdapter->pTxq[qid], pkt, pktLen);

@@ -146,6 +146,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   if(flags & (EFX_PKT_VLAN_TAGGED  | EFX_CHECK_VLAN)) {
     sfvmk_stripVlanHdr(pAdapter, pPkt);
     pRxDesc->size -= SFVMK_VLAN_HDR_SIZE;
+    len=0;
   }
 
   /* pad the pPkt if it is shorter than 60 bytes */
@@ -156,10 +157,11 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
     vmk_Memset((vmk_uint8 *)pFrameVa + pRxDesc->size, 0,
                SFVMK_MIN_PKT_SIZE - pRxDesc->size);
     pRxDesc->size = SFVMK_MIN_PKT_SIZE;
+    len=0;
   }
 
   /* set pkt len */
-  if(len != pRxDesc->size)
+  if(!len)
     vmk_PktFrameLenSet(pPkt, pRxDesc->size);
 
   /* Convert checksum flags */
@@ -226,7 +228,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, boolean_t eop)
               (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt),
                  &len);
       VMK_ASSERT_BUG(rc == 0, "cannot get packet length: %d", rc);
-      pRxDesc->size = len;
+      pRxDesc->size = len + pAdapter->rxPrefixSize;
       SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
                 "rx_desc_size: %d", pRxDesc->size);
     }

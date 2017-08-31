@@ -19,6 +19,18 @@
   vmk_SpinlockUnlock(adapter->shareDataLock);                 \
 }
 
+#define SFVMK_SHARED_AREA_BEGIN_READ(adapter)                      \
+  do {                                                             \
+    vmk_uint32 sharedReadLockVer;                                  \
+    do {                                                           \
+      sharedReadLockVer = vmk_VersionedAtomicBeginTryRead          \
+                              (&adapter->sharedData.lock);
+
+#define SFVMK_SHARED_AREA_END_READ(adapter)                        \
+    } while (!vmk_VersionedAtomicEndTryRead                        \
+                 (&adapter->sharedData.lock, sharedReadLockVer));  \
+  } while (VMK_FALSE)
+
 #define SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter)              \
                &pAdapter->queueData[0];
 

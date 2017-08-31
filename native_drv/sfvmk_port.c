@@ -86,6 +86,31 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
   return;
 }
 
+/*! /brief  Get current link state
+**
+** /param[in]   pAdapter    pointer to sfvmk_adapter_t
+** /param[out]  pLinkState  link state
+**
+** /result: VMK_OK on success, error no otherwise.
+**
+*/
+VMK_ReturnStatus
+sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_Bool *pLinkState)
+{
+  vmk_UplinkSharedData *pSharedData = NULL;
+
+  if (!pAdapter || !pLinkState)
+    return VMK_BAD_PARAM;
+
+  pSharedData = &pAdapter->sharedData;
+
+  SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
+  *pLinkState = pSharedData->link.state;
+  SFVMK_SHARED_AREA_END_READ(pAdapter);
+
+  return VMK_OK;
+}
+
 /*! /brief  update the PHY link speed
 **
 ** /param[in]  pAdapter  pointer to sfvmk_adapter_t

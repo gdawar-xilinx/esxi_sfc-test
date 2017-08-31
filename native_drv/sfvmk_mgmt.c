@@ -366,21 +366,63 @@ end:
   return VMK_OK;
 }
 
-/*! \brief  A Mgmt callback for Get/Set Link state
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to mgmt param
-** \param[in/out]  pLinkOps   pointer to link ops structure
-**
-** \return VMK_OK
-**
-*/
+/*! \brief  A Mgmt callback for Get Link state
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface   pointer to mgmt param
+ ** \param[in/out]  pLinkOps   pointer to link ops structure
+ **
+ ** \return VMK_OK
+ **     Below error values are filled in the status field of
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **
+ */
 int sfvmk_mgmtLinkStatusUpdate(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_linkStatus_t *pLinkOps)
 {
+  sfvmk_adapter_t *pAdapter = NULL;
+  VMK_ReturnStatus status = VMK_OK;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pLinkOps) {
+    SFVMK_ERROR("pLinkOps: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Pointer to pAdapter is NULL");
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  if (pLinkOps->type != SFVMK_MGMT_DEV_OPS_GET) {
+    SFVMK_ERR(pAdapter, "Invalid operation 0x%x", pLinkOps->type);
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pLinkOps->state = VMK_FALSE;
+  if ((status = sfvmk_linkStateGet(pAdapter,
+                    &pLinkOps->state)) != VMK_OK) {
+    SFVMK_ERR(pAdapter, "Get current link state failed with error %s",
+                  vmk_StatusToString(status));
+    pDevIface->status = status;
+  }
+
+end:
   return VMK_OK;
 }
 

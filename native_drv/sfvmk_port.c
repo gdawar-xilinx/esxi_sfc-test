@@ -186,6 +186,45 @@ sfvmk_link_speed_set_fail:
   return status;
 }
 
+/*! /brief  Get PHY link speed and AutoNeg status
+**
+** /param[in]   pAdapter   pointer to sfvmk_adapter_t
+** /param[out]  pSpeed     link speed
+** /param[out]  pAutoNeg   AutoNeg On/Off
+**
+** /result: VMK_OK on success, error no otherwise.
+**
+*/
+VMK_ReturnStatus
+sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter,
+                      vmk_uint32 *pSpeed, vmk_Bool *pAutoNeg)
+{
+  efx_nic_t *pNic;
+  vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_uint32 advertisedCapabilities;
+
+  if (!pAdapter || !pSpeed || !pAutoNeg)
+    return VMK_BAD_PARAM;
+
+  pNic = pAdapter->pNic;
+  pSharedData = &pAdapter->sharedData;
+
+  SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
+  *pSpeed = pSharedData->link.speed;
+  SFVMK_SHARED_AREA_END_READ(pAdapter);
+
+  /* Get current phy advertised capabilities */
+  efx_phy_adv_cap_get(pNic, EFX_PHY_CAP_CURRENT,
+                      &advertisedCapabilities);
+
+  *pAutoNeg = VMK_FALSE;
+
+  if (advertisedCapabilities & (1 << EFX_PHY_CAP_AN))
+    *pAutoNeg = VMK_TRUE;
+
+  return VMK_OK;
+}
+
 /*! \brief Function to DMA the latest stats from NIC
 **
 ** \param[in] adapter pointer to sfvmk_adapter_t

@@ -427,22 +427,81 @@ end:
 }
 
 /*! \brief  A Mgmt callback for Get/Set Link speed and autoneg
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface    pointer to mgmt param
-** \param[in/out]  pLinkSpeed   pointer to speed and autoneg
-**                              param structure
-**
-** \return VMK_OK
-**
-*/
-int sfvmk_mgmtLinkSpeedUpdate(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_linkSpeed_t *pLinkSpeed)
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface    pointer to mgmt param
+ ** \param[in/out]  pLinkSpeed   pointer to speed and autoneg
+ **                              param structure
+ **
+ ** \return VMK_OK
+ **     Below error values are filled in the status field of
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **
+ */
+ int sfvmk_mgmtLinkSpeedUpdate(vmk_MgmtCookies *pCookies,
+                         vmk_MgmtEnvelope *pEnvelope,
+                         sfvmk_mgmtDevInfo_t *pDevIface,
+                         sfvmk_linkSpeed_t *pLinkSpeed)
 {
-  return VMK_OK;
+  sfvmk_adapter_t      *pAdapter = NULL;
+  VMK_ReturnStatus      status = VMK_OK;
+  vmk_uint32            speed;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pLinkSpeed) {
+    SFVMK_ERROR("pLinkSpeed: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Pointer to pAdapter is NULL");
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  switch (pLinkSpeed->type) {
+    case SFVMK_MGMT_DEV_OPS_SET:
+      speed = pLinkSpeed->autoNeg ? VMK_LINK_SPEED_AUTO : pLinkSpeed->speed;
+
+      /* Set PHY speed */
+      status = sfvmk_phyLinkSpeedSet(pAdapter, speed);
+      if (status != VMK_OK) {
+        SFVMK_ERR(pAdapter, "Link speed change failed with error %s",
+                  vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+    case SFVMK_MGMT_DEV_OPS_GET:
+      status = sfvmk_phyLinkSpeedGet(pAdapter, &pLinkSpeed->speed,
+                                     &pLinkSpeed->autoNeg);
+      if (status != VMK_OK) {
+        SFVMK_ERR(pAdapter, "Link speed get failed with error %s",
+                  vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+end:
+   return VMK_OK;
 }
 
 /*! \brief  A Mgmt callback to Get/Set intr moderation settings

@@ -944,6 +944,7 @@ sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_txMapping_t **pStmp)
 
   SFVMK_DBG(pTxq->pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "pStmp id: %ld", *pStmp - &pTxq->pStmp[0]);
+  vmk_Memset(*pStmp, 0, sizeof(sfvmk_txMapping_t));
   //SFVMK_DBG_FUNC_EXIT(pTxq->pAdapter, SFVMK_DBG_TX);
 }
 
@@ -1073,6 +1074,20 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq, vmk_PktHandle **ppPkt, vmk_ByteCountSm
       }
       SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
       return 0;
+    }
+  }
+  else {
+    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                  "clear sticky desc for non-tagged traffic");
+    if (0 != pTxq->hwVlanTci) {
+      efx_tx_qdesc_vlantci_create(pTxq->pCommonTxq,
+          0,
+          &pTxq->pPendDesc[0]);
+
+      pTxq->nPendDesc = 1;
+      pTxq->hwVlanTci = 0;
+
+      return (1);
     }
   }
 
@@ -1609,10 +1624,16 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
+  vmk_Memset(pStmp, 0, sizeof(sfvmk_txMapping_t));
+
   /* VLAN handling */
   vlanTagged = sfvmk_txMaybeInsertTag(pTxq, &pkt, &pktLen);
   if (vlanTagged) {
-     sfvmk_nextStmp(pTxq, &pStmp);
+    /* for option descriptors, make sure txqComplete doesn't try clean-up */
+    pStmp->isPkt = VMK_TRUE;
+    pStmp->u.pkt = NULL;
+
+    sfvmk_nextStmp(pTxq, &pStmp);
   }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,

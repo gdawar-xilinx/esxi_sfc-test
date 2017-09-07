@@ -75,8 +75,8 @@ sfvmk_stripVlanHdr(sfvmk_adapter_t *pAdapter, vmk_PktHandle *pPkt)
   pPtr += SFVMK_ETH_TYPE_SIZE;
 
   /*fetch the TCI now */
-  thisTag = *(uint16_t *)pPtr;
-  vlanId = sfvmk_swapBytes(thisTag & SFVMK_VLAN_VID_MASK);
+  thisTag = sfvmk_swapBytes(*(uint16_t *)pPtr);
+  vlanId = thisTag & SFVMK_VLAN_VID_MASK;
   vlanPrio = (thisTag & SFVMK_VLAN_PRIO_MASK) >> SFVMK_VLAN_PRIO_SHIFT;
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_RX, SFVMK_LOG_LEVEL_DBG,
@@ -116,7 +116,6 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   int flags ;
   VMK_ReturnStatus status;
   vmk_SgElem elem;
-  vmk_uint32 len;
 
   if (qIndex >=  pAdapter->intr.numIntrAlloc)
     return ;
@@ -133,8 +132,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   VMK_ASSERT_BUG((status == VMK_OK),"(status == VMK_OK) is False");
 
   /* Initialize the pkt len for vmk_PktPushHeadroom to work */
-  len = pRxDesc->size;
-  vmk_PktFrameLenSet(pPkt, len);
+  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
 
   /* if prefix header is present, remove it */
   status = vmk_PktPushHeadroom(pPkt, pAdapter->rxPrefixSize);
@@ -142,11 +140,14 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
     SFVMK_ERR(pAdapter, "vmk_PktPushHeadroom failed with err %s",
               vmk_StatusToString(status));
   }
+  else {
+    /* pRxDesc->size update can be avoided but doing it for debug purpose */
+    pRxDesc->size -= pAdapter->rxPrefixSize;
+  }
 
   if(flags & (EFX_PKT_VLAN_TAGGED  | EFX_CHECK_VLAN)) {
     sfvmk_stripVlanHdr(pAdapter, pPkt);
     pRxDesc->size -= SFVMK_VLAN_HDR_SIZE;
-    len=0;
   }
 
   /* pad the pPkt if it is shorter than 60 bytes */
@@ -157,12 +158,8 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
     vmk_Memset((vmk_uint8 *)pFrameVa + pRxDesc->size, 0,
                SFVMK_MIN_PKT_SIZE - pRxDesc->size);
     pRxDesc->size = SFVMK_MIN_PKT_SIZE;
-    len=0;
-  }
-
-  /* set pkt len */
-  if(!len)
     vmk_PktFrameLenSet(pPkt, pRxDesc->size);
+  }
 
   /* Convert checksum flags */
   if (flags & EFX_CKSUM_TCPUDP)

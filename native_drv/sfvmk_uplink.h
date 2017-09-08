@@ -43,6 +43,7 @@ VMK_ReturnStatus sfvmk_initUplinkData(struct sfvmk_adapter_s * pAdapter);
 VMK_ReturnStatus sfvmk_destroyUplinkData(struct sfvmk_adapter_s *pAdapter);
 void sfvmk_updateQueueStatus(struct sfvmk_adapter_s *pAdapter, vmk_UplinkQueueState qState, vmk_uint32 qIndex);
 VMK_ReturnStatus sfvmk_changeLinkState(struct sfvmk_adapter_s *pAdapter, vmk_LinkState state);
-
+VMK_ReturnStatus sfvmk_changeRxTxIntrModeration(struct sfvmk_adapter_s *pAdapter, vmk_uint32 moderation);
+void sfvmk_updateIntrCoalesceQueueData(struct sfvmk_adapter_s *pAdapter, vmk_UplinkCoalesceParams *params);
 #endif /* __SFVMK_RX_H__ */
 

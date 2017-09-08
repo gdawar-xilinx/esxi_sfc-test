@@ -350,8 +350,7 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
                         vmk_UplinkCoalesceParams *params)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  vmk_UplinkSharedQueueData *pQueueData;
-  vmk_uint32 moderation=0, qIndex=0;
+  vmk_uint32 moderation=0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
@@ -367,43 +366,16 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
     params->rxUsecs = params->txUsecs;
   }
 
-  for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
-    status = sfvmk_evqModerate(pAdapter, qIndex, moderation);
-    if (status != VMK_OK) {
-      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_ERROR,
-		"Error : Invalid value (%d) of Interrupt Moderation [Value should be <= %d] %s",
-                moderation, SFVMK_MAX_MODERATION_USEC, vmk_NameToString(&pAdapter->uplinkName));
-      goto end;
-    }
+  /* Change interrupt moderation settings for Rx/Tx queues */
+  status = sfvmk_changeRxTxIntrModeration(pAdapter, moderation);
+  if (status != VMK_OK) {
+    return status;
   }
 
-  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-           "sfvmk_coalesceParamsSet: Configured static interupt moderation to %d (us)", moderation);
-
-  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
-  SFVMK_NULL_PTR_CHECK(pQueueData);
-
-  /* Once gloabl coalesce params are set, set to every TX/RX queues */
-  SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
-
-  /* Configure RX queue data */
-  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
-  for (qIndex=0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
-    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
-  }
-
-  /* Configure TX queue data */
-  pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
-  for (qIndex=0; qIndex < pAdapter->queueInfo.maxTxQueues; qIndex++) {
-    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
-  }
-
-  SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+  /* Copy the current interrupt coals params into shared queue data */
+  sfvmk_updateIntrCoalesceQueueData(pAdapter, params);
 
   return VMK_OK;
-
-end:
-  return status;
 }
 
 /*! \brief uplink callback function to get ring params
@@ -2000,6 +1972,72 @@ sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter)
       pAdapter->intr.numIntrAlloc;
 
   return (efx_nic_set_drv_limits(pAdapter->pNic, &limits));
+}
+
+/*! \brief function to set requested intr moderation settings.
+**
+** \param[in] pAdapter    pointer to sfvmk_adapter_t
+** \param[in] moderation  Intr moderation value
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+VMK_ReturnStatus
+sfvmk_changeRxTxIntrModeration(struct sfvmk_adapter_s *pAdapter, vmk_uint32 moderation)
+{
+  vmk_uint32 qIndex=0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  for (qIndex=0; qIndex < pAdapter->evqCount; qIndex++) {
+    status = sfvmk_evqModerate(pAdapter, qIndex, moderation);
+    if (status != VMK_OK) {
+      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_ERROR,
+		"Error : Invalid value (%d) of Interrupt Moderation [Value should be <= %d] %s",
+                moderation, SFVMK_MAX_MODERATION_USEC, vmk_NameToString(&pAdapter->uplinkName));
+      goto end;
+    }
+  }
+
+  SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+           "sfvmk_coalesceParamsSet: Configured static interupt moderation to %d (us)", moderation);
+end:
+  return status;
+}
+
+/*! \brief function to copy the current coalesce params in shared queue area.
+**
+** \param[in] pAdapter    pointer to sfvmk_adapter_t
+** \param[in] params    pointer to vmk_UplinkCoalesceParams
+**
+** \return: None
+**
+*/
+void
+sfvmk_updateIntrCoalesceQueueData(struct sfvmk_adapter_s *pAdapter, vmk_UplinkCoalesceParams *params)
+{
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_uint32 qIndex=0;
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  SFVMK_NULL_PTR_CHECK(pQueueData);
+
+  /* Once gloabl coalesce params are set, set to every TX/RX queues */
+  SFVMK_SHARED_AREA_BEGIN_WRITE(pAdapter);
+
+  /* Configure RX queue data */
+  pQueueData = SFVMK_GET_RX_SHARED_QUEUE_DATA(pAdapter);
+  for (qIndex=0; qIndex < pAdapter->queueInfo.maxRxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+  }
+
+  /* Configure TX queue data */
+  pQueueData = SFVMK_GET_TX_SHARED_QUEUE_DATA(pAdapter);
+  for (qIndex=0; qIndex < pAdapter->queueInfo.maxTxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, params, sizeof(*params));
+  }
+
+  SFVMK_SHARED_AREA_END_WRITE(pAdapter);
+
+  return;
 }
 
 /*! \brief: Function to change link state

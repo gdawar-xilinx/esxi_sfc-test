@@ -173,6 +173,9 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
+  if (pAdapter->initState != SFVMK_STARTED)
+    return VMK_FAILURE;
+
   pPort = &pAdapter->port;
   SFVMK_NULL_PTR_CHECK(pPort);
 
@@ -215,6 +218,9 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams params)
   sfvmk_port_t *pPort = NULL;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
+
+  if (pAdapter->initState != SFVMK_STARTED)
+    return VMK_FAILURE;
 
   pPort = &pAdapter->port;
   SFVMK_NULL_PTR_CHECK(pPort);

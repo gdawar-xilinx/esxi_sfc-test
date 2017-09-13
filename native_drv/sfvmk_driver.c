@@ -137,13 +137,13 @@ sfvmk_driverRegister(void)
 
   /* Populate driverProps */
   driverProps.moduleID = vmk_ModuleCurrentID;
-  vmk_NameCopy(&driverProps.name, &sfvmk_ModInfo.driverName);
+  vmk_NameCopy(&driverProps.name, &sfvmk_modInfo.driverName);
   driverProps.ops = &sfvmk_DriverOps;
   driverProps.privateData = (vmk_AddrCookie)NULL;
 
 
   /* Register Driver with the device layer */
-  status = vmk_DriverRegister(&driverProps, &sfvmk_ModInfo.driverID);
+  status = vmk_DriverRegister(&driverProps, &sfvmk_modInfo.driverID);
 
   if (status == VMK_OK) {
     vmk_LogMessage("Initialization of SFC  driver successful");
@@ -163,6 +163,6 @@ sfvmk_driverRegister(void)
 void
 sfvmk_driverUnregister(void)
 {
-  vmk_DriverUnregister(sfvmk_ModInfo.driverID);
+  vmk_DriverUnregister(sfvmk_modInfo.driverID);
 }
 

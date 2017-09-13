@@ -7,7 +7,7 @@
 #include "sfvmk.h"
 #include "sfvmk_ut.h"
 
-sfvmk_ModInfo_t sfvmk_ModInfo = {
+sfvmk_modInfo_t sfvmk_modInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
    .memPoolID        = VMK_MEMPOOL_INVALID,
    .logID            = VMK_INVALID_LOG_HANDLE,
@@ -16,28 +16,28 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
 };
 
 static void
-sfvmk_ModInfoCleanup(void)
+sfvmk_modInfoCleanup(void)
 {
-   if (sfvmk_ModInfo.driverID != NULL) {
+  if (sfvmk_modInfo.driverID != NULL) {
     sfvmk_driverUnregister();
-    sfvmk_ModInfo.driverID = NULL;
-   }
-   if (sfvmk_ModInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
-      vmk_LockDomainDestroy(sfvmk_ModInfo.lockDomain);
-      sfvmk_ModInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
-   }
-   if (sfvmk_ModInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
-      vmk_LogUnregister(sfvmk_ModInfo.logThrottledID);
-      sfvmk_ModInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
-   }
-   if (sfvmk_ModInfo.logID != VMK_INVALID_LOG_HANDLE) {
-      vmk_LogUnregister(sfvmk_ModInfo.logID);
-      sfvmk_ModInfo.logID = VMK_INVALID_LOG_HANDLE;
-   }
-   if (sfvmk_ModInfo.heapID != VMK_INVALID_HEAP_ID) {
-      vmk_HeapDestroy(sfvmk_ModInfo.heapID);
-      sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
-   }
+    sfvmk_modInfo.driverID = NULL;
+  }
+  if (sfvmk_modInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
+    vmk_LockDomainDestroy(sfvmk_modInfo.lockDomain);
+    sfvmk_modInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
+  }
+  if (sfvmk_modInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
+    vmk_LogUnregister(sfvmk_modInfo.logThrottledID);
+    sfvmk_modInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
+  }
+  if (sfvmk_modInfo.logID != VMK_INVALID_LOG_HANDLE) {
+    vmk_LogUnregister(sfvmk_modInfo.logID);
+    sfvmk_modInfo.logID = VMK_INVALID_LOG_HANDLE;
+  }
+  if (sfvmk_modInfo.heapID != VMK_INVALID_HEAP_ID) {
+    vmk_HeapDestroy(sfvmk_modInfo.heapID);
+    sfvmk_modInfo.heapID = VMK_INVALID_HEAP_ID;
+  }
 }
 
 /*! \brief This is the driver module entry point that gets invoked
@@ -69,7 +69,7 @@ init_module(void)
   /* Populate sfvmk_ModInfo fields */
 
   /* 1. Driver Name */
-  vmk_NameInitialize(&sfvmk_ModInfo.driverName, SFC_DRIVER_NAME);
+  vmk_NameInitialize(&sfvmk_modInfo.driverName, SFC_DRIVER_NAME);
 
   /* 2. Heap */
   status = vmk_HeapDetermineMaxSize(allocDesc,
@@ -77,68 +77,77 @@ init_module(void)
                                      &byteCount);
   if (status != VMK_OK) {
      vmk_WarningMessage("Failed to determine heap max size (%x)", status);
-     goto err;
+     goto failed_max_heap_size;
   }
+
   heapProps.type = VMK_HEAP_TYPE_SIMPLE;
-  vmk_NameCopy(&heapProps.name, &sfvmk_ModInfo.driverName);
+  vmk_NameCopy(&heapProps.name, &sfvmk_modInfo.driverName);
   heapProps.module = vmk_ModuleCurrentID;
   heapProps.initial = 0;
   heapProps.max = byteCount;
   heapProps.creationTimeoutMS = VMK_TIMEOUT_UNLIMITED_MS;
-  status = vmk_HeapCreate(&heapProps, &sfvmk_ModInfo.heapID);
+
+  status = vmk_HeapCreate(&heapProps, &sfvmk_modInfo.heapID);
   if (status != VMK_OK) {
      vmk_WarningMessage("Failed to create heap (%x) for sfc_native driver", status);
-     goto err;
+     goto failed_heap_create;
   }
 
   /* 3. Log  */
-  vmk_NameCopy(&logProps.name, &sfvmk_ModInfo.driverName);
+  vmk_NameCopy(&logProps.name, &sfvmk_modInfo.driverName);
   logProps.module = vmk_ModuleCurrentID;
-  logProps.heap = sfvmk_ModInfo.heapID;
+  logProps.heap = sfvmk_modInfo.heapID;
   logProps.defaultLevel = 0;
   logProps.throttle = NULL;
-  status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logID);
+
+  status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logID);
   if (status != VMK_OK) {
      vmk_WarningMessage("Failed to register log component (%x)", status);
-     goto err;
+     goto failed_log_register;
   }
 
   logThrottledProps.type = VMK_LOG_THROTTLE_COUNT;
   logProps.throttle = &logThrottledProps;
   vmk_NameInitialize(&logProps.name, SFC_DRIVER_NAME"_throttled");
-  status = vmk_LogRegister(&logProps, &sfvmk_ModInfo.logThrottledID);
+
+  status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logThrottledID);
   if (status != VMK_OK) {
      vmk_WarningMessage("Failed to register throttled log component (%x)", status);
-     goto err;
+     goto failed_throttled_log_register;
   }
 
   /* 4. Lock Domain */
   status = vmk_LockDomainCreate(vmk_ModuleCurrentID,
-                                 sfvmk_ModInfo.heapID,
-                                 &sfvmk_ModInfo.driverName,
-                                 &sfvmk_ModInfo.lockDomain);
+                                sfvmk_modInfo.heapID,
+                                &sfvmk_modInfo.driverName,
+                                &sfvmk_modInfo.lockDomain);
   if (status != VMK_OK) {
      vmk_WarningMessage("Failed to create lock domain (%x)", status);
-     goto err;
+     goto failed_lock_domain_create;
   }
 
-  vmk_ModuleSetHeapID(vmk_ModuleCurrentID, sfvmk_ModInfo.heapID);
+  vmk_ModuleSetHeapID(vmk_ModuleCurrentID, sfvmk_modInfo.heapID);
 
   /* 5. MemPool - TBD */
 
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
-
-  if (status == VMK_OK) {
-    vmk_LogMessage("Initialization of SFC  driver successful");
-  } else {
-    vmk_LogMessage("Initialization of SFC driver failed (%x)", status);
-  }
-
-  err:
   if (status != VMK_OK) {
-    sfvmk_ModInfoCleanup();
+    vmk_WarningMessage("Initialization of SFC driver failed (%s)",
+                       vmk_StatusToString(status));
+    goto failed_driver_register;
   }
+
+  vmk_LogMessage("Initialization of SFC  driver successful");
+  return status;
+
+failed_max_heap_size:
+failed_heap_create:
+failed_log_register:
+failed_throttled_log_register:
+failed_lock_domain_create:
+failed_driver_register:
+  sfvmk_modInfoCleanup();
 
   return status;
 }
@@ -154,7 +163,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  sfvmk_ModInfoCleanup();
+  sfvmk_modInfoCleanup();
 
   vmk_LogMessage("Exit: -- Solarflare Native Driver -- ");
 }

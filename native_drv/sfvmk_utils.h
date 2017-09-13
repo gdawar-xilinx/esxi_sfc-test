@@ -10,8 +10,8 @@
 #include "sfvmk.h"
 
 /* spinklock  handlers */
-extern VMK_ReturnStatus
-sfvmk_createLock(const char *lockName, vmk_LockRank rank, vmk_Lock *lock);
-extern void sfvmk_destroyLock(vmk_Lock lock);
+VMK_ReturnStatus
+sfvmk_createLock(const char *pLockName, vmk_LockRank rank, vmk_Lock *pLock);
 
+void sfvmk_destroyLock(vmk_Lock lock);
 #endif /*  __SFVMK_UTILS_H__ */

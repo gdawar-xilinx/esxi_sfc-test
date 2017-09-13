@@ -15,28 +15,31 @@
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
 VMK_ReturnStatus
-sfvmk_createLock(const char *lockName,
-                       vmk_LockRank rank,
-                       vmk_Lock *lock)
+sfvmk_createLock(const char *pLockName,
+                 vmk_LockRank rank,
+                 vmk_Lock *pLock)
 {
-   vmk_SpinlockCreateProps lockProps;
-   VMK_ReturnStatus status;
-   lockProps.moduleID = vmk_ModuleCurrentID;
-   lockProps.heapID = sfvmk_ModInfo.heapID;
+  vmk_SpinlockCreateProps lockProps;
+  VMK_ReturnStatus status;
 
-   if((lock == NULL) || (lockName == NULL))
-     return VMK_BAD_PARAM;
+  if((pLock == NULL) || (pLockName == NULL))
+    return VMK_BAD_PARAM;
 
-   vmk_NameFormat(&lockProps.name, "sfvmk-%s", lockName);
+  vmk_Memset(&lockProps, 0, sizeof(vmk_SpinlockCreateProps));
 
-   lockProps.type = VMK_SPINLOCK;
-   lockProps.domain = sfvmk_ModInfo.lockDomain;
-   lockProps.rank = rank;
-   status = vmk_SpinlockCreate(&lockProps, lock);
-   if (status != VMK_OK) {
-      vmk_LogMessage("Failed to create spinlock (%x)", status);
-   }
-   return status;
+  lockProps.moduleID = vmk_ModuleCurrentID;
+  lockProps.heapID = sfvmk_modInfo.heapID;
+  lockProps.domain = sfvmk_modInfo.lockDomain;
+  lockProps.type = VMK_SPINLOCK;
+  lockProps.rank = rank;
+  vmk_NameFormat(&lockProps.name, "sfvmk-%s", pLockName);
+
+  status = vmk_SpinlockCreate(&lockProps, pLock);
+  if (status != VMK_OK) {
+     vmk_WarningMessage("Failed to create spinlock (%s)", vmk_StatusToString(status));
+  }
+
+  return status;
 }
 
 /*! \brief It destroys the spin lock.
@@ -49,10 +52,6 @@ sfvmk_createLock(const char *lockName,
 void
 sfvmk_destroyLock(vmk_Lock lock)
 {
-  if (lock) {
+  if (lock)
     vmk_SpinlockDestroy(lock);
-    lock = NULL;
-  }
 }
-
-

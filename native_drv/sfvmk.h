@@ -25,7 +25,7 @@
 TBD : Move it to Makefile */
 //#define SFVMK_WITH_UNIT_TESTS
 
-typedef struct {
+typedef struct sfvmk_modInfo_s {
    vmk_Name           driverName;
    vmk_Driver         driverID;
    vmk_HeapID         heapID;
@@ -35,22 +35,22 @@ typedef struct {
    vmk_LockDomainID   lockDomain;
    vmk_DumpFileHandle dumpFile;
    vmk_ListLinks      adapterList;
-} sfvmk_ModInfo_t;
+} sfvmk_modInfo_t;
 
-extern sfvmk_ModInfo_t sfvmk_ModInfo;
+extern sfvmk_modInfo_t sfvmk_modInfo;
 
 /* Mem Allocation */
 static inline void *
 sfvmk_MemAlloc(vmk_uint32 size)
 {
-  return vmk_HeapAlloc(sfvmk_ModInfo.heapID, size);
+  return vmk_HeapAlloc(sfvmk_modInfo.heapID, size);
 }
 
 static inline void
 sfvmk_MemFree(void *memPtr)
 {
   VMK_ASSERT(memPtr);
-  vmk_HeapFree(sfvmk_ModInfo.heapID, memPtr);
+  vmk_HeapFree(sfvmk_modInfo.heapID, memPtr);
 }
 
 /* to handle endianness */

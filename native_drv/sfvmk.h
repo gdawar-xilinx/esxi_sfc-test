@@ -12,8 +12,6 @@
 #include <vmkapi.h>
 #include <lib/vmkapi_types.h>
 #include "sfvmk_driver.h"
-#include "sfvmk_utils.h"
-#include "efx.h"
 
 /* Constants/Defines */
 

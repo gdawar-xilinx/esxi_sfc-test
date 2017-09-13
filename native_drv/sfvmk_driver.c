@@ -7,10 +7,6 @@
 
 #include "sfvmk_driver.h"
 
-#ifdef SFVMK_WITH_UNIT_TESTS
-extern void sfvmk_run_ut();
-#endif
-
 /* driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_detachDevice(vmk_Device device);
@@ -44,9 +40,6 @@ sfvmk_attachDevice(vmk_Device dev)
 {
 
   vmk_LogMessage("AttachDevice is invoked (updated: call sfvmk_CreateLock !");
-#ifdef SFVMK_WITH_UNIT_TESTS
-  sfvmk_run_ut();
-#endif
 
   return VMK_OK;
 }

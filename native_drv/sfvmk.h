@@ -11,7 +11,6 @@
 
 #include <vmkapi.h>
 #include <lib/vmkapi_types.h>
-#include "sfvmk_driver.h"
 
 /* Constants/Defines */
 
@@ -74,6 +73,18 @@ typedef enum sfvmk_logLevel_e {
                              SFVMK_DEBUG_EVQ    |                            \
                              SFVMK_DEBUG_HW)
 
+#define SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ...)                   \
+  do {                                                                       \
+    if (modParams.debugMask & (mask)) {                                      \
+      vmk_LogLevel(VMK_LOG_URGENCY_NORMAL, sfvmk_modInfo.logID,              \
+                   (lvl), "%s: %s:%d: [%s] " fmt "\n",                       \
+                   vmk_LogGetName(sfvmk_modInfo.logID), __FUNCTION__,        \
+                   __LINE__, (pAdapter) ?                                    \
+                   vmk_NameToString(&pAdapter->devName) : "sfvmk",           \
+                   ##__VA_ARGS__);                                           \
+    }                                                                        \
+  } while (0)
+
 #define SFVMK_DEBUG(mask, lvl, fmt, ...)                                     \
   do {                                                                       \
     if (modParams.debugMask & (mask)) {                                      \
@@ -84,12 +95,28 @@ typedef enum sfvmk_logLevel_e {
     }                                                                        \
   } while (0)
 
-
 /* Errors (never masked) */
+#define SFVMK_ADAPTER_ERROR(pAdapter, fmt, ...)                              \
+  do {                                                                       \
+      vmk_WarningMessage("[%s] "fmt, (pAdapter) ?                            \
+                         vmk_NameToString(&pAdapter->devName) : "sfvmk",     \
+                         ##__VA_ARGS__);                                     \
+  } while (0)
+
 #define SFVMK_ERROR(fmt, ...)                                                \
   vmk_WarningMessage(fmt, ##__VA_ARGS__)
 
 /* Debug macro for function entry and exit */
+#define SFVMK_ADAPTER_DEBUG_FUNC(pAdapter, mask, string, fmt, ...)           \
+  SFVMK_ADAPTER_DEBUG(pAdapter, mask, SFVMK_LOG_LEVEL_FUNCTION, "%s " fmt,   \
+                      string, ##__VA_ARGS__)
+
+#define SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, mask, ...)                  \
+  SFVMK_ADAPTER_DEBUG_FUNC(pAdapter, mask, "Entered ", __VA_ARGS__)
+
+#define SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, mask,  ...)                  \
+  SFVMK_ADAPTER_DEBUG_FUNC(pAdapter, mask, "Exiting ", __VA_ARGS__)
+
 #define SFVMK_DEBUG_FUNC(mask, string, fmt, ...)                             \
   SFVMK_DEBUG(mask, SFVMK_LOG_LEVEL_FUNCTION, "%s " fmt, string,             \
               ##__VA_ARGS__)

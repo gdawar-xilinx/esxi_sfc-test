@@ -4,7 +4,7 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-#include "sfvmk.h"
+#include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
 
 sfvmk_modInfo_t sfvmk_modInfo = {

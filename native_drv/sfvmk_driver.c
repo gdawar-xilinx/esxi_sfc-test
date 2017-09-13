@@ -22,6 +22,144 @@ static VMK_ReturnStatus sfvmk_quiesceDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_startDevice(vmk_Device device);
 static void sfvmk_forgetDevice(vmk_Device device);
 
+/*! \brief  Routine to check adapter's family, raise error if proper family
+** is not found.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_TRUE <success> VMK_FALSE <failure>
+*/
+static vmk_Bool
+sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
+{
+  int rc;
+  vmk_Bool supported = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  /* Check adapter's family */
+  rc = efx_family(pAdapter->pciDeviceID.vendorID,
+                  pAdapter->pciDeviceID.deviceID, &pAdapter->efxFamily);
+  if (rc != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_family failed status: %d", rc);
+    goto done;
+  }
+
+  /* Driver support only Medford Family */
+  switch (pAdapter->efxFamily) {
+  case EFX_FAMILY_MEDFORD:
+    supported = VMK_TRUE;
+    break;
+  case EFX_FAMILY_SIENA:
+  case EFX_FAMILY_HUNTINGTON:
+    SFVMK_ADAPTER_ERROR(pAdapter, "Controller family %d not supported",
+                        pAdapter->efxFamily);
+    break;
+  default:
+    SFVMK_ADAPTER_ERROR(pAdapter, "Unknown controller type");
+    break;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return supported;
+}
+
+/*! \brief  Routine to get pci device information such as vendor id , device ID
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+static VMK_ReturnStatus
+sfvmk_getPciDevice(sfvmk_adapter_t *pAdapter)
+{
+  vmk_AddrCookie pciDeviceCookie;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  /* Get PCI device */
+  status = vmk_DeviceGetRegistrationData(pAdapter->device, &pciDeviceCookie);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_DeviceGetRegistrationData failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_get_reg_data;
+  }
+
+  pAdapter->pciDevice = pciDeviceCookie.ptr;
+
+  /* Query PCI device information */
+  status = vmk_PCIQueryDeviceID(pAdapter->pciDevice, &pAdapter->pciDeviceID);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIQueryDeviceID failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_query_device_id;
+  }
+
+  if (sfvmk_isDeviceSupported(pAdapter) == VMK_FALSE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Device is not supported");
+    goto failed_device_support_check;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+                      "Found PCI device with following\n"
+                      "Dev Id: %x\n"
+                      "Vend ID: %x\n"
+                      "Sub Dev ID: %x\n"
+                      "Sub Vend ID: %x\n",
+                      pAdapter->pciDeviceID.deviceID,
+                      pAdapter->pciDeviceID.vendorID,
+                      pAdapter->pciDeviceID.subDeviceID,
+                      pAdapter->pciDeviceID.subVendorID);
+
+  status = vmk_PCIQueryDeviceAddr(pAdapter->pciDevice, &pAdapter->pciDeviceAddr);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIQueryDeviceAddr failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_query_device_addr;
+  }
+
+  status = vmk_StringFormat(pAdapter->pciDeviceName.string,
+                            sizeof(pAdapter->pciDeviceName.string),
+                            NULL, "%04x:%02x:%02x.%x",
+                            pAdapter->pciDeviceAddr.seg,
+                            pAdapter->pciDeviceAddr.bus,
+                            pAdapter->pciDeviceAddr.dev,
+                            pAdapter->pciDeviceAddr.fn);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_set_pci_dev_name;
+  }
+
+  /* Used for debugging purpose */
+  vmk_NameCopy(&pAdapter->devName, &pAdapter->pciDeviceName);
+
+  goto done;
+
+failed_set_pci_dev_name:
+failed_get_reg_data:
+failed_query_device_id:
+failed_device_support_check:
+failed_query_device_addr:
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -45,9 +183,53 @@ static vmk_DriverOps sfvmk_DriverOps = {
 static VMK_ReturnStatus
 sfvmk_attachDevice(vmk_Device dev)
 {
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_adapter_t *pAdapter = NULL;
+
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+
+  /* Allocate memory for adapter */
+  pAdapter = vmk_HeapAlloc(sfvmk_modInfo.heapID, sizeof(sfvmk_adapter_t));
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("Failed to alloc memory for adapter");
+    goto failed_adapter_alloc;
+  }
+
+  vmk_Memset(pAdapter, 0, sizeof(sfvmk_adapter_t));
+
+  pAdapter->device = dev;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                      "allocated adapter =%p", (void *)pAdapter);
+
+  status = sfvmk_getPciDevice(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_getPciDevice failed status %s",
+                        vmk_StatusToString(status));
+    goto failed_get_pci_dev;
+  }
+
+  status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "vmk_DeviceSetAttachedDriverData failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_set_drvdata;
+  }
+
+  pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
+
+  goto done;
+
+failed_set_drvdata:
+failed_get_pci_dev:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
+
+failed_adapter_alloc:
+done:
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
-  return VMK_OK;
+
+  return status;
 }
 
 /*! \brief: Callback routine for the device layer to notify the driver to
@@ -91,9 +273,30 @@ sfvmk_scanDevice(vmk_Device device)
 static VMK_ReturnStatus
 sfvmk_detachDevice(vmk_Device dev)
 {
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_AddrCookie data;
+  sfvmk_adapter_t *pAdapter = NULL;
+
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+
+  status = vmk_DeviceGetAttachedDriverData(dev, &data);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed in vmk_DeviceGetAttachedDriverData: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+  pAdapter = (sfvmk_adapter_t *)data.ptr;
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
+
+done:
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
-  return VMK_OK;
+
+  return status;
 }
 
 /*! \brief : Callback routine for the device layer to notify the driver to

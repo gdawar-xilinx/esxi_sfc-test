@@ -24,6 +24,8 @@ typedef enum sfvmk_adapterState_e {
 typedef struct sfvmk_adapter_s {
   /* Device handle passed by VMK */
   vmk_Device               device;
+  /* DMA engine handle */
+  vmk_DMAEngine            dmaEngine;
   /* Adapter state */
   sfvmk_adapterState_t     state;
   /* PCI device handle */

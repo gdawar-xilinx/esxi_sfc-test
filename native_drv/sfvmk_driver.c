@@ -14,6 +14,12 @@ sfvmk_modParams_t modParams = {
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
 
+/* Value of SFVMK_DMA_ADDR_MASK_BITS chosen based on the field
+ * TX_KER_BUF_ADDR of TX_KER_DESC */
+#define SFVMK_DMA_ADDR_MASK_BITS 48
+#define SFVMK_DMA_BIT_MASK(n) (((n) == 64) ? VMK_ADDRESS_MASK_64BIT : \
+  ((VMK_CONST64U(1) << n) - VMK_CONST64U(1)))
+
 /* driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_detachDevice(vmk_Device device);
@@ -160,6 +166,94 @@ done:
   return status;
 }
 
+/*! \brief  Routine to create DMA engine.
+**
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+static VMK_ReturnStatus
+sfvmk_createDMAEngine(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+  vmk_DMAConstraints dmaConstraints;
+  vmk_DMAEngineProps dmaProps;
+  vmk_uint64 dmaMask = SFVMK_DMA_BIT_MASK(SFVMK_DMA_ADDR_MASK_BITS);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  vmk_Memset(&dmaConstraints, 0, sizeof(dmaConstraints));
+  vmk_Memset(&dmaProps, 0, sizeof(dmaProps));
+  vmk_NameCopy(&dmaProps.name, &sfvmk_modInfo.driverName);
+
+  dmaProps.module = vmk_ModuleCurrentID;
+  dmaProps.device = pAdapter->device;
+  dmaProps.constraints = &dmaConstraints;
+  dmaProps.flags = VMK_DMA_ENGINE_FLAGS_COHERENT;
+
+  /* Set the PCI DMA mask.  Try all possibilities from our
+   * genuine mask down to 32 bits */
+  while (dmaMask > VMK_ADDRESS_MASK_32BIT)
+  {
+    dmaConstraints.addressMask = dmaMask;
+    status = vmk_DMAEngineCreate(&dmaProps, &pAdapter->dmaEngine);
+    if (status == VMK_OK) {
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+                          "DMA engine created with mask %"VMK_FMT64"x", dmaMask);
+      break;
+    }
+    dmaMask >>= 1;
+  }
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to create DMA engine status: %s",
+                        vmk_StatusToString(status));
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
+/*! \brief  Routine to destroy DMA engine.
+**
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+static VMK_ReturnStatus
+sfvmk_destroyDMAEngine(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (pAdapter->dmaEngine != VMK_DMA_ENGINE_INVALID) {
+    status = vmk_DMAEngineDestroy(pAdapter->dmaEngine);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Failed to destroy DMA engine status: %s",
+                          vmk_StatusToString(status));
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -209,6 +303,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_get_pci_dev;
   }
 
+  status = sfvmk_createDMAEngine(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createDMAEngine failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_dma_eng_create;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -222,6 +323,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_destroyDMAEngine(pAdapter);
+
+failed_dma_eng_create:
 failed_get_pci_dev:
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
 
@@ -291,6 +395,7 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+  sfvmk_destroyDMAEngine(pAdapter);
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
 
 done:

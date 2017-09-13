@@ -4,8 +4,15 @@
  *
  * -- Solarflare Confidential
  ************************************************************************/
-
 #include "sfvmk_driver.h"
+
+/* Initialize module params with default values */
+sfvmk_modParams_t modParams = {
+  .debugMask = SFVMK_DEBUG_DEFAULT,
+};
+
+/* List of module parameters */
+VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
 
 /* driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
@@ -38,9 +45,8 @@ static vmk_DriverOps sfvmk_DriverOps = {
 static VMK_ReturnStatus
 sfvmk_attachDevice(vmk_Device dev)
 {
-
-  vmk_LogMessage("AttachDevice is invoked (updated: call sfvmk_CreateLock !");
-
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;
 }
 
@@ -54,7 +60,8 @@ sfvmk_attachDevice(vmk_Device dev)
 static VMK_ReturnStatus
 sfvmk_startDevice(vmk_Device dev)
 {
-  vmk_LogMessage("StartDevice is invoked!");
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;
 }
 
@@ -68,7 +75,8 @@ sfvmk_startDevice(vmk_Device dev)
 static VMK_ReturnStatus
 sfvmk_scanDevice(vmk_Device device)
 {
-  vmk_LogMessage("ScanDevice is invoked!");
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
   return VMK_OK;
 }
 
@@ -83,8 +91,8 @@ sfvmk_scanDevice(vmk_Device device)
 static VMK_ReturnStatus
 sfvmk_detachDevice(vmk_Device dev)
 {
-  vmk_LogMessage("DetachDevice is invoked!");
-
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;
 }
 
@@ -98,7 +106,8 @@ sfvmk_detachDevice(vmk_Device dev)
 static VMK_ReturnStatus
 sfvmk_quiesceDevice(vmk_Device dev)
 {
-  vmk_LogMessage("QuiesceDevice/drv_DeviceShutdown is invoked!");
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;
 }
 
@@ -112,7 +121,8 @@ sfvmk_quiesceDevice(vmk_Device dev)
 static void
 sfvmk_forgetDevice(vmk_Device dev)
 {
-  vmk_LogMessage("ForgetDevice is invoked!");
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return;
 }
 

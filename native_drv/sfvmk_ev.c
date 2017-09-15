@@ -1110,6 +1110,7 @@ sfvmk_evqModerate(sfvmk_adapter_t *pAdapter, unsigned int index, unsigned int us
   SFVMK_EVQ_LOCK(pEvq);
 
   (efx_ev_qmoderate(pEvq->pCommonEvq, us));
+  pAdapter->evModeration = us;
 
   SFVMK_EVQ_UNLOCK(pEvq);
 

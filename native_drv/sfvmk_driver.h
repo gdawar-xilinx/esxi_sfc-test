@@ -48,7 +48,10 @@ typedef struct sfvmk_adapter_s {
 
 /* Spinlock  handlers */
 VMK_ReturnStatus
-sfvmk_createLock(const char *pLockName, vmk_LockRank rank, vmk_Lock *pLock);
+sfvmk_createLock(sfvmk_adapter_t *pAdapter,
+                 const char *pLockName,
+                 vmk_LockRank rank,
+                 vmk_Lock *pLock);
 
 void sfvmk_destroyLock(vmk_Lock lock);
 #endif /* __SFVMK_DRIVER_H__ */

@@ -15,14 +15,15 @@
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
 VMK_ReturnStatus
-sfvmk_createLock(const char *pLockName,
+sfvmk_createLock(sfvmk_adapter_t *pAdapter,
+                 const char *pLockName,
                  vmk_LockRank rank,
                  vmk_Lock *pLock)
 {
   vmk_SpinlockCreateProps lockProps;
   VMK_ReturnStatus status;
 
-  if((pLock == NULL) || (pLockName == NULL))
+  if ((pLock == NULL) || (pLockName == NULL) || (pAdapter == NULL))
     return VMK_BAD_PARAM;
 
   vmk_Memset(&lockProps, 0, sizeof(vmk_SpinlockCreateProps));
@@ -32,11 +33,13 @@ sfvmk_createLock(const char *pLockName,
   lockProps.domain = sfvmk_modInfo.lockDomain;
   lockProps.type = VMK_SPINLOCK;
   lockProps.rank = rank;
-  vmk_NameFormat(&lockProps.name, "sfvmk-%s", pLockName);
+  vmk_NameFormat(&lockProps.name, "%s_%s", pAdapter->pciDeviceName.string,
+                 pLockName);
 
   status = vmk_SpinlockCreate(&lockProps, pLock);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create spinlock (%s)", vmk_StatusToString(status));
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_SpinlockCreate failed status: %s",
+                        vmk_StatusToString(status));
   }
 
   return status;

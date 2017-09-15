@@ -1705,7 +1705,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
       SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "WRAP AROUND, status: %d", status);
     }
 
-    for(i=id;i<status;i++) {
+    for(i=id+vlanTagged;i<status;i++) {
       /* for option descriptors, make sure txqComplete doesn't try clean-up */
       pStmp->isPkt = VMK_TRUE;
       pStmp->u.pkt = NULL;

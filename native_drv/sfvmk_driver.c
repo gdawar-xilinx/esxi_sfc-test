@@ -402,6 +402,7 @@ sfvmk_attachDevice(vmk_Device dev)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_adapter_t *pAdapter = NULL;
+  efx_rc_t error;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -441,6 +442,26 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_map_bar;
   }
 
+  status = sfvmk_createLock(pAdapter, "nicLock",
+                            SFVMK_SPINLOCK_RANK_NIC_LOCK,
+                            &pAdapter->nicLock.lock);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createLock failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_create_lock;
+  }
+
+  error = efx_nic_create(pAdapter->efxFamily,
+                         (efsys_identifier_t *)pAdapter,
+                         &pAdapter->bar,
+                         &pAdapter->nicLock,
+                         &pAdapter->pNic);
+  if (error != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_create failed status: %s",
+                        vmk_StatusToString(error));
+    goto failed_nic_create;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -454,6 +475,15 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  if (pAdapter->pNic != NULL) {
+    efx_nic_destroy(pAdapter->pNic);
+    pAdapter->pNic = NULL;
+  }
+
+failed_nic_create:
+  sfvmk_destroyLock(pAdapter->nicLock.lock);
+
+failed_create_lock:
   sfvmk_unmapBAR(pAdapter);
 
 failed_map_bar:
@@ -529,6 +559,14 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+  /* Destroy common code context. */
+  if (pAdapter->pNic != NULL) {
+    efx_nic_destroy(pAdapter->pNic);
+    pAdapter->pNic = NULL;
+  }
+
+  sfvmk_destroyLock(pAdapter->nicLock.lock);
+  /* vmk related resource deallocation */
   sfvmk_unmapBAR(pAdapter);
   sfvmk_destroyDMAEngine(pAdapter);
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);

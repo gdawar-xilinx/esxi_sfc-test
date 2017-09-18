@@ -13,6 +13,10 @@
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
+typedef enum sfvmk_spinlockRank_e {
+  SFVMK_SPINLOCK_RANK_BAR_LOCK = VMK_SPINLOCK_RANK_LOWEST
+} sfvmk_spinlockRank_t;
+
 /* Adapter states */
 typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_UNINITIALIZED = 0,
@@ -40,7 +44,8 @@ typedef struct sfvmk_adapter_s {
   /* EFX /efsys related information */
   /* EFX family */
   efx_family_t             efxFamily;
-
+  /* Struct to store mapped memory BAR info */
+  efsys_bar_t              bar;
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
   vmk_Name                 devName;

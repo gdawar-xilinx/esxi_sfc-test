@@ -337,7 +337,8 @@ typedef struct efsys_mem_s {
 
 typedef struct efsys_bar_s {
   vmk_MappedResourceAddress esbBase;
-  vmk_Lock         esbLock;
+  vmk_Lock                  esbLock;
+  vmk_uint32                index;
 } efsys_bar_t;
 
 #define EFSYS_BAR_READD(_esbp, _offset, _edp, _lock)                    \

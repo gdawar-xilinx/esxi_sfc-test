@@ -254,6 +254,129 @@ done:
   return status;
 }
 
+/*! \brief  Routine to map memory BAR. A lock has been created which will be
+**          used by common code to synchronize access to BAR region.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK ion success and failure status on failure.
+*/
+static VMK_ReturnStatus
+sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+  vmk_uint32 barIndex;
+  vmk_PCIResource pciResource[VMK_PCI_NUM_BARS];
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  status = vmk_PCIQueryIOResources(pAdapter->pciDevice,
+                                   VMK_PCI_NUM_BARS,
+                                   pciResource);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIQueryIOResources failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_query_io_resource;
+  }
+
+  /* Look for first 64bit memory BAR containing VI aperture */
+  for(barIndex = 0; barIndex < VMK_PCI_NUM_BARS; barIndex++) {
+    if ((pciResource[barIndex].flags & VMK_PCI_BAR_FLAGS_IO_MASK) ==
+        VMK_PCI_BAR_FLAGS_IO)
+      continue;
+
+    if (pciResource[barIndex].flags & VMK_PCI_BAR_FLAGS_MEM_64_BITS)
+      break;
+  }
+
+  /* Check if BAR has been found */
+  if (barIndex == VMK_PCI_NUM_BARS) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get BAR for VI register");
+    goto failed_fetch_mem_bar_info;
+  }
+
+  status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
+                                        barIndex, VMK_MAPATTRS_READWRITE |
+                                        VMK_MAPATTRS_UNCACHED,
+                                        &pAdapter->bar.esbBase);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "vmk_PCIMapIOResourceWithAttr for BAR%d failed status: %s",
+                        barIndex, vmk_StatusToString(status));
+    goto failed_map_io_resource;
+  }
+
+  status = sfvmk_createLock(pAdapter, "memBarLock",
+                            SFVMK_SPINLOCK_RANK_BAR_LOCK,
+                            &pAdapter->bar.esbLock);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createLock for BAR%d failed status  %s",
+                        barIndex, vmk_StatusToString(status));
+    goto failed_create_lock;
+  }
+
+  /* Storing BAR index to be used for unmapping resource */
+  pAdapter->bar.index = barIndex;
+
+  goto done;
+
+failed_create_lock:
+  vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice, barIndex);
+
+failed_map_io_resource:
+failed_fetch_mem_bar_info:
+failed_query_io_resource:
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
+/*! \brief  Routine to unmap memory BAR.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+static VMK_ReturnStatus
+sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (pAdapter->bar.index == VMK_PCI_NUM_BARS) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "BAR is not yet mapped");
+    goto done;
+  }
+  sfvmk_destroyLock(pAdapter->bar.esbLock);
+
+  status = vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
+                                  pAdapter->bar.index);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIUnmapIOResource failed status: %s",
+                        vmk_StatusToString(status));
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+                        "Unmapped BAR %d", pAdapter->bar.index);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -292,6 +415,7 @@ sfvmk_attachDevice(vmk_Device dev)
   vmk_Memset(pAdapter, 0, sizeof(sfvmk_adapter_t));
 
   pAdapter->device = dev;
+  pAdapter->bar.index = VMK_PCI_NUM_BARS;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                       "allocated adapter =%p", (void *)pAdapter);
@@ -310,6 +434,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_dma_eng_create;
   }
 
+  status = sfvmk_mapBAR(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mapBAR failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_map_bar;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -323,6 +454,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_unmapBAR(pAdapter);
+
+failed_map_bar:
   sfvmk_destroyDMAEngine(pAdapter);
 
 failed_dma_eng_create:
@@ -395,6 +529,7 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+  sfvmk_unmapBAR(pAdapter);
   sfvmk_destroyDMAEngine(pAdapter);
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
 

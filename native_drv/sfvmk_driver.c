@@ -20,7 +20,7 @@ VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Mask
 #define SFVMK_DMA_BIT_MASK(n) (((n) == 64) ? VMK_ADDRESS_MASK_64BIT : \
   ((VMK_CONST64U(1) << n) - VMK_CONST64U(1)))
 
-/* driver callback functions */
+/* Driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_detachDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_scanDevice(vmk_Device device);
@@ -549,7 +549,8 @@ sfvmk_detachDevice(vmk_Device dev)
 
   status = vmk_DeviceGetAttachedDriverData(dev, &data);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Failed in vmk_DeviceGetAttachedDriverData: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "vmk_DeviceGetAttachedDriverData failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
@@ -587,6 +588,7 @@ done:
 static VMK_ReturnStatus
 sfvmk_quiesceDevice(vmk_Device dev)
 {
+  /* TODO: functinality will be added along with startDevice implementation */
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;
@@ -602,9 +604,9 @@ sfvmk_quiesceDevice(vmk_Device dev)
 static void
 sfvmk_forgetDevice(vmk_Device dev)
 {
+  /* No functionality expected by VMK kernel */
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
-  return;
 }
 
 /*! \brief: This function registers the driver as network driver
@@ -619,21 +621,25 @@ sfvmk_driverRegister(void)
   VMK_ReturnStatus status;
   vmk_DriverProps driverProps;
 
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER);
+
   /* Populate driverProps */
   driverProps.moduleID = vmk_ModuleCurrentID;
   vmk_NameCopy(&driverProps.name, &sfvmk_modInfo.driverName);
   driverProps.ops = &sfvmk_DriverOps;
   driverProps.privateData = (vmk_AddrCookie)NULL;
 
-
   /* Register Driver with the device layer */
   status = vmk_DriverRegister(&driverProps, &sfvmk_modInfo.driverID);
-
   if (status == VMK_OK) {
-    vmk_LogMessage("Initialization of SFC  driver successful");
+    SFVMK_DEBUG(SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                "Initialization of SFC  driver successful");
   } else {
-    vmk_LogMessage("Initialization of SFC driver failed with status: %d", status);
+    SFVMK_ERROR("Initialization of SFC driver failed status: %s",
+                vmk_StatusToString(status));
   }
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER);
 
   return status;
 }

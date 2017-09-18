@@ -37,6 +37,10 @@
   vmk_MutexUnlock(pPort->lock);     \
 }
 
+#define SFVMK_LINK_UP(pPort) ((pPort->linkMode != EFX_LINK_DOWN) && \
+                               (pPort->linkMode != EFX_LINK_UNKNOWN))
+
+
 typedef struct sfvmk_phyInfo_s {
 
    vmk_uint8 linkStatus;

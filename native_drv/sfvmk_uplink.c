@@ -199,8 +199,10 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
   SFVMK_NULL_PTR_CHECK(pPort);
 
   SFVMK_PORT_LOCK(pPort);
-
-  efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntlLink);
+  
+  if(VMK_LIKELY(pPort->initState == SFVMK_PORT_STARTED) && SFVMK_LINK_UP(pPort)) {
+    efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntlLink);
+  }
 
   params->txPauseEnabled = (fcntlWanted & EFX_FCNTL_GENERATE) ? VMK_TRUE : VMK_FALSE;
   params->rxPauseEnabled = (fcntlWanted & EFX_FCNTL_RESPOND) ? VMK_TRUE : VMK_FALSE;

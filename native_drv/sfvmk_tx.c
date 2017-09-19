@@ -777,6 +777,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   /* Enable the transmit queue. */
   efx_tx_qenable(pTxq->pCommonTxq);
 
+  pTxq->hwVlanTci = 0;
   pTxq->initState = SFVMK_TXQ_STARTED;
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;

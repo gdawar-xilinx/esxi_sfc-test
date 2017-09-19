@@ -786,6 +786,10 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
     return status;
   }
 
+  status = vmk_HashKeyDelete(sfvmk_ModInfo.vmkdevHashTable,
+                              pAdapter->uplinkName.string,
+                              (vmk_HashValue *)&pHashTblEntry);
+
   vmk_HeapFree(sfvmk_ModInfo.heapID, pHashTblEntry);
 
   pAdapter->uplink = NULL;

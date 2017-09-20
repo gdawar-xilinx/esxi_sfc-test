@@ -14,9 +14,28 @@ extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
 typedef enum sfvmk_spinlockRank_e {
-  SFVMK_SPINLOCK_RANK_NIC_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_MCDI_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_NIC_LOCK,
   SFVMK_SPINLOCK_RANK_BAR_LOCK
 } sfvmk_spinlockRank_t;
+
+typedef enum sfvmk_mcdiState_e {
+  SFVMK_MCDI_STATE_UNINITIALIZED = 0,
+  SFVMK_MCDI_STATE_INITIALIZED,
+} sfvmk_mcdiState_t;
+
+typedef enum sfvmk_mcdiMode_e {
+  SFVMK_MCDI_MODE_POLL,
+  SFVMK_MCDI_MODE_EVENT
+} sfvmk_mcdiMode_t;
+
+typedef struct sfvmk_mcdi_s {
+  efsys_mem_t           mem;
+  vmk_Lock              lock;
+  sfvmk_mcdiState_t     state;
+  sfvmk_mcdiMode_t      mode;
+  efx_mcdi_transport_t  transport;
+} sfvmk_mcdi_t;
 
 /* Adapter states */
 typedef enum sfvmk_adapterState_e {
@@ -50,6 +69,7 @@ typedef struct sfvmk_adapter_s {
   /* Lock required by common code nic module */
   efsys_lock_t             nicLock;
   efx_nic_t                *pNic;
+  sfvmk_mcdi_t             mcdi;
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
   vmk_Name                 devName;
@@ -63,4 +83,20 @@ sfvmk_createLock(sfvmk_adapter_t *pAdapter,
                  vmk_Lock *pLock);
 
 void sfvmk_destroyLock(vmk_Lock lock);
+
+/* Mempool handlers */
+vmk_VA sfvmk_memPoolAlloc(size_t size);
+void sfvmk_memPoolFree(vmk_VA vAddr, size_t size);
+
+/* DMA memory handler */
+void sfvmk_freeDMAMappedMem(vmk_DMAEngine engine, void *pVA,
+                            vmk_IOA ioAddr, size_t size);
+
+void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
+                              vmk_IOA *ioAddr);
+
+/* Functions for MCDI handling */
+VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);
+void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
+
 #endif /* __SFVMK_DRIVER_H__ */

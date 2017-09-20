@@ -33,6 +33,7 @@ module_def = {
    "identification"  : sfvmk_identification,
    "source files"    : [ "sfvmk_module.c",
                          "sfvmk_driver.c",
+                         "sfvmk_mcdi.c",
                          "sfvmk_utils.c",
                          "sfvmk_ut.c",
                          "imported/ef10_ev.c",

@@ -26,6 +26,10 @@ sfvmk_modInfoCleanup(void)
     vmk_LockDomainDestroy(sfvmk_modInfo.lockDomain);
     sfvmk_modInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
   }
+  if (sfvmk_modInfo.memPoolID != VMK_MEMPOOL_INVALID) {
+    vmk_MemPoolDestroy(sfvmk_modInfo.memPoolID);
+    sfvmk_modInfo.memPoolID = VMK_MEMPOOL_INVALID;
+  }
   if (sfvmk_modInfo.logThrottledID != VMK_INVALID_LOG_HANDLE) {
     vmk_LogUnregister(sfvmk_modInfo.logThrottledID);
     sfvmk_modInfo.logThrottledID = VMK_INVALID_LOG_HANDLE;
@@ -56,7 +60,7 @@ init_module(void)
   vmk_LogProperties logProps;
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
-
+  vmk_MemPoolProps memPoolProps;
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
       /* size, alignment, count */
@@ -128,7 +132,19 @@ init_module(void)
 
   vmk_ModuleSetHeapID(vmk_ModuleCurrentID, sfvmk_modInfo.heapID);
 
-  /* 5. MemPool - TBD */
+  /* 5. MemPool */
+  vmk_NameCopy(&memPoolProps.name, &sfvmk_modInfo.driverName);
+  memPoolProps.module = vmk_ModuleCurrentID;
+  memPoolProps.parentMemPool = VMK_MEMPOOL_INVALID;
+  memPoolProps.memPoolType = VMK_MEM_POOL_LEAF;
+  memPoolProps.resourceProps.reservation = 0;
+  memPoolProps.resourceProps.limit = 0;
+
+  status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_modInfo.memPoolID);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("vmk_MemPoolCreate failed status: %s", vmk_StatusToString(status));
+    goto failed_mem_pool_create;
+  }
 
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
@@ -146,6 +162,7 @@ failed_heap_create:
 failed_log_register:
 failed_throttled_log_register:
 failed_lock_domain_create:
+failed_mem_pool_create:
 failed_driver_register:
   sfvmk_modInfoCleanup();
 

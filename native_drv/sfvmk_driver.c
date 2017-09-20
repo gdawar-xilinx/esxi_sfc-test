@@ -462,6 +462,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_nic_create;
   }
 
+  /* Initialize MCDI to talk to the management controller. */
+  if ((error = sfvmk_mcdiInit(pAdapter)) != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mcdiInit failed status: %s",
+		        vmk_StatusToString(status));
+    goto failed_mcdi_init;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -475,6 +482,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_mcdiFini(pAdapter);
+
+failed_mcdi_init:
   if (pAdapter->pNic != NULL) {
     efx_nic_destroy(pAdapter->pNic);
     pAdapter->pNic = NULL;
@@ -559,6 +569,9 @@ sfvmk_detachDevice(vmk_Device dev)
     SFVMK_ERROR("NULL adapter ptr");
     goto done;
   }
+
+  /* Tear down MCDI. */
+  sfvmk_mcdiFini(pAdapter);
 
   /* Destroy common code context. */
   if (pAdapter->pNic != NULL) {

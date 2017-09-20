@@ -469,6 +469,20 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_mcdi_init;
   }
 
+  /* Probe  NIC and build the configuration data area. */
+  if ((error = efx_nic_probe(pAdapter->pNic)) != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe failed status: %s",
+                        vmk_StatusToString(error));
+    goto failed_nic_probe;
+  }
+
+  /* Reset NIC. */
+  if ((error = efx_nic_reset(pAdapter->pNic)) != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed status: %s",
+                        vmk_StatusToString(error));
+    goto failed_nic_reset;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -482,6 +496,10 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+failed_nic_reset:
+  efx_nic_unprobe(pAdapter->pNic);
+
+failed_nic_probe:
   sfvmk_mcdiFini(pAdapter);
 
 failed_mcdi_init:
@@ -568,6 +586,11 @@ sfvmk_detachDevice(vmk_Device dev)
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
     goto done;
+  }
+
+  if (pAdapter->pNic != NULL) {
+    efx_nic_reset(pAdapter->pNic);
+    efx_nic_unprobe(pAdapter->pNic);
   }
 
   /* Tear down MCDI. */

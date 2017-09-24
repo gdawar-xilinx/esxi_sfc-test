@@ -37,6 +37,25 @@ typedef struct sfvmk_mcdi_s {
   efx_mcdi_transport_t  transport;
 } sfvmk_mcdi_t;
 
+/* Intrrupt module state */
+typedef enum sfvmk_intrState_e {
+  SFVMK_INTR_STATE_UNINITIALIZED = 0,
+  SFVMK_INTR_STATE_INITIALIZED,
+} sfvmk_intrState_t;
+
+/* Data structure for interrupt handling */
+typedef struct sfvmk_intr_s {
+  /* Number of interrupt allocated */
+  vmk_uint32            numIntrAlloc;
+  vmk_uint32            numIntrDesired;
+  /* Interrupt Cookies */
+  vmk_IntrCookie        *pIntrCookies;
+  /* Interrupt module state */
+  sfvmk_intrState_t     state;
+  /* Interrupt type (MESSAGE, LINE) */
+  efx_intr_type_t       type;
+} sfvmk_intr_t;
+
 typedef enum sfvmk_txqType_e {
   SFVMK_TXQ_TYPE_NON_CKSUM = 0,
   SFVMK_TXQ_TYPE_IP_CKSUM,
@@ -77,6 +96,7 @@ typedef struct sfvmk_adapter_s {
   efsys_lock_t             nicLock;
   efx_nic_t                *pNic;
   sfvmk_mcdi_t             mcdi;
+  sfvmk_intr_t             intr;
   vmk_uint32               numEvqsDesired;
   vmk_uint32               numEvqsAllotted;
   vmk_uint32               numTxqsAllotted;
@@ -86,6 +106,10 @@ typedef struct sfvmk_adapter_s {
    * Used only for debugging */
   vmk_Name                 devName;
 } sfvmk_adapter_t;
+
+/* Functions for interrupt handling */
+VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_intrFini(sfvmk_adapter_t *pAdapter);
 
 /* Spinlock  handlers */
 VMK_ReturnStatus

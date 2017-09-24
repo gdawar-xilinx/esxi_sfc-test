@@ -583,6 +583,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_get_vi_pool;
   }
 
+  status = sfvmk_intrInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_intrInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_intr_init;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -597,6 +604,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_intrFini(pAdapter);
+
+failed_intr_init:
 failed_get_vi_pool:
   efx_nic_fini(pAdapter->pNic);
 
@@ -694,6 +704,15 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+  /* Deinit interrupts */
+  status = sfvmk_intrFini(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_intrFini failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Tear down common code subsystems. */
   if (pAdapter->pNic != NULL) {
     efx_nic_reset(pAdapter->pNic);
     efx_nic_unprobe(pAdapter->pNic);

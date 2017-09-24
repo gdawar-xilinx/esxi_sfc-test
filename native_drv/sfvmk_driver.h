@@ -37,6 +37,13 @@ typedef struct sfvmk_mcdi_s {
   efx_mcdi_transport_t  transport;
 } sfvmk_mcdi_t;
 
+typedef enum sfvmk_txqType_e {
+  SFVMK_TXQ_TYPE_NON_CKSUM = 0,
+  SFVMK_TXQ_TYPE_IP_CKSUM,
+  SFVMK_TXQ_TYPE_IP_TCP_UDP_CKSUM,
+  SFVMK_TXQ_NTYPES
+} sfvmk_txqType_t;
+
 /* Adapter states */
 typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_UNINITIALIZED = 0,
@@ -70,6 +77,11 @@ typedef struct sfvmk_adapter_s {
   efsys_lock_t             nicLock;
   efx_nic_t                *pNic;
   sfvmk_mcdi_t             mcdi;
+  vmk_uint32               numEvqsDesired;
+  vmk_uint32               numEvqsAllotted;
+  vmk_uint32               numTxqsAllotted;
+  vmk_uint32               numRxqsAllotted;
+
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
   vmk_Name                 devName;

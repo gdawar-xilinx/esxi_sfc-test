@@ -14,6 +14,8 @@ sfvmk_modParams_t modParams = {
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
 
+#define SFVMK_MIN_EVQ_COUNT 1
+
 /* Value of SFVMK_DMA_ADDR_MASK_BITS chosen based on the field
  * TX_KER_BUF_ADDR of TX_KER_DESC */
 #define SFVMK_DMA_ADDR_MASK_BITS 48
@@ -377,6 +379,79 @@ done:
   return status;
 }
 
+/*! \brief  Routine to estimate resource (eg number of RXQs,TXQs and EVQs)
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+VMK_ReturnStatus
+sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
+{
+  efx_drv_limits_t limits;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  const efx_nic_cfg_t *pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto done;
+  }
+
+  vmk_Memset(&limits, 0, sizeof(limits));
+
+  /* Get number of queues supported (this is depend on number of cpus) */
+  status = vmk_UplinkQueueGetNumQueuesSupported(pNicCfg->enc_txq_limit,
+                                                pNicCfg->enc_rxq_limit,
+                                                &limits.edl_max_txq_count,
+                                                &limits.edl_max_rxq_count);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "vmk_UplinkQueueGetNumQueuesSupported failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+  /* Using following scheme for EVQs, RXQs and TXQs
+   * One EVQ for each RXQ and TXQ_TYPE_IP_TCP_UDP_CKSUM TXQ
+   * EVQ-0 also handles:
+   * Events for one (shared) TXQ_TYPE_NON_CKSUM TXQ
+   * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
+   * MCDI events
+   * Error events from firmware/hardware
+   * TODO: calculation of EVQs when NETQ and RSS features are added */
+
+  limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
+  limits.edl_max_evq_count = MIN(limits.edl_max_rxq_count,
+                                 limits.edl_max_txq_count);
+  pAdapter->numEvqsDesired = limits.edl_max_evq_count;
+
+  limits.edl_min_rxq_count = limits.edl_min_evq_count;
+  limits.edl_max_rxq_count = limits.edl_max_evq_count;
+
+  limits.edl_min_txq_count = MAX((limits.edl_min_evq_count + SFVMK_TXQ_NTYPES - 1),
+                                  SFVMK_TXQ_NTYPES);
+  limits.edl_max_txq_count = limits.edl_max_evq_count + SFVMK_TXQ_NTYPES - 1;
+
+  status = efx_nic_set_drv_limits(pAdapter->pNic, &limits);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_set_drv_limits failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -483,6 +558,31 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_nic_reset;
   }
 
+  status = sfvmk_setResourceLimits(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setResourceLimits failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_set_resource_limit;
+  }
+
+  status = efx_nic_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_nic_init;
+  }
+
+  /* Get size of resource pool from NIC */
+  status = efx_nic_get_vi_pool(pAdapter->pNic,
+                               &pAdapter->numEvqsAllotted,
+                               &pAdapter->numRxqsAllotted,
+                               &pAdapter->numTxqsAllotted);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_get_vi_pool failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_get_vi_pool;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -491,11 +591,17 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_set_drvdata;
   }
 
+  efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
   goto done;
 
 failed_set_drvdata:
+failed_get_vi_pool:
+  efx_nic_fini(pAdapter->pNic);
+
+failed_nic_init:
+failed_set_resource_limit:
 failed_nic_reset:
   efx_nic_unprobe(pAdapter->pNic);
 

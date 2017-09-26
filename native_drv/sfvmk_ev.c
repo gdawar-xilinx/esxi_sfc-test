@@ -385,7 +385,7 @@ sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 
   SFVMK_NULL_PTR_CHECK(pTxq);
   VMK_ASSERT(pEvq->index == pTxq->evqIndex,
-      ("pEvq->index != pTxq->evqIndex"));
+      "pEvq->index != pTxq->evqIndex");
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
             "id: %d txq_index %d for evqIndex: %d, initState:%d",
@@ -1008,8 +1008,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     spinTime *= 2;
 
     /* MAX Spin will not be more than SFVMK_EVQ_START_POLL_WAIT */
-    if (spinTime >= SFVMK_EVQ_START_POLL_WAIT);
-      spinTime = SFVMK_EVQ_START_POLL_WAIT;
+    spinTime = MIN(spinTime, SFVMK_EVQ_START_POLL_WAIT);
 
     /* Check to see if the test event has been processed */
     if (pEvq->initState == SFVMK_EVQ_STARTED)

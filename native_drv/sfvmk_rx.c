@@ -666,8 +666,7 @@ static void sfvmk_rxqStop( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
       spinTime *= 2;
 
       /* MAX Spin will not be more than SFVMK_RXQ_STOP_POLL_WAIT */
-      if (spinTime >= SFVMK_RXQ_STOP_POLL_WAIT);
-        spinTime = SFVMK_RXQ_STOP_POLL_WAIT;
+      spinTime = MIN(spinTime, SFVMK_RXQ_STOP_POLL_WAIT);
 
       if (pRxq->flushState != SFVMK_FLUSH_PENDING)
         break;

@@ -530,12 +530,12 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
   for (index = 0; index < numIntReq; index++)
     pAdapter->intr.intrCookies[index] = VMK_INVALID_INTRCOOKIE;
 
-    /* allocate msix interrupt */
-    status = vmk_PCIAllocIntrCookie(vmk_ModuleCurrentID,
-                                    pAdapter->pciDevice,
-                                    VMK_PCI_INTERRUPT_TYPE_MSIX,
-                                    numIntReq, numIntReq, NULL,
-                                    pAdapter->intr.intrCookies, &numIntrsAlloc);
+  /* allocate msix interrupt */
+  status = vmk_PCIAllocIntrCookie(vmk_ModuleCurrentID,
+                                  pAdapter->pciDevice,
+                                  VMK_PCI_INTERRUPT_TYPE_MSIX,
+                                  numIntReq, numIntReq, NULL,
+                                  pAdapter->intr.intrCookies, &numIntrsAlloc);
   if (status == VMK_OK) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_INTR, SFVMK_LOG_LEVEL_DBG,
               "Allocated %d interrupts", numIntrsAlloc);

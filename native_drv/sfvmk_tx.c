@@ -567,8 +567,7 @@ sfvmk_txqStop(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
           spinTime *= 2;
 
           /* MAX Spin will not be more than SFVMK_TXQ_STOP_POLL_WAIT */
-          if (spinTime >= SFVMK_TXQ_STOP_POLL_WAIT);
-            spinTime = SFVMK_TXQ_STOP_POLL_WAIT;
+          spinTime = MIN(spinTime, SFVMK_TXQ_STOP_POLL_WAIT);
 
           if (pTxq->flushState != SFVMK_FLUSH_PENDING)
             break;

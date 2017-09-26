@@ -42,7 +42,7 @@
 /* Number of transmit descriptors processed per batch */
 #define SFVMK_TX_BATCH              64
 
-#define SFVMK_TXQ_UNBLOCK_LEVEL(entries)       (EFX_TXQ_LIMIT(entries) / 4)
+#define SFVMK_TXQ_UNBLOCK_LEVEL(entries)       (EFX_TXQ_LIMIT(entries) / 2)
 
 /* Considering MAX pkt size of TSO pkt as 64K and buffer size as 2K*/
 

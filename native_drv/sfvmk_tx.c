@@ -1096,9 +1096,9 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq, vmk_PktHandle **ppPkt, vmk_ByteCountSm
     }
   }
   else {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
-                  "clear sticky desc for non-tagged traffic");
     if (0 != pTxq->hwVlanTci) {
+      SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                "clear sticky desc for non-tagged traffic");
       efx_tx_qdesc_vlantci_create(pTxq->pCommonTxq,
           0,
           &pTxq->pPendDesc[0]);
@@ -1834,10 +1834,6 @@ VMK_ReturnStatus sfvmk_transmitPkt(sfvmk_adapter_t *pAdapter,  sfvmk_txq_t *pTxq
   if (status != VMK_OK) {
     SFVMK_ERR(pAdapter, "failed to populate tx desc");
     return status;
-  }
-
-  if (pTxq->blocked) {
-    SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "Txq is blocked, returning");
   }
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG, "added: %d, pushed: %d", pTxq->added, pushed);

@@ -879,13 +879,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   /* cross over the rx queues */
   qid -= maxRxQueues;
 
-  if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
-   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-             "sfvmk_isTxqStopped returned TRUE");
-   isQueueStopped = VMK_TRUE;
-   /* TODO: need to see the pkt completion context and use appropriate function call */
-  }
-
   SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
             "RxQ: %d, TxQ: %d, qid: %d", maxRxQueues, maxTxQueues, qid);
 
@@ -900,6 +893,14 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
               pktLen, vmk_NameToString(&pAdapter->uplinkName));
     goto sfvmk_release_pkt;
 	}
+
+   if (VMK_UNLIKELY(sfvmk_isTxqStopped(pAdapter, qid))) {
+     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+             "sfvmk_isTxqStopped returned TRUE");
+     isQueueStopped = VMK_TRUE;
+     /* TODO: need to see the pkt completion context and use appropriate function call */
+   }
+
 
    if(vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt)) {
      /* TODO: implement queue mapping for later use  */

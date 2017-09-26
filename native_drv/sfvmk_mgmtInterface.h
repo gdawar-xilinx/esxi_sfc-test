@@ -182,7 +182,7 @@ typedef	struct sfvmk_nvramCmd_s {
   vmk_uint32 subtype;
   vmk_uint16 version[4];		/* get/set_ver */
   vmk_uint8 data[SFVMK_NVRAM_MAX_PAYLOAD];	/* read/write */
-} sfvmk_nvramCmd_t;
+} __attribute__((__packed__)) sfvmk_nvramCmd_t;
 
 /*! \brief Get size of NVRAM partition
  **
@@ -305,7 +305,7 @@ typedef	struct sfvmk_nvramCmd_s {
 typedef struct sfvmk_versionInfo_s {
   vmk_uint32 type;
   char version[SFVMK_VER_MAX_CHAR_LEN];
-}sfvmk_versionInfo_t;
+} __attribute__((__packed__)) sfvmk_versionInfo_t;
 
 #define SFVMK_GET_DRV_VERSION  0x00000001
 #define SFVMK_GET_FW_VERSION   0x00000002
@@ -340,7 +340,7 @@ typedef enum sfvmk_mgmtDevOps_e {
 typedef struct sfvmk_linkStatus_s {
   sfvmk_mgmtDevOps_t type;
   vmk_Bool state;
-}sfvmk_linkStatus_t;
+} __attribute__((__packed__)) sfvmk_linkStatus_t;
 
 #define SFVMK_LINK_SPEED_10_MBPS    10
 #define SFVMK_LINK_SPEED_100_MBPS   100
@@ -370,7 +370,7 @@ typedef struct sfvmk_linkSpeed_s {
   sfvmk_mgmtDevOps_t   type;
   vmk_uint32           speed;
   vmk_Bool             autoNeg;
-}sfvmk_linkSpeed_t;
+} __attribute__((__packed__)) sfvmk_linkSpeed_t;
 
 /*! \brief struct sfvmk_intrCoalsParam_s for
  **         Interrupt coalesce parameters
@@ -435,7 +435,7 @@ typedef struct sfvmk_intrCoalsParam_s {
   vmk_uint32 rxFramesHigh;
   vmk_uint32 txUsecsHigh;
   vmk_uint32 txFramesHigh;
-}sfvmk_intrCoalsParam_t;
+} __attribute__((__packed__)) sfvmk_intrCoalsParam_t;
 
 /*! \brief struct sfvmk_pciInfo_s to
  **        PCI BDF and device information

@@ -36,6 +36,7 @@ module_def = {
                          "sfvmk_mcdi.c",
                          "sfvmk_intr.c",
                          "sfvmk_ev.c",
+                         "sfvmk_port.c",
                          "sfvmk_utils.c",
                          "sfvmk_ut.c",
                          "imported/ef10_ev.c",

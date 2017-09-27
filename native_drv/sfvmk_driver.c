@@ -597,6 +597,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_ev_init;
   }
 
+  status = sfvmk_portInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_portInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_port_init;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -611,6 +618,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_portFini(pAdapter);
+
+failed_port_init:
   sfvmk_evFini(pAdapter);
 
 failed_ev_init:
@@ -714,6 +724,8 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+  /* Deinit port */
+  sfvmk_portFini(pAdapter);
   /* Deinit EVQs */
   sfvmk_evFini(pAdapter);
 

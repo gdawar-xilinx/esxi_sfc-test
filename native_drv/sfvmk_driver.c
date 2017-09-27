@@ -590,6 +590,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_intr_init;
   }
 
+  status = sfvmk_evInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_ev_init;
+  }
+
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
@@ -604,6 +611,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 failed_set_drvdata:
+  sfvmk_evFini(pAdapter);
+
+failed_ev_init:
   sfvmk_intrFini(pAdapter);
 
 failed_intr_init:
@@ -703,6 +713,9 @@ sfvmk_detachDevice(vmk_Device dev)
     SFVMK_ERROR("NULL adapter ptr");
     goto done;
   }
+
+  /* Deinit EVQs */
+  sfvmk_evFini(pAdapter);
 
   /* Deinit interrupts */
   status = sfvmk_intrFini(pAdapter);

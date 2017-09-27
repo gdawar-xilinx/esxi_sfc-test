@@ -10,11 +10,18 @@
 #include "sfvmk.h"
 #include "efx.h"
 
+/* Default number of descriptors required for RXQs */
+#define SFVMK_NUM_RXQ_DESC 1024
+
+/* Default number of descriptors required for TXQs */
+#define SFVMK_NUM_TXQ_DESC 1024
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
 typedef enum sfvmk_spinlockRank_e {
-  SFVMK_SPINLOCK_RANK_MCDI_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_MCDI_LOCK,
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
   SFVMK_SPINLOCK_RANK_BAR_LOCK
 } sfvmk_spinlockRank_t;
@@ -55,6 +62,25 @@ typedef struct sfvmk_intr_s {
   /* Interrupt type (MESSAGE, LINE) */
   efx_intr_type_t       type;
 } sfvmk_intr_t;
+
+/* Event queue state */
+typedef enum sfvmk_evqState_e {
+  SFVMK_EVQ_STATE_UNINITIALIZED = 0,
+  SFVMK_EVQ_STATE_INITIALIZED,
+} sfvmk_evqState_t;
+
+typedef struct sfvmk_evq_s {
+  struct sfvmk_adapter_s  *pAdapter;
+  /* Memory for event queue */
+  efsys_mem_t             mem;
+  vmk_Lock                lock;
+  /* Hardware EVQ index */
+  vmk_uint32              index;
+  /* Number of event queue descriptors in EVQ */
+  vmk_uint32              numDesc;
+  /* EVQ state */
+  sfvmk_evqState_t        state;
+} sfvmk_evq_t;
 
 typedef enum sfvmk_txqType_e {
   SFVMK_TXQ_TYPE_NON_CKSUM = 0,
@@ -97,10 +123,16 @@ typedef struct sfvmk_adapter_s {
   efx_nic_t                *pNic;
   sfvmk_mcdi_t             mcdi;
   sfvmk_intr_t             intr;
+  /* Ptr to array of numEvqsAllocated EVQs */
+  sfvmk_evq_t              **ppEvq;
+  vmk_uint32               numEvqsAllocated;
   vmk_uint32               numEvqsDesired;
   vmk_uint32               numEvqsAllotted;
   vmk_uint32               numTxqsAllotted;
   vmk_uint32               numRxqsAllotted;
+
+  vmk_uint32               numRxqBuffDesc;
+  vmk_uint32               numTxqBuffDesc;
 
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
@@ -131,8 +163,14 @@ void sfvmk_freeDMAMappedMem(vmk_DMAEngine engine, void *pVA,
 void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
                               vmk_IOA *ioAddr);
 
+vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
+
 /* Functions for MCDI handling */
 VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
+
+/* Functions for event queue handling */
+VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);
+void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
 
 #endif /* __SFVMK_DRIVER_H__ */

@@ -267,3 +267,19 @@ sfvmk_freeDMAMappedMem(vmk_DMAEngine engine, void *pVA,
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_UTILS);
 }
+
+/*! \brief  Convert a number in to next  power of 2 value
+**
+** \param[in]  value
+**
+** \return: A next power of 2 value which could be greater than
+**          or equal to the value given.
+*/
+vmk_uint32 sfvmk_pow2GE(vmk_uint32 value)
+{
+  vmk_uint32 order = 0;
+  while ((1ul << order) < value)
+    ++order;
+
+  return (1ul << (order));
+}

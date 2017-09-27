@@ -21,6 +21,7 @@ extern void             sfvmk_driverUnregister(void);
 
 typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_RXQ_LOCK,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
   SFVMK_SPINLOCK_RANK_PORT_LOCK,
   SFVMK_SPINLOCK_RANK_MCDI_LOCK,
@@ -119,6 +120,20 @@ typedef struct sfvmk_txq_s {
   sfvmk_txqType_t     type;
 } sfvmk_txq_t;
 
+typedef enum sfvmk_rxqState_e {
+  SFVMK_RXQ_STATE_UNINITIALIZED = 0,
+  SFVMK_RXQ_STATE_INITIALIZED,
+} sfvmk_rxqState_t;
+
+typedef struct sfvmk_rxq_s {
+  vmk_Lock          lock;
+  efsys_mem_t       mem;
+  vmk_uint32        index;
+  vmk_uint32        numDesc;
+  vmk_uint32        ptrMask;
+  sfvmk_rxqState_t  state;
+} sfvmk_rxq_t;
+
 /* Adapter states */
 typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_UNINITIALIZED = 0,
@@ -167,6 +182,8 @@ typedef struct sfvmk_adapter_s {
   sfvmk_txq_t              **ppTxq;
   vmk_uint32               numTxqsAllocated;
 
+  sfvmk_rxq_t              **ppRxq;
+  vmk_uint32               numRxqsAllocated;
   sfvmk_port_t             port;
 
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
@@ -216,5 +233,8 @@ void sfvmk_portFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
 
+/* Functions for RXQ module handling */
+VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);
+void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
 
 #endif /* __SFVMK_DRIVER_H__ */

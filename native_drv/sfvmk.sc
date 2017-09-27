@@ -37,6 +37,7 @@ module_def = {
                          "sfvmk_intr.c",
                          "sfvmk_ev.c",
                          "sfvmk_tx.c",
+                         "sfvmk_rx.c",
                          "sfvmk_port.c",
                          "sfvmk_utils.c",
                          "sfvmk_ut.c",

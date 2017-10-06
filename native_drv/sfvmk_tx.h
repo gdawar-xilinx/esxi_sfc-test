@@ -151,6 +151,8 @@ typedef struct sfvmk_txq_s {
   ** FW-assisted tagging is used
   */
   vmk_uint16        hwVlanTci;
+  /* True if this txq has option csum descriptor on */
+  vmk_Bool          isCso   VMK_ATTRIBUTE_L1_ALIGNED;
 
   /* Statistics */
   vmk_uint64     tsoBursts;

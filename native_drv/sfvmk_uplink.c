@@ -901,14 +901,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
      /* TODO: need to see the pkt completion context and use appropriate function call */
    }
 
-
-   if(vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt)) {
-     /* TODO: implement queue mapping for later use  */
-	  qid = SFVMK_TXQ_IP_TCP_UDP_CKSUM;
-     SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-            "pkt: %p moved to qid: %d", pkt, qid);
-   }
-
    if(VMK_UNLIKELY((VMK_TRUE == isQueueStopped) && (pAdapter->pTxq[qid]->blocked))) {
      SFVMK_DBG(pAdapter, SFVMK_DBG_UPLINK, SFVMK_LOG_LEVEL_INFO,
              "Queue blocked, returning");
@@ -1999,7 +1991,7 @@ sfvmk_setDrvLimits( sfvmk_adapter_t *pAdapter)
   limits.edl_min_evq_count = limits.edl_max_evq_count =
       pAdapter->intr.numIntrAlloc;
   limits.edl_min_txq_count = limits.edl_max_txq_count =
-      pAdapter->intr.numIntrAlloc + SFVMK_TXQ_NTYPES - 1;
+      pAdapter->intr.numIntrAlloc;
   limits.edl_min_rxq_count = limits.edl_max_rxq_count =
       pAdapter->intr.numIntrAlloc;
 

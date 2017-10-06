@@ -332,29 +332,14 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
               pAdapter->tsoFwAssisted, pCfg->enc_tx_dma_desc_size_max);
   pAdapter->txDmaDescMaxSize = pCfg->enc_tx_dma_desc_size_max;
 
-  pAdapter->txqCount = SFVMK_TXQ_NTYPES - 1 + pIntr->numIntrAlloc;
+  pAdapter->txqCount = pIntr->numIntrAlloc;
 
   /* Initialize transmit queues */
-  rc = sfvmk_txqInit(pAdapter, SFVMK_TXQ_NON_CKSUM, SFVMK_TXQ_NON_CKSUM, 0);
-  if(rc) {
-    SFVMK_ERR(pAdapter, "failed to init txq[SFVMK_TXQ_NON_CKSUM] with err %d",
-                rc);
-    goto sfvmk_fail;
-  }
-
-  rc = sfvmk_txqInit(pAdapter, SFVMK_TXQ_IP_CKSUM,  SFVMK_TXQ_IP_CKSUM, 0);
-  if(rc) {
-    SFVMK_ERR(pAdapter,"failed to init txq[SFVMK_TXQ_IP_CKSUM] with err %d",
-                rc);
-    goto sfvmk_fail2;
-  }
-
-  qIndex = SFVMK_TXQ_NTYPES - 1;
-  for (; qIndex < pAdapter->txqCount; qIndex++, evqIndex++) {
+  for (qIndex =0; qIndex < pAdapter->txqCount; qIndex++, evqIndex++) {
     rc = sfvmk_txqInit(pAdapter, qIndex, SFVMK_TXQ_IP_TCP_UDP_CKSUM, evqIndex);
     if (rc) {
       SFVMK_ERR(pAdapter,"failed to init txq[%d]", qIndex);
-      goto sfvmk_fail3;
+      goto sfvmk_fail;
     }
   }
 
@@ -362,17 +347,9 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
 
   return rc;
 
-sfvmk_fail3:
-  while (--qIndex >= SFVMK_TXQ_NTYPES - 1)
-    sfvmk_txqFini(pAdapter,  qIndex);
-
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_IP_CKSUM);
-
-sfvmk_fail2:
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_NON_CKSUM);
-
 sfvmk_fail:
-
+  while (--qIndex >= 0)
+    sfvmk_txqFini(pAdapter,  qIndex);
   return (rc);
 }
 
@@ -733,7 +710,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
       break;
 
     case SFVMK_TXQ_IP_TCP_UDP_CKSUM:
-      flags = EFX_TXQ_CKSUM_IPV4 | EFX_TXQ_CKSUM_TCPUDP;
+      flags = 0;
       tsoFwAssisted = pAdapter->tsoFwAssisted;
 
       if (tsoFwAssisted & SFVMK_FATSOV2)
@@ -777,6 +754,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   efx_tx_qenable(pTxq->pCommonTxq);
 
   pTxq->hwVlanTci = 0;
+  pTxq->isCso = VMK_FALSE;
   pTxq->initState = SFVMK_TXQ_STARTED;
   pTxq->flushState = SFVMK_FLUSH_REQUIRED;
   pTxq->tsoFwAssisted = tsoFwAssisted;
@@ -952,7 +930,7 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
 **
 ** \return: void
 */
-static inline void
+static void
 sfvmk_nextStmp(sfvmk_txq_t *pTxq, sfvmk_txMapping_t **pStmp)
 {
   //SFVMK_DBG_FUNC_ENTRY(pTxq->pAdapter, SFVMK_DBG_TX);
@@ -1612,6 +1590,30 @@ sfvmk_txQueueTso(sfvmk_txq_t *pTxq, vmk_PktHandle *pkt,
   return (id);
 }
 
+/*! \brief  Create checksum offload option descriptor
+**
+** \param[in]  pTxq        pointer to txq
+** \param[in]  idx         pending desc array index
+** \param[in]  isCso       whether to enable or disable cso
+**
+** \return: void
+**
+*/
+static void
+sfvmk_txCreateCsumDesc(sfvmk_txq_t *pTxq, vmk_uint16 idx, vmk_uint8 isCso) {
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DBG_TX);
+  SFVMK_DEBUG(SFVMK_DBG_TX, SFVMK_LOG_LEVEL_INFO, "isCso: %u", isCso);
+
+  efx_tx_qdesc_checksum_create(pTxq->pCommonTxq,
+          isCso?(EFX_TXQ_CKSUM_TCPUDP|EFX_TXQ_CKSUM_IPV4):0,
+          &pTxq->pPendDesc[idx]);
+
+  pTxq->nPendDesc++;
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DBG_TX);
+}
+
+
 /*! \brief fill the transmit buffer descriptor with pkt fragments
 **
 ** \param[in]  pAdapter  pointer to adapter structure
@@ -1640,6 +1642,7 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
   sfvmk_txMapping_t *pStmp = &pTxq->pStmp[id];
   sfvmk_dmaSegment_t *pDmaSeg = NULL;
   VMK_ReturnStatus status;
+  vmk_Bool isCso = VMK_FALSE;
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
 
@@ -1654,6 +1657,18 @@ sfvmk_populateTxDescriptor(sfvmk_adapter_t *pAdapter,sfvmk_txq_t *pTxq,vmk_PktHa
 
     sfvmk_nextStmp(pTxq, &pStmp);
   }
+
+  isCso = vmk_PktIsLargeTcpPacket(pkt) || vmk_PktIsMustCsum(pkt);
+  if(pTxq->isCso != isCso) {
+    sfvmk_txCreateCsumDesc(pTxq, vlanTagged, isCso);
+    vlanTagged++;
+    pTxq->isCso = isCso;
+    /* for option descriptors, make sure txqComplete doesn't try clean-up */
+    pStmp->isPkt = VMK_TRUE;
+    pStmp->u.pkt = NULL;
+    sfvmk_nextStmp(pTxq, &pStmp);
+  }
+
 
   SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
         "id: %d, pTxq: %p, pStmp: %p, vlanTagged: %d", id, pTxq, pStmp, vlanTagged);

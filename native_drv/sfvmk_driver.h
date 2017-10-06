@@ -93,6 +93,7 @@ typedef struct sfvmk_adapter_s {
 
   /* EFX /efsys related information */
   efx_family_t      efxFamily;
+  vmk_uint32        memBar;
   efsys_bar_t       bar;
   efsys_lock_t      nicLock;
   efx_nic_t         *pNic;
@@ -105,7 +106,7 @@ typedef struct sfvmk_adapter_s {
   /*queues relater DS */
   struct sfvmk_evq_s    *pEvq[SFVMK_RX_SCALE_MAX];
   struct sfvmk_rxq_s    *pRxq[SFVMK_RX_SCALE_MAX];
-  struct sfvmk_txq_s    *pTxq[SFVMK_TXQ_NTYPES + SFVMK_TX_SCALE_MAX];
+  struct sfvmk_txq_s    *pTxq[SFVMK_TX_SCALE_MAX];
 
   vmk_uint32      rxIndirTable[SFVMK_RX_SCALE_MAX];
 

@@ -147,8 +147,9 @@ sfvmk_isr(void *arg, vmk_IntrCookie intrCookie)
   pEvq = (sfvmk_evq_t *)arg;
 
   /* This info is required only for intr moderation testing */
-  SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_INTR, SFVMK_LOG_LEVEL_INFO,
-      "Got MSIX interrupt");
+  /* SFVMK_DBG(pEvq->pAdapter, SFVMK_DBG_INTR, SFVMK_LOG_LEVEL_INFO,
+   *   "Got MSIX interrupt");
+  */
 
   /* activate net poll to process the event */
   vmk_NetPollActivate(pEvq->netPoll);

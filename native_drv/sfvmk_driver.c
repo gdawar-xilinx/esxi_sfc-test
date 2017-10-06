@@ -109,7 +109,8 @@ sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter)
 
   /*check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
-                  pAdapter->pciDeviceID.deviceID, &pAdapter->efxFamily);
+                  pAdapter->pciDeviceID.deviceID,
+                  &pAdapter->efxFamily, &pAdapter->memBar);
   if (rc != 0) {
     SFVMK_ERR(pAdapter, "efx_family fail %d", rc);
     return VMK_FAILURE;
@@ -185,10 +186,10 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
   pBar = &pAdapter->bar;
 
   status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                                  EFX_MEM_BAR, VMK_MAPATTRS_READWRITE ,
+                                  pAdapter->memBar, VMK_MAPATTRS_READWRITE ,
                                         &pBar->esbBase);
   if (status != VMK_OK) {
-    SFVMK_ERR(pAdapter, "Failed to map BAR%d (%s)", EFX_MEM_BAR,
+    SFVMK_ERR(pAdapter, "Failed to map BAR%d (%s)", pAdapter->memBar,
               vmk_StatusToString(status));
   }
   vmk_NameFormat(&lockName, "sfvmk_memBarLock");
@@ -196,8 +197,8 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
                             &pBar->esbLock);
   if (status != VMK_OK) {
     vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                           EFX_MEM_BAR);
-    SFVMK_ERR(pAdapter, "Failed to create lock for BAR%d (%s)", EFX_MEM_BAR,
+                           pAdapter->memBar);
+    SFVMK_ERR(pAdapter, "Failed to create lock for BAR%d (%s)", pAdapter->memBar,
               vmk_StatusToString(status));
   }
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
@@ -222,13 +223,13 @@ sfvmk_unmapBAR(sfvmk_adapter_t *pAdapter)
   sfvmk_destroyLock(pAdapter->bar.esbLock);
 
   status = vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                                  EFX_MEM_BAR);
+                                  pAdapter->memBar);
   if (status != VMK_OK)
     SFVMK_ERR(pAdapter, "Failed to unmap memory BAR status %s",
               vmk_StatusToString(status));
   else
     SFVMK_DBG(pAdapter, SFVMK_DBG_DRIVER, SFVMK_LOG_LEVEL_INFO,
-              "Freed Bar %d ", EFX_MEM_BAR);
+              "Freed Bar %d ", pAdapter->memBar);
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
   return status;
@@ -326,8 +327,7 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
     return status;
   }
 
-  evqMax = MIN(limits.edl_max_rxq_count ,
-                (limits.edl_max_txq_count - SFVMK_TXQ_NTYPES +1));
+  evqMax = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
   /* TODO: hardcoing to 1 event queue will be removed after multiq support */
   evqMax = 1;
 
@@ -336,10 +336,10 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
   limits.edl_max_evq_count = evqMax;
-  limits.edl_min_txq_count = SFVMK_TXQ_NTYPES;
+  limits.edl_min_txq_count = limits.edl_min_evq_count;
   limits.edl_min_rxq_count = limits.edl_min_evq_count;
   limits.edl_max_rxq_count = evqMax;
-  limits.edl_max_txq_count = evqMax + SFVMK_TXQ_NTYPES - 1;
+  limits.edl_max_txq_count = evqMax;
 
   /* set the limits in fw */
   efx_nic_set_drv_limits(pAdapter->pNic, &limits);
@@ -357,16 +357,9 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
     return VMK_FAILURE;
   }
 
-  if (txqAllocated < SFVMK_TXQ_NTYPES) {
-    efx_nic_fini(pAdapter->pNic);
-    SFVMK_ERR(pAdapter, " txqAllocated should be more than type of txqs");
-    return VMK_FAILURE;
-  }
-
   pAdapter->evqMax = MIN(evqAllocated, evqMax);
   pAdapter->evqMax = MIN(rxqAllocated, pAdapter->evqMax);
-  pAdapter->evqMax = MIN(txqAllocated - (SFVMK_TXQ_NTYPES - 1),
-                          pAdapter->evqMax);
+  pAdapter->evqMax = MIN(txqAllocated, pAdapter->evqMax);
 
   VMK_ASSERT_BUG((pAdapter->evqMax <= evqMax),"(pAdapter->evqMax <= evqMax) is False");
 

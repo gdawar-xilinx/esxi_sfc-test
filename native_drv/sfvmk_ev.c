@@ -339,26 +339,6 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
   return B_FALSE;
 }
 
-/*! \brief   Local function to get txq attached to a given evq.
-**
-** \param[in] pEvq     pointer to eventQ
-** \param[in] label    txq type
-**
-** \return: VMK_OK <success> error code <failure>
-**
-*/
-static struct sfvmk_txq_s *
-sfvmk_getTxqByLabel(struct sfvmk_evq_s *pEvq, enum sfvmk_txqType label)
-{
-  unsigned int index;
-
-  VMK_ASSERT_BUG((pEvq->index == 0 && label < SFVMK_TXQ_NTYPES) ||
-        (label == SFVMK_TXQ_IP_TCP_UDP_CKSUM), "unexpected txq label");
-  index = (pEvq->index == 0) ? label : (pEvq->index - 1 + SFVMK_TXQ_NTYPES);
-
-  return (pEvq->pAdapter->pTxq[index]);
-}
-
 /*! \brief called when a TX event received on eventQ
 **
 ** \param[in] arg      ptr to event queue
@@ -381,7 +361,7 @@ sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
-  pTxq = sfvmk_getTxqByLabel(pEvq, label);
+  pTxq = pEvq->pAdapter->pTxq[pEvq->index];
 
   SFVMK_NULL_PTR_CHECK(pTxq);
   VMK_ASSERT(pEvq->index == pTxq->evqIndex,
@@ -498,7 +478,7 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
       break;
 
     case SFVMK_SW_EV_MAGIC(SFVMK_SW_EV_TX_QFLUSH_DONE): {
-      struct sfvmk_txq_s *pTxq = sfvmk_getTxqByLabel(pEvq, label);
+      struct sfvmk_txq_s *pTxq = pEvq->pAdapter->pTxq[pEvq->index];
 
       SFVMK_NULL_PTR_CHECK(pTxq);
       VMK_ASSERT_BUG(pEvq->index == pTxq->evqIndex,

@@ -17,9 +17,264 @@
  */
 #define SFVMK_MAX_FILTER 2048
 
-/* Callback for uplink operations. */
-/* TODO: Add callback functions. */
-static vmk_UplinkOps sfvmkUplinkOps = {NULL};
+/****************************************************************************
+ *               vmk_UplinkOps Handlers                                     *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
+static VMK_ReturnStatus sfvmk_uplinkMTUSet(vmk_AddrCookie, vmk_uint32);
+static VMK_ReturnStatus sfvmk_uplinkStateSet(vmk_AddrCookie, vmk_UplinkState);
+static VMK_ReturnStatus sfvmk_uplinkStatsGet(vmk_AddrCookie, vmk_UplinkStats *);
+static VMK_ReturnStatus sfvmk_uplinkAssociate(vmk_AddrCookie, vmk_Uplink);
+static VMK_ReturnStatus sfvmk_uplinkDisassociate(vmk_AddrCookie);
+static VMK_ReturnStatus sfvmk_uplinkCapEnable(vmk_AddrCookie, vmk_UplinkCap);
+static VMK_ReturnStatus sfvmk_uplinkCapDisable(vmk_AddrCookie, vmk_UplinkCap);
+static VMK_ReturnStatus sfvmk_uplinkStartIO(vmk_AddrCookie);
+static VMK_ReturnStatus sfvmk_uplinkQuiesceIO(vmk_AddrCookie);
+static VMK_ReturnStatus sfvmk_uplinkReset(vmk_AddrCookie);
+
+static vmk_UplinkOps sfvmkUplinkOps = {
+  .uplinkTx = sfvmk_uplinkTx,
+  .uplinkReset = sfvmk_uplinkReset,
+  .uplinkMTUSet = sfvmk_uplinkMTUSet,
+  .uplinkStateSet = sfvmk_uplinkStateSet,
+  .uplinkStatsGet = sfvmk_uplinkStatsGet,
+  .uplinkStartIO = sfvmk_uplinkStartIO,
+  .uplinkQuiesceIO = sfvmk_uplinkQuiesceIO,
+  .uplinkCapEnable = sfvmk_uplinkCapEnable,
+  .uplinkCapDisable = sfvmk_uplinkCapDisable,
+  .uplinkAssociate = sfvmk_uplinkAssociate,
+  .uplinkDisassociate = sfvmk_uplinkDisassociate,
+};
+
+/*! \brief  Uplink callback function to associate uplink device with driver and
+**          driver register its cap with uplink device.
+**
+** \param[in]  cookie     vmk_AddrCookie
+** \param[in]  uplink     uplink device
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to disassociate uplink device from driver.
+**
+** \param[in]  cookie     vmk_AddrCookie
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to transmit pkt
+**
+** \param[in]  cookie     vmk_AddrCookie
+** \param[in]  pktList    List of packets to be transmitted
+**
+** \return: VMK_OK on success, VMK_BUSY otherwise.
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to set MTU
+**
+** \param[in]  cookie  vmk_AddrCookie
+** \param[in]  mtu
+**
+** \return: VMK_OK <success>
+** \return: VMK_FAILURE <failure>
+** \return: VMK_BAD_PARAM <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to set the link status.
+**
+** \param[in]  cookie    vmk_AddrCookie
+** \param[in]  admnState linkstate.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to get the NIC stats
+**
+** \param[in]  cookie  pointer to vmk_AddrCookie
+** \param[out] pNicStats    ptr to stats
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Uplink callback function to enable cap
+**
+** \param[in]  cookie      vmk_AddrCookie
+** \param[in]  uplinkCap   uplink capability to be enabled
+**
+* @return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to disable cap
+**
+** \param[in]  cookie     vmk_AddrCookie
+** \param[in]  uplinkCap  uplink cap to be disabled
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to reset the adapter.
+**
+** \param[in]  cookie  vmk_AddrCookie
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkReset(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to start the IO operations.
+**
+** \param[in]  cookie  pointer to vmk_AddrCookie
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *) cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to  Quiesce IO operations.
+**
+** \param[in]  cookie  pointer to vmk_AddrCookie
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
 
 /*! \brief  Update supported link modes for reporting to VMK interface
 **

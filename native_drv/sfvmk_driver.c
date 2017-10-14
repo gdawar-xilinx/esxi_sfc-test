@@ -452,6 +452,58 @@ done:
   return status;
 }
 
+/*! \brief  Routine to update driver information
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: none
+*/
+static void
+sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter)
+{
+  vmk_UplinkDriverInfo *pDrvInfo;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+  efx_nic_fw_info_t nicFwVer;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  vmk_Memset(&nicFwVer, 0, sizeof(efx_nic_fw_info_t));
+
+  status  = efx_nic_get_fw_version(pAdapter->pNic, &nicFwVer);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_get_fw_version failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  pDrvInfo = &pAdapter->uplink.sharedData.driverInfo;
+
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+  vmk_NameInitialize(&pDrvInfo->driver, sfvmk_modInfo.driverName.string);
+  vmk_NameInitialize(&pDrvInfo->moduleInterface, "native");
+  vmk_NameInitialize(&pDrvInfo->version, SFVMK_DRIVER_VERSION_STRING);
+
+  status = vmk_NameFormat(&pDrvInfo->firmwareVersion, "%u.%u.%u.%u rx%u tx%u",
+                          nicFwVer.enfi_mc_fw_version[0],
+                          nicFwVer.enfi_mc_fw_version[1],
+                          nicFwVer.enfi_mc_fw_version[2],
+                          nicFwVer.enfi_mc_fw_version[3],
+                          nicFwVer.enfi_rx_dpcpu_fw_id,
+                          nicFwVer.enfi_tx_dpcpu_fw_id);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_NameFormat failed status: %s",
+                        vmk_StatusToString(status));
+  }
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -624,6 +676,8 @@ sfvmk_attachDevice(vmk_Device dev)
                         vmk_StatusToString(status));
     goto failed_uplinkData_init;
   }
+
+  sfvmk_updateDrvInfo(pAdapter);
 
   status = vmk_DeviceSetAttachedDriverData(dev, pAdapter);
   if (status != VMK_OK) {

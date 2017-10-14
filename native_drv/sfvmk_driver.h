@@ -91,6 +91,7 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              numDesc;
   /* EVQ state */
   sfvmk_evqState_t        state;
+  vmk_NetPoll             netPoll;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_portState_e {
@@ -266,5 +267,17 @@ void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
 
+/* Locking mechanism to serialize multiple writers's access to protected sharedData area */
+static inline void sfvmk_sharedAreaBeginWrite(sfvmk_uplink_t *pUplink)
+{
+  vmk_SpinlockLock(pUplink->shareDataLock);
+  vmk_VersionedAtomicBeginWrite(&pUplink->sharedData.lock);
+}
+
+static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
+{
+  vmk_VersionedAtomicEndWrite(&pUplink->sharedData.lock);
+  vmk_SpinlockUnlock(pUplink->shareDataLock);
+}
 
 #endif /* __SFVMK_DRIVER_H__ */

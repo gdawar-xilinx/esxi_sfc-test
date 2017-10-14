@@ -80,9 +80,9 @@ module_def = {
                        ],
    "cc warnings"     : [ "-Winline", ],
    "cc flags"        : [ ],
-   "cc defs"         : { 'SFC_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
-                         'SFC_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,
-                         'SFC_DRIVER_VERSION_NUM=%s' % (driver_ver_hex)       : None,
+   "cc defs"         : { 'SFVMK_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
+                         'SFVMK_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,
+                         'SFVMK_DRIVER_VERSION_NUM=%s' % (driver_ver_hex)       : None,
 
                        },
 }

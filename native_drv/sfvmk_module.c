@@ -73,7 +73,7 @@ init_module(void)
   /* Populate sfvmk_ModInfo fields */
 
   /* 1. Driver Name */
-  vmk_NameInitialize(&sfvmk_modInfo.driverName, SFC_DRIVER_NAME);
+  vmk_NameInitialize(&sfvmk_modInfo.driverName, SFVMK_DRIVER_NAME);
 
   /* 2. Heap */
   status = vmk_HeapDetermineMaxSize(allocDesc,
@@ -112,7 +112,7 @@ init_module(void)
 
   logThrottledProps.type = VMK_LOG_THROTTLE_COUNT;
   logProps.throttle = &logThrottledProps;
-  vmk_NameInitialize(&logProps.name, SFC_DRIVER_NAME"_throttled");
+  vmk_NameInitialize(&logProps.name, SFVMK_DRIVER_NAME"_throttled");
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logThrottledID);
   if (status != VMK_OK) {

@@ -763,21 +763,102 @@ sfvmk_startDevice(vmk_Device dev)
   return VMK_OK;
 }
 
+/*! \brief  Routine to unregister the device.
+**
+** \param[in]  device handle.
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_removeUplinkDevice(vmk_Device device)
+{
+  return vmk_DeviceUnregister(device);
+}
+
+static vmk_DeviceOps sfvmk_uplinkDeviceOps = {
+  .removeDevice = sfvmk_removeUplinkDevice
+};
+
 /*! \brief: Callback routine for the device layer to notify the driver to
 **          scan for new device
 **
-** \param[in]  dev  pointer to vmkDevice
+** \param[in]  device  pointer to vmkDevice
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
 static VMK_ReturnStatus
 sfvmk_scanDevice(vmk_Device device)
 {
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
-  return VMK_OK;
-}
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_AddrCookie data;
+  sfvmk_adapter_t *pAdapter = NULL;
+  vmk_Name busName;
+  vmk_DeviceProps deviceProps = {0};
 
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
+
+  status = vmk_DeviceGetAttachedDriverData(device, &data);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("vmk_DeviceGetAttachedDriverData failed status: %s",
+                vmk_StatusToString(status));
+    goto done;
+  }
+
+  pAdapter = (sfvmk_adapter_t *)data.ptr;
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  status = vmk_NameInitialize(&busName, VMK_LOGICAL_BUS_NAME);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_NameInitialize failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = vmk_BusTypeFind(&busName, &pAdapter->uplink.deviceID.busType);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_BusTypeFind failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = vmk_LogicalCreateBusAddress(sfvmk_modInfo.driverID,
+                                       pAdapter->device,
+                                       0,
+                                       &pAdapter->uplink.deviceID.busAddress,
+                                       &pAdapter->uplink.deviceID.busAddressLen);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_LogicalCreateBusAddress failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pAdapter->uplink.deviceID.busIdentifier = VMK_UPLINK_DEVICE_IDENTIFIER;
+  pAdapter->uplink.deviceID.busIdentifierLen = sizeof(VMK_UPLINK_DEVICE_IDENTIFIER) - 1;
+
+  deviceProps.deviceID = &pAdapter->uplink.deviceID;
+  deviceProps.deviceOps = &sfvmk_uplinkDeviceOps;
+  deviceProps.registeringDriver = sfvmk_modInfo.driverID;
+  deviceProps.registrationData.ptr = &pAdapter->uplink.regData;
+  deviceProps.registeringDriverData.ptr = pAdapter;
+
+  status = vmk_DeviceRegister(&deviceProps, device, &pAdapter->uplink.uplinkDevice);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_DeviceRegister failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  vmk_LogicalFreeBusAddress(sfvmk_modInfo.driverID, pAdapter->uplink.deviceID.busAddress);
+  vmk_BusTypeRelease(pAdapter->uplink.deviceID.busType);
+
+done:
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
+
+  return status;
+}
 
 /*! \brief : Callback routine for the device layer to notify the driver to
 ** release control of a driver.

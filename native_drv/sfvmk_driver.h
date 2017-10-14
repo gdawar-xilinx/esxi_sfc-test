@@ -155,6 +155,8 @@ typedef struct sfvmk_uplink_s {
   vmk_Lock                   shareDataLock;
   /* Shared queue information */
   vmk_UplinkSharedQueueInfo  queueInfo;
+  vmk_Device                 uplinkDevice;
+  vmk_DeviceID               deviceID;
 } sfvmk_uplink_t;
 
 /* Adapter states */

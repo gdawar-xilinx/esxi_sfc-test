@@ -19,8 +19,16 @@
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
+/* Lock rank is based on the order in which locks are typically acquired.
+ * A lock with higher rank can be acquired while holding a lock with a lower rank.
+ * NIC and BAR locks are taken by common code and hence are at the highest rank.
+ * Rest all the locks are having lower rank than the MCDI lock as MCDI can be invoked
+ * at the lowest most level of the code.
+ * Uplink, RXQ, TXQ and Port are the logical order in which the locks are taken.
+ */
 typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_UPLINK_LOCK,
   SFVMK_SPINLOCK_RANK_RXQ_LOCK,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
   SFVMK_SPINLOCK_RANK_PORT_LOCK,
@@ -134,6 +142,20 @@ typedef struct sfvmk_rxq_s {
   sfvmk_rxqState_t  state;
 } sfvmk_rxq_t;
 
+typedef struct sfvmk_uplink_s {
+  /* Structure advertising a mode (speed/duplex/media) that is supported by an uplink. */
+  vmk_UplinkSupportedMode    supportedModes[EFX_PHY_CAP_NTYPES];
+  vmk_uint32                 numSupportedModes;
+  /* Uplink registration data. */
+  vmk_UplinkRegData          regData;
+  /* Data shared between uplink layer and NIC driver. */
+  vmk_UplinkSharedData       sharedData;
+  /* Serializes multiple writers. */
+  vmk_Lock                   shareDataLock;
+  /* Shared queue information */
+  vmk_UplinkSharedQueueInfo  queueInfo;
+} sfvmk_uplink_t;
+
 /* Adapter states */
 typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_UNINITIALIZED = 0,
@@ -144,51 +166,55 @@ typedef enum sfvmk_adapterState_e {
 /* Adapter structure */
 typedef struct sfvmk_adapter_s {
   /* Device handle passed by VMK */
-  vmk_Device               device;
+  vmk_Device                 device;
   /* DMA engine handle */
-  vmk_DMAEngine            dmaEngine;
+  vmk_DMAEngine              dmaEngine;
   /* Adapter state */
-  sfvmk_adapterState_t     state;
+  sfvmk_adapterState_t       state;
   /* PCI device handle */
-  vmk_PCIDevice            pciDevice;
+  vmk_PCIDevice              pciDevice;
   /* PCI vendor/device id */
-  vmk_PCIDeviceID          pciDeviceID;
+  vmk_PCIDeviceID            pciDeviceID;
   /* PCI device Address (SBDF) */
-  vmk_PCIDeviceAddr        pciDeviceAddr;
+  vmk_PCIDeviceAddr          pciDeviceAddr;
   /* PCI device name */
-  vmk_Name                 pciDeviceName;
+  vmk_Name                   pciDeviceName;
 
   /* EFX /efsys related information */
   /* EFX family */
-  efx_family_t             efxFamily;
+  efx_family_t               efxFamily;
   /* Struct to store mapped memory BAR info */
-  efsys_bar_t              bar;
+  efsys_bar_t                bar;
   /* Lock required by common code nic module */
-  efsys_lock_t             nicLock;
-  efx_nic_t                *pNic;
-  sfvmk_mcdi_t             mcdi;
-  sfvmk_intr_t             intr;
+  efsys_lock_t               nicLock;
+  efx_nic_t                  *pNic;
+  sfvmk_mcdi_t               mcdi;
+  sfvmk_intr_t               intr;
+
   /* Ptr to array of numEvqsAllocated EVQs */
-  sfvmk_evq_t              **ppEvq;
-  vmk_uint32               numEvqsAllocated;
-  vmk_uint32               numEvqsDesired;
-  vmk_uint32               numEvqsAllotted;
-  vmk_uint32               numTxqsAllotted;
-  vmk_uint32               numRxqsAllotted;
+  sfvmk_evq_t                **ppEvq;
+  vmk_uint32                 numEvqsAllocated;
+  vmk_uint32                 numEvqsDesired;
+  vmk_uint32                 numEvqsAllotted;
+  vmk_uint32                 numTxqsAllotted;
+  vmk_uint32                 numRxqsAllotted;
 
-  vmk_uint32               numRxqBuffDesc;
-  vmk_uint32               numTxqBuffDesc;
+  vmk_uint32                 numRxqBuffDesc;
+  vmk_uint32                 numTxqBuffDesc;
 
-  sfvmk_txq_t              **ppTxq;
-  vmk_uint32               numTxqsAllocated;
+  /* Ptr to array of numTxqsAllocated TXQs */
+  sfvmk_txq_t                **ppTxq;
+  vmk_uint32                 numTxqsAllocated;
 
-  sfvmk_rxq_t              **ppRxq;
-  vmk_uint32               numRxqsAllocated;
-  sfvmk_port_t             port;
+  /* Ptr to array of numRxqsAllocated RXQs */
+  sfvmk_rxq_t                **ppRxq;
+  vmk_uint32                 numRxqsAllocated;
+  sfvmk_port_t               port;
 
+  sfvmk_uplink_t             uplink;
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
-  vmk_Name                 devName;
+  vmk_Name                   devName;
 } sfvmk_adapter_t;
 
 /* Functions for interrupt handling */
@@ -236,5 +262,9 @@ void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
 /* Functions for RXQ module handling */
 VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
+
+VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
+void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
+
 
 #endif /* __SFVMK_DRIVER_H__ */

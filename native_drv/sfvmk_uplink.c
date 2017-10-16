@@ -59,10 +59,31 @@ static VMK_ReturnStatus
 sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if ((pAdapter == NULL) || (uplinkHandle == NULL)) {
+    SFVMK_ERROR("Invalid argument(s)");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->uplink.handle != NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Already associated with uplink");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pAdapter->uplink.handle = uplinkHandle;
+  pAdapter->uplink.name = vmk_UplinkNameGet(uplinkHandle);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "%s associated",  pAdapter->uplink.name.string);
+
+  status = VMK_OK;
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -79,10 +100,26 @@ static VMK_ReturnStatus
 sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->uplink.handle == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Not associated with uplink");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pAdapter->uplink.handle = NULL;
+  status = VMK_OK;
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

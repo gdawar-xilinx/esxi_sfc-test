@@ -42,6 +42,8 @@ module_def = {
                          "sfvmk_port.c",
                          "sfvmk_utils.c",
                          "sfvmk_ut.c",
+                         "sfvmk_mgmt_interface.c",
+                         "sfvmk_mgmt.c",
                          "imported/ef10_ev.c",
                          "imported/ef10_filter.c",
                          "imported/ef10_intr.c",

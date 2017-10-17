@@ -32,6 +32,7 @@ typedef struct sfvmk_modInfo_s {
    vmk_LockDomainID   lockDomain;
    vmk_DumpFileHandle dumpFile;
    vmk_ListLinks      adapterList;
+   vmk_MgmtHandle     mgmtHandle;
 } sfvmk_modInfo_t;
 
 extern sfvmk_modInfo_t sfvmk_modInfo;

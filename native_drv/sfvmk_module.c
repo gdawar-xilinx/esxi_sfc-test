@@ -6,6 +6,9 @@
  ************************************************************************/
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
+#include "sfvmk_mgmt_interface.h"
+
+extern const vmk_MgmtApiSignature sfvmk_mgmtSig;
 
 sfvmk_modInfo_t sfvmk_modInfo = {
    .heapID           = VMK_INVALID_HEAP_ID,
@@ -13,11 +16,17 @@ sfvmk_modInfo_t sfvmk_modInfo = {
    .logID            = VMK_INVALID_LOG_HANDLE,
    .logThrottledID   = VMK_INVALID_LOG_HANDLE,
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
+   .mgmtHandle       = NULL,
 };
 
 static void
 sfvmk_modInfoCleanup(void)
 {
+  if (sfvmk_modInfo.mgmtHandle) {
+    vmk_MgmtDestroy(sfvmk_modInfo.mgmtHandle);
+    sfvmk_modInfo.mgmtHandle = NULL;
+  }
+
   if (sfvmk_modInfo.driverID != NULL) {
     sfvmk_driverUnregister();
     sfvmk_modInfo.driverID = NULL;
@@ -61,6 +70,8 @@ init_module(void)
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
   vmk_MemPoolProps memPoolProps;
+  vmk_MgmtProps mgmtProps;
+
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
       /* size, alignment, count */
@@ -154,6 +165,21 @@ init_module(void)
     goto failed_driver_register;
   }
 
+  mgmtProps.modId = vmk_ModuleCurrentID;
+  mgmtProps.heapId = sfvmk_modInfo.heapID;
+  mgmtProps.sig = (vmk_MgmtApiSignature *)&sfvmk_mgmtSig;
+  mgmtProps.cleanupFn = NULL;
+  mgmtProps.sessionAnnounceFn = NULL;
+  mgmtProps.sessionCleanupFn = NULL;
+  mgmtProps.handleCookie = 0;
+
+  status = vmk_MgmtInit(&mgmtProps, &sfvmk_modInfo.mgmtHandle);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of mgmtProps failed: (%s)",
+                 vmk_StatusToString(status));
+    goto failed_mgmt_init;
+  }
+
   vmk_LogMessage("Initialization of SFC  driver successful");
   return status;
 
@@ -164,6 +190,7 @@ failed_throttled_log_register:
 failed_lock_domain_create:
 failed_mem_pool_create:
 failed_driver_register:
+failed_mgmt_init:
   sfvmk_modInfoCleanup();
 
   return status;

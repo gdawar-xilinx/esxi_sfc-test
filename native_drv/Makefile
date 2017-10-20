@@ -86,7 +86,6 @@ imported/%:
 	@chmod a-w $@
 
 imported_dir:
-	@$(RM) -rf $(IMPORTED_CODE)
 	@mkdir -p $(IMPORTED_CODE)
 
 imported_code:	imported_dir $(IMPORTED_FILES)

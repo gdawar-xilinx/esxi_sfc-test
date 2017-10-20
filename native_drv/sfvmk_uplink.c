@@ -698,6 +698,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
       VMK_ASSERT_BUG(0);
    }
 
+   status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_MOD_TX_HDRS,
+                                  NULL);
+   if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter,
+                     "Modify Tx Hdrs cap register failed with error %s",
+                     vmk_StatusToString(status));
+      VMK_ASSERT_BUG(0);
+   }
+
+
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
   return (status);

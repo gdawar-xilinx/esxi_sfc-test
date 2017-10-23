@@ -273,9 +273,34 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
   return status;
 }
 
+/*! \brief Set the driver limit in fw.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_setDrvLimits(sfvmk_adapter_t *pAdapter)
+{
+  efx_drv_limits_t limits;
+
+  vmk_Memset(&limits, 0, sizeof(limits));
+
+  /* The resource limits configured here use the allotted resource values
+   * obtained when the NIC was probed. Request fixed sizes here to ensure
+   * that the allocated resources do not change across an MC reset.
+   */
+  limits.edl_min_evq_count = limits.edl_max_evq_count = pAdapter->numEvqsAllotted;
+  limits.edl_min_txq_count = limits.edl_max_txq_count = pAdapter->numTxqsAllotted;
+  limits.edl_min_rxq_count = limits.edl_max_rxq_count = pAdapter->numRxqsAllotted;
+
+  return efx_nic_set_drv_limits(pAdapter->pNic, &limits);
+}
+
 /*! \brief uplink callback function to start the IO operations.
 **
-** \param[in]  cookie  pointer to vmk_AddrCookie
+** \param[in]  cookie  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK <success> error code <failure>
 **
@@ -284,10 +309,41 @@ static VMK_ReturnStatus
 sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *) cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
+    status = VMK_FAILURE;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is already started");
+    goto done;
+  }
+
+  /* Set required resource limits */
+  status = sfvmk_setDrvLimits(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setDrvLimits failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = efx_nic_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
+  status = VMK_OK;
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -304,10 +360,28 @@ static VMK_ReturnStatus
 sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    status = VMK_FAILURE;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
+    goto done;
+  }
+
+  pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
+
+  efx_nic_fini(pAdapter->pNic);
+  status = VMK_OK;
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

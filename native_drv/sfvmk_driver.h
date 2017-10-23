@@ -59,6 +59,7 @@ typedef struct sfvmk_mcdi_s {
 typedef enum sfvmk_intrState_e {
   SFVMK_INTR_STATE_UNINITIALIZED = 0,
   SFVMK_INTR_STATE_INITIALIZED,
+  SFVMK_INTR_STATE_STARTED
 } sfvmk_intrState_t;
 
 /* Data structure for interrupt handling */
@@ -226,6 +227,8 @@ typedef struct sfvmk_adapter_s {
 /* Functions for interrupt handling */
 VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_intrFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_intrStart(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_intrStop(sfvmk_adapter_t *pAdapter);
 
 /* Spinlock  handlers */
 VMK_ReturnStatus

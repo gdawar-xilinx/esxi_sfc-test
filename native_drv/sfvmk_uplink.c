@@ -340,8 +340,19 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto done;
   }
 
+  status = sfvmk_intrStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_intrStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_intr_start;
+  }
+
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
   status = VMK_OK;
+  goto done;
+
+failed_intr_start:
+  efx_nic_fini(pAdapter->pNic);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -378,7 +389,15 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
+  status = sfvmk_intrStop(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_intrStop failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
   efx_nic_fini(pAdapter->pNic);
+
   status = VMK_OK;
 
 done:

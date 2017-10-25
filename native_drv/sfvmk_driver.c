@@ -328,10 +328,11 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
   }
 
   evqMax = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
-  /* TODO: hardcoing to 1 event queue will be removed after multiq support */
-  evqMax = 1;
 
-  if (pAdapter->maxRssChannels > 0)
+   /* TODO: Initilization would be done using module param 'rss_channels' */
+  pAdapter->maxRssChannels = 1; /* RSS channels=1 indicate that RSS is disabled */
+
+  if (pAdapter->maxRssChannels > 1)
     evqMax = MIN(evqMax, pAdapter->maxRssChannels);
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;

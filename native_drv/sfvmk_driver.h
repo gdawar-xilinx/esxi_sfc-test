@@ -62,6 +62,9 @@ extern void             sfvmk_driverUnregister(void);
 
 #define SFVMK_ADAPTER_TABLE_SIZE  64
 
+/* Bitmask for supported features */
+#define SFVMK_RSS		(1 << 0)
+
 /* ring size for TX and RX */
 extern int sfvmk_txRingEntries;
 extern int sfvmk_rxRingEntries;
@@ -90,6 +93,9 @@ typedef struct sfvmk_adapter_s {
 
   /* Adapter lock */
   vmk_Mutex         lock;
+
+  /* Supported Features */
+  vmk_uint32         features;
 
   /* EFX /efsys related information */
   efx_family_t      efxFamily;

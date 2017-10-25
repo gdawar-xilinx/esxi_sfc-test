@@ -247,7 +247,8 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size,
 
   pEvq->rxDone++;
   SFVMK_DBG(pAdapter, SFVMK_DBG_EVQ, SFVMK_LOG_LEVEL_DBG,
-            "pending %d, Completed %d", pRxq->pending , pRxq->completed);
+            "pending %d, Completed %d, pEvq->index %d,  pRxq->index: %d",
+             pRxq->pending , pRxq->completed, pEvq->index,  pRxq->index);
 
   if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
     sfvmk_evqComplete(pEvq, B_FALSE);

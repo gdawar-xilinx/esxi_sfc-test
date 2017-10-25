@@ -54,6 +54,8 @@ int sfvmk_rxRingEntries = SFVMK_NDESCS;
 extern void sfvmk_run_ut();
 #endif
 
+#define SFVMK_DEFAULT_MAX_RSS_CHANNELS 4
+
 /* driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
 static VMK_ReturnStatus sfvmk_detachDevice(vmk_Device device);
@@ -329,11 +331,15 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 
   evqMax = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
 
-   /* TODO: Initilization would be done using module param 'rss_channels' */
-  pAdapter->maxRssChannels = 1; /* RSS channels=1 indicate that RSS is disabled */
+  /* TODO: Initilization would be done using module param 'rss_channels' */
+  pAdapter->maxRssChannels = SFVMK_DEFAULT_MAX_RSS_CHANNELS;
 
-  if (pAdapter->maxRssChannels > 1)
+  /* RSS channels > 1 indicates that RSS is enabled */
+  /* TODO:evqMax initialization will change when NetQ + RSS support will be added */
+  if (pAdapter->maxRssChannels > 1) {
+    pAdapter->features |= SFVMK_RSS;
     evqMax = MIN(evqMax, pAdapter->maxRssChannels);
+  }
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
   limits.edl_max_evq_count = evqMax;
@@ -635,6 +641,7 @@ sfvmk_attachDevice(vmk_Device dev)
     goto sfvmk_adapter_alloc_fail;
   }
 
+  pAdapter->features = 0;
   pAdapter->maxRssChannels = 0;
   pAdapter->device = dev;
 

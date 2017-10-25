@@ -28,8 +28,8 @@
 
 #define SFVMK_RX_BATCH  128
 
-/* max number of rxq */
-#define SFVMK_RX_SCALE_MAX  EFX_MAXRSS
+/* Number of entries in the indirection table */
+#define SFVMK_RX_SCALE_MAX  EFX_RSS_TBL_SIZE
 
 /* flush state of rxq*/
 enum sfvmk_flushState {

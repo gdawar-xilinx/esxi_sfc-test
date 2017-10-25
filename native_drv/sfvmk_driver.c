@@ -46,6 +46,12 @@ sfvmk_modParams_t modParams = {
 SFVMK_MOD_PARAMS_LIST
 #undef PARAMS
 
+#define SFVMK_DEFAULT_MAX_RSS_CHANNELS 4
+
+int rss_channels = SFVMK_DEFAULT_MAX_RSS_CHANNELS;
+VMK_MODPARAM(rss_channels, int, "max number of rss channels (default : 4 ,"
+                                  "< 1: Disable, 0xff : same as number of available pCPU > )");
+
 /* ring size for TX and RX */
 int sfvmk_txRingEntries = SFVMK_NDESCS;
 int sfvmk_rxRingEntries = SFVMK_NDESCS;
@@ -53,8 +59,6 @@ int sfvmk_rxRingEntries = SFVMK_NDESCS;
 #ifdef SFVMK_WITH_UNIT_TESTS
 extern void sfvmk_run_ut();
 #endif
-
-#define SFVMK_DEFAULT_MAX_RSS_CHANNELS 4
 
 /* driver callback functions */
 static VMK_ReturnStatus sfvmk_attachDevice(vmk_Device device);
@@ -331,14 +335,18 @@ sfvmk_estimateRsrcLimits(sfvmk_adapter_t *pAdapter)
 
   evqMax = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
 
-  /* TODO: Initilization would be done using module param 'rss_channels' */
-  pAdapter->maxRssChannels = SFVMK_DEFAULT_MAX_RSS_CHANNELS;
+  pAdapter->maxRssChannels = rss_channels;
 
-  /* RSS channels > 1 indicates that RSS is enabled */
-  /* TODO:evqMax initialization will change when NetQ + RSS support will be added */
+  /* RSS channels > 1 indicates that RSS is enabled
+   * If it is more than number of core then max number of 
+   * rss channel would be same as no of availble pCPUs */
   if (pAdapter->maxRssChannels > 1) {
     pAdapter->features |= SFVMK_RSS;
     evqMax = MIN(evqMax, pAdapter->maxRssChannels);
+  }
+  else {
+    /* TODO: Need to be updated with the netqueue support */
+    evqMax = 1;
   }
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;

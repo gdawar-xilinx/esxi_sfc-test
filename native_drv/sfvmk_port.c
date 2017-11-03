@@ -451,6 +451,8 @@ VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
   struct sfvmk_port_s *pPort;
   efsys_mem_t *pMacStatsBuf;
   VMK_ReturnStatus status = VMK_OK;
+  vmk_uint32 numMacStats;
+  size_t macStatsSize;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
@@ -472,16 +474,19 @@ VMK_ReturnStatus sfvmk_portInit(struct sfvmk_adapter_s *pAdapter)
   }
 
   /* Allocate DMA space. */
-  pMacStatsBuf->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, EFX_MAC_STATS_SIZE, &pMacStatsBuf->ioElem.ioAddr);
+  numMacStats = efx_nic_cfg_get(pAdapter->pNic)->enc_mac_stats_nstats;
+  macStatsSize = P2ROUNDUP(numMacStats * sizeof(uint64_t), EFX_BUF_SIZE);
+
+  pMacStatsBuf->pEsmBase = sfvmk_allocCoherentDMAMapping(pAdapter->dmaEngine, macStatsSize, &pMacStatsBuf->ioElem.ioAddr);
   if(NULL == pMacStatsBuf->pEsmBase) {
     SFVMK_ERR(pAdapter,"failed to allocate DMA memory for pMacStatsBuf enteries");
     status = VMK_NO_MEMORY;
     goto sfvmk_dma_alloc_fail;
   }
 
-  pMacStatsBuf->ioElem.length = EFX_MAC_STATS_SIZE;
+  pMacStatsBuf->ioElem.length = macStatsSize;
   pMacStatsBuf->esmHandle = pAdapter->dmaEngine;
-  memset(pAdapter->adapterStats, 0, sizeof(EFX_MAC_NSTATS * sizeof(uint64_t)));
+  memset(pAdapter->adapterStats, 0, EFX_MAC_NSTATS * sizeof(uint64_t));
 
   status = sfvmk_mutexInit("port", &pPort->lock);
   if (status != VMK_OK) {

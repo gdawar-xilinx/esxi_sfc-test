@@ -7,6 +7,10 @@
 
 #include "sfvmk_driver.h"
 
+/* Wait time  for common TXQ to stop */
+#define SFVMK_TXQ_STOP_POLL_TIME_USEC   VMK_USEC_PER_MSEC
+#define SFVMK_TXQ_STOP_POLL_COUNT       200
+
 /*! \brief  Allocate resources required for a particular TX queue.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -284,3 +288,301 @@ sfvmk_txFini(sfvmk_adapter_t *pAdapter)
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
 }
+
+/*! \brief Flush and destroy common code TXQ.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      TXQ index
+**
+** \return: void
+*/
+static void
+sfvmk_txqStop(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_txq_t *pTxq = NULL;
+  sfvmk_evq_t *pEvq = NULL;
+  vmk_uint32 count;
+  VMK_ReturnStatus status;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (qIndex >= pAdapter->numTxqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ index %u", qIndex);
+    goto done;
+  }
+
+  if (pAdapter->ppTxq != NULL)
+    pTxq = pAdapter->ppTxq[qIndex];
+
+  if (pTxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL transmit queue ptr");
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    goto done;
+  }
+
+  vmk_SpinlockLock(pTxq->lock);
+
+  if (pTxq->state != SFVMK_TXQ_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ is not yet started");
+    vmk_SpinlockUnlock(pTxq->lock);
+    goto done;
+  }
+  pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
+
+  if (pTxq->flushState == SFVMK_FLUSH_STATE_DONE) {
+    vmk_SpinlockUnlock(pTxq->lock);
+    goto done;
+  }
+  pTxq->flushState = SFVMK_FLUSH_STATE_PENDING;
+
+  vmk_SpinlockUnlock(pTxq->lock);
+
+  /* Flush the transmit queue. */
+  status = efx_tx_qflush(pTxq->pCommonTxq);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tx_qflush failed status: %s",
+                        vmk_StatusToString(status));
+  } else {
+    count = 0;
+    do {
+      status = vmk_WorldSleep(SFVMK_TXQ_STOP_POLL_TIME_USEC);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                            vmk_StatusToString(status));
+        break;
+      }
+
+      vmk_SpinlockLock(pTxq->lock);
+      if (pTxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
+        vmk_SpinlockUnlock(pTxq->lock);
+        break;
+      }
+      vmk_SpinlockUnlock(pTxq->lock);
+
+    } while (++count < SFVMK_TXQ_STOP_POLL_COUNT);
+  }
+
+  vmk_SpinlockLock(pTxq->lock);
+  if (pTxq->flushState != SFVMK_FLUSH_STATE_DONE) {
+    /* Flush timeout */
+    pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
+  }
+  vmk_SpinlockUnlock(pTxq->lock);
+
+  /* Destroy the common code transmit queue. */
+  efx_tx_qdestroy(pTxq->pCommonTxq);
+  pTxq->pCommonTxq = NULL;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
+
+}
+
+/*! \brief Flush and destroy all common code TXQs.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: void
+**
+*/
+void
+sfvmk_txStop(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 qIndex;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    goto done;
+  }
+
+  qIndex = pAdapter->numTxqsAllocated;
+  while (qIndex--)
+    sfvmk_txqStop(pAdapter, qIndex);
+
+  /* Tear down the transmit module */
+  efx_tx_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+}
+
+/*! \brief Create common code TXQ.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      TXQ index
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_txq_t *pTxq = NULL;
+  vmk_uint32 flags;
+  vmk_uint32 descIndex;
+  sfvmk_evq_t *pEvq = NULL;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (qIndex >= pAdapter->numTxqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue index %u", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->ppTxq != NULL)
+    pTxq = pAdapter->ppTxq[qIndex];
+
+  if (pTxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL transmit queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[pTxq->evqIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL Event queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  vmk_SpinlockLock(pTxq->lock);
+  if (pTxq->state != SFVMK_TXQ_STATE_INITIALIZED) {
+    vmk_SpinlockUnlock(pTxq->lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ is not initialized");
+    status = VMK_FAILURE;
+    goto done;
+  }
+  vmk_SpinlockUnlock(pTxq->lock);
+
+  flags = EFX_TXQ_CKSUM_IPV4 | EFX_TXQ_CKSUM_TCPUDP;
+
+  /* Create the common code transmit queue. */
+  status = efx_tx_qcreate(pAdapter->pNic, qIndex,
+                          pTxq->type, &pTxq->mem,
+                          pAdapter->numTxqBuffDesc, 0, flags,
+                          pEvq->pCommonEvq,
+                          &pTxq->pCommonTxq, &descIndex);
+  if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_tx_qcreate(%u) failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto done;
+  }
+
+  /* Enable the transmit queue. */
+  efx_tx_qenable(pTxq->pCommonTxq);
+
+  vmk_SpinlockLock(pTxq->lock);
+  pTxq->state = SFVMK_TXQ_STATE_STARTED;
+  pTxq->flushState = SFVMK_FLUSH_STATE_REQUIRED;
+  vmk_SpinlockUnlock(pTxq->lock);
+
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
+
+  return status;
+}
+
+/*! \brief creates txq module for all allocated txqs.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_txStart(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 qIndex;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Initialize the common code transmit module. */
+
+  status = efx_tx_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"efx_tx_init failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto failed_tx_init;
+  }
+
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated; qIndex++) {
+    status = sfvmk_txqStart(pAdapter, qIndex);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqStart(%u) failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto failed_txq_start;
+    }
+  }
+
+  goto done;
+
+
+failed_txq_start:
+  while (qIndex)
+    sfvmk_txqStop(pAdapter, --qIndex);
+
+  efx_tx_fini(pAdapter->pNic);
+
+failed_tx_init:
+  pAdapter->numTxqsAllocated = 0;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+
+  return status;
+
+}
+
+/*! \brief Change the flush state to done.
+**
+** \param[in]  pTxq    pointer to txq
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_txqFlushDone(sfvmk_txq_t *pTxq)
+{
+  if (pTxq == NULL) {
+    SFVMK_ERROR("NULL TXQ ptr");
+    return VMK_FAILURE;
+  }
+
+  vmk_SpinlockLock(pTxq->lock);
+  pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
+  vmk_SpinlockUnlock(pTxq->lock);
+
+  return VMK_OK;
+}
+
+

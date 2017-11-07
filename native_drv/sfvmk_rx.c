@@ -6,6 +6,10 @@
  ************************************************************************/
 #include "sfvmk_driver.h"
 
+/* Wait time  for common RXQ to stop */
+#define SFVMK_RXQ_STOP_POLL_TIME_USEC   VMK_USEC_PER_MSEC
+#define SFVMK_RXQ_STOP_POLL_COUNT       200
+
 /*! \brief     Initialize all resources required for a RXQ
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
@@ -193,12 +197,18 @@ sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
     }
   }
 
+  /* Set default RXQ index */
+  pAdapter->defRxqIndex = 0;
+
   goto done;
 
 failed_rxq_init:
   /* Tear down the receive queue(s). */
   while (qIndex > 0)
     sfvmk_rxqFini(pAdapter, --qIndex);
+
+  vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->ppRxq);
+  pAdapter->ppRxq = NULL;
 
 failed_rxq_alloc:
   pAdapter->numRxqsAllocated = 0;
@@ -238,3 +248,328 @@ void sfvmk_rxFini(sfvmk_adapter_t *pAdapter)
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
 }
+
+/*! \brief  Create common code RXQ.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      RXQ Index
+**
+** \return: VMK_OK <success> or error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_rxq_t *pRxq = NULL;
+  sfvmk_evq_t *pEvq = NULL;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (qIndex >= pAdapter->numRxqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid RXQ index %u", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->ppRxq != NULL)
+    pRxq = pAdapter->ppRxq[qIndex];
+
+  if (pRxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL receive queue ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* Create the common code receive queue. */
+  status = efx_rx_qcreate(pAdapter->pNic,
+                          qIndex, 0,
+                          EFX_RXQ_TYPE_DEFAULT,
+                          &pRxq->mem,
+                          pAdapter->numRxqBuffDesc, 0,
+                          pEvq->pCommonEvq,
+                          &pRxq->pCommonRxq);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_qcreate(%u) failed status: %s",
+                        qIndex, vmk_StatusToString(status));
+    goto done;
+  }
+
+  efx_rx_qenable(pRxq->pCommonRxq);
+
+  vmk_SpinlockLock(pRxq->lock);
+  pRxq->state = SFVMK_RXQ_STATE_STARTED;
+  pRxq->flushState = SFVMK_FLUSH_STATE_REQUIRED;
+  vmk_SpinlockUnlock(pRxq->lock);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX, "qIndex[%u]", qIndex);
+
+  return status;
+}
+
+/*! \brief  Flush and destroy common code RXQ.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      RXQ Index
+**
+** \return: void
+*/
+static void
+sfvmk_rxqStop(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_rxq_t *pRxq = NULL;
+  sfvmk_evq_t *pEvq = NULL;
+  vmk_uint32 count;
+  vmk_uint32 retry = 3;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (pAdapter->ppRxq != NULL)
+    pRxq = pAdapter->ppRxq[qIndex];
+
+  if (pRxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL receive queue ptr");
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    goto done;
+  }
+
+  vmk_SpinlockLock(pRxq->lock);
+  pRxq->state = SFVMK_RXQ_STATE_INITIALIZED;
+  vmk_SpinlockUnlock(pRxq->lock);
+
+  while (1) {
+
+    vmk_SpinlockLock(pRxq->lock);
+    if ((pRxq->flushState == SFVMK_FLUSH_STATE_DONE) || (retry == 0)) {
+      vmk_SpinlockUnlock(pRxq->lock);
+      break;
+    }
+    pRxq->flushState = SFVMK_FLUSH_STATE_PENDING;
+    vmk_SpinlockUnlock(pRxq->lock);
+
+    /* Flush the receive queue */
+    status = efx_rx_qflush(pRxq->pCommonRxq);
+    if (status != VMK_OK) {
+      vmk_SpinlockLock(pRxq->lock);
+      pRxq->flushState = SFVMK_FLUSH_STATE_FAILED;
+      vmk_SpinlockUnlock(pRxq->lock);
+      break;
+    }
+
+    count = 0;
+    do {
+      status = vmk_WorldSleep(SFVMK_RXQ_STOP_POLL_TIME_USEC);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                            vmk_StatusToString(status));
+        break;
+      }
+
+      vmk_SpinlockLock(pRxq->lock);
+      /* Check to see if the flush event has been processed */
+      if (pRxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
+        vmk_SpinlockUnlock(pRxq->lock);
+        break;
+      }
+      vmk_SpinlockUnlock(pRxq->lock);
+
+    } while (++count < SFVMK_RXQ_STOP_POLL_COUNT);
+
+    vmk_SpinlockLock(pRxq->lock);
+    /* Flush timeout neither done nor failed */
+    if (pRxq->flushState == SFVMK_FLUSH_STATE_PENDING) {
+      pRxq->flushState = SFVMK_FLUSH_STATE_DONE;
+    }
+    vmk_SpinlockUnlock(pRxq->lock);
+
+    retry--;
+  }
+
+  vmk_SpinlockLock(pRxq->lock);
+  if (pRxq->flushState == SFVMK_FLUSH_STATE_FAILED) {
+    pRxq->flushState = SFVMK_FLUSH_STATE_DONE;
+  }
+  vmk_SpinlockUnlock(pRxq->lock);
+
+  /* Destroy the common code receive queue. */
+  efx_rx_qdestroy(pRxq->pCommonRxq);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX, "qIndex[%d]" , qIndex);
+}
+
+/*! \brief  Create all Common code RXQs.
+**
+** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
+{
+  const efx_nic_cfg_t *pNicCfg;
+  size_t hdrlen;
+  size_t align;
+  vmk_uint32 qIndex;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->ppRxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQs are not initialized");
+    status = VMK_FAILURE;
+    goto done;
+  }
+  /* Initialize the common code receive module. */
+  status = efx_rx_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_rxq_init;
+  }
+
+  pAdapter->rxBufferSize = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+
+  /* Calculate receive packet buffer size. */
+  pAdapter->rxPrefixSize = pNicCfg->enc_rx_prefix_size;
+
+  /* Ensure IP headers are 32bit aligned */
+  hdrlen = pAdapter->rxPrefixSize + sizeof (vmk_EthHdr);
+  pAdapter->rxBufferAlign = P2ROUNDUP(hdrlen, 4) - hdrlen;
+  pAdapter->rxBufferSize += pAdapter->rxBufferAlign;
+
+  /* Align end of packet buffer for RX DMA end padding */
+  align = MAX(1, pNicCfg->enc_rx_buf_align_end);
+  EFSYS_ASSERT(ISP2(align));
+
+  pAdapter->rxBufferSize = P2ROUNDUP(pAdapter->rxBufferSize, align);
+
+  /* Start the receive queue(s). */
+  for (qIndex = 0; qIndex < pAdapter->numRxqsAllocated; qIndex++) {
+    status = sfvmk_rxqStart(pAdapter, qIndex);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_rxqStart(%u) failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto failed_rxq_start;
+    }
+  }
+
+  status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
+                                          pAdapter->ppRxq[pAdapter->defRxqIndex]->pCommonRxq,
+                                          pAdapter->enableRSS);
+
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_default_rxq_set;
+  }
+
+  goto done;
+
+failed_default_rxq_set:
+failed_rxq_start:
+  while (qIndex--)
+    sfvmk_rxqStop(pAdapter, qIndex);
+
+  efx_rx_fini(pAdapter->pNic);
+
+failed_rxq_init:
+  pAdapter->numRxqsAllocated = 0;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
+
+  return status;
+}
+
+/*! \brief    Destroy all common code RXQs
+**
+** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+void
+sfvmk_rxStop(sfvmk_adapter_t *pAdapter)
+{
+  int qIndex;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  efx_mac_filter_default_rxq_clear(pAdapter->pNic);
+
+  /* Stop the receive queue(s) */
+  qIndex = pAdapter->numRxqsAllocated;
+  while (qIndex--)
+    sfvmk_rxqStop(pAdapter, qIndex);
+
+  pAdapter->rxPrefixSize = 0;
+  pAdapter->rxBufferSize = 0;
+
+  efx_rx_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
+}
+
+/*! \brief Set the RXQ flush state.
+**
+** \param[in]  pRxq    Pointer to RXQ
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState)
+{
+  if (pRxq == NULL) {
+    SFVMK_ERROR("NULL RXQ ptr");
+    return VMK_FAILURE;
+  }
+
+  vmk_SpinlockLock(pRxq->lock);
+  pRxq->flushState = flushState;
+  vmk_SpinlockUnlock(pRxq->lock);
+
+  return VMK_OK;
+}
+

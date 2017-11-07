@@ -16,6 +16,11 @@
 /* Default number of descriptors required for TXQs */
 #define SFVMK_NUM_TXQ_DESC 1024
 
+/* Offset in 256 bytes configuration address space */
+#define SFVMK_PCI_COMMAND             0x04
+/* Type of command */
+#define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -79,6 +84,8 @@ typedef struct sfvmk_intr_s {
 typedef enum sfvmk_evqState_e {
   SFVMK_EVQ_STATE_UNINITIALIZED = 0,
   SFVMK_EVQ_STATE_INITIALIZED,
+  SFVMK_EVQ_STATE_STARTING,
+  SFVMK_EVQ_STATE_STARTED
 } sfvmk_evqState_t;
 
 typedef struct sfvmk_evq_s {
@@ -93,16 +100,29 @@ typedef struct sfvmk_evq_s {
   /* EVQ state */
   sfvmk_evqState_t        state;
   vmk_NetPoll             netPoll;
+  efx_evq_t               *pCommonEvq;
+  vmk_Bool                exception;
+  vmk_uint32              readPtr;
 } sfvmk_evq_t;
+
+typedef enum sfvmk_flushState_e {
+  SFVMK_FLUSH_STATE_DONE = 0,
+  SFVMK_FLUSH_STATE_REQUIRED,
+  SFVMK_FLUSH_STATE_PENDING,
+  SFVMK_FLUSH_STATE_FAILED
+} sfvmk_flushState_t;
 
 typedef enum sfvmk_portState_e {
   SFVMK_PORT_STATE_UNINITIALIZED = 0,
   SFVMK_PORT_STATE_INITIALIZED,
+  SFVMK_PORT_STATE_STARTED
 } sfvmk_portState_t;
 
 typedef struct sfvmk_port_s {
   sfvmk_portState_t   state;
   vmk_Lock            lock;
+  efx_link_mode_t     linkMode;
+  vmk_uint32          fcRequested;
 } sfvmk_port_t;
 
 typedef enum sfvmk_txqType_e {
@@ -115,6 +135,7 @@ typedef enum sfvmk_txqType_e {
 typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_UNINITIALIZED = 0,
   SFVMK_TXQ_STATE_INITIALIZED,
+  SFVMK_TXQ_STATE_STARTED
 } sfvmk_txqState_t;
 
 typedef struct sfvmk_txq_s {
@@ -128,20 +149,25 @@ typedef struct sfvmk_txq_s {
   efsys_mem_t         mem;
   sfvmk_txqState_t    state;
   sfvmk_txqType_t     type;
+  sfvmk_flushState_t  flushState;
+  efx_txq_t           *pCommonTxq;
 } sfvmk_txq_t;
 
 typedef enum sfvmk_rxqState_e {
   SFVMK_RXQ_STATE_UNINITIALIZED = 0,
   SFVMK_RXQ_STATE_INITIALIZED,
+  SFVMK_RXQ_STATE_STARTED
 } sfvmk_rxqState_t;
 
 typedef struct sfvmk_rxq_s {
-  vmk_Lock          lock;
-  efsys_mem_t       mem;
-  vmk_uint32        index;
-  vmk_uint32        numDesc;
-  vmk_uint32        ptrMask;
-  sfvmk_rxqState_t  state;
+  vmk_Lock            lock;
+  efsys_mem_t         mem;
+  vmk_uint32          index;
+  vmk_uint32          numDesc;
+  vmk_uint32          ptrMask;
+  sfvmk_rxqState_t    state;
+  sfvmk_flushState_t  flushState;
+  efx_rxq_t           *pCommonRxq;
 } sfvmk_rxq_t;
 
 typedef struct sfvmk_uplink_s {
@@ -205,6 +231,8 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 numEvqsAllotted;
   vmk_uint32                 numTxqsAllotted;
   vmk_uint32                 numRxqsAllotted;
+  /* Interrupt moderation in micro seconds */
+  vmk_uint32                 intrModeration;
 
   vmk_uint32                 numRxqBuffDesc;
   vmk_uint32                 numTxqBuffDesc;
@@ -216,6 +244,12 @@ typedef struct sfvmk_adapter_s {
   /* Ptr to array of numRxqsAllocated RXQs */
   sfvmk_rxq_t                **ppRxq;
   vmk_uint32                 numRxqsAllocated;
+  vmk_uint32                 defRxqIndex;
+  size_t                     rxPrefixSize;
+  size_t                     rxBufferSize;
+  size_t                     rxBufferAlign;
+  vmk_Bool                   enableRSS;
+
   sfvmk_port_t               port;
 
   sfvmk_uplink_t             uplink;
@@ -259,18 +293,30 @@ void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_evStart(sfvmk_adapter_t *pAdapter);
+void sfvmk_evStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
 
 /* Functions for port module handling */
 VMK_ReturnStatus sfvmk_portInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_portFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_portStart(sfvmk_adapter_t *pAdapter);
+void sfvmk_portStop(sfvmk_adapter_t *pAdapter);
+void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter, efx_link_mode_t linkMode);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
+void sfvmk_txStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_txStart(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_txqFlushDone(sfvmk_txq_t *pTxq);
 
 /* Functions for RXQ module handling */
 VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
+void sfvmk_rxStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_rxStart(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState);
 
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
@@ -287,5 +333,7 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
   vmk_VersionedAtomicEndWrite(&pUplink->sharedData.lock);
   vmk_SpinlockUnlock(pUplink->shareDataLock);
 }
+
+void sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
 #endif /* __SFVMK_DRIVER_H__ */

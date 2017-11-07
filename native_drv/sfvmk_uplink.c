@@ -347,9 +347,49 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto failed_intr_start;
   }
 
+  status = sfvmk_evStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_ev_start;
+  }
+
+  status = sfvmk_portStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_portStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_port_start;
+  }
+
+  status = sfvmk_rxStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_rxStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_rx_start;
+  }
+
+  status = sfvmk_txStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_txStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_tx_start;
+  }
+
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
   status = VMK_OK;
   goto done;
+
+failed_tx_start:
+  sfvmk_rxStop(pAdapter);
+
+failed_rx_start:
+  sfvmk_portStop(pAdapter);
+
+failed_port_start:
+  sfvmk_evStop(pAdapter);
+
+failed_ev_start:
+  sfvmk_intrStop(pAdapter);
 
 failed_intr_start:
   efx_nic_fini(pAdapter->pNic);
@@ -388,6 +428,14 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   }
 
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
+
+  sfvmk_txStop(pAdapter);
+
+  sfvmk_rxStop(pAdapter);
+
+  sfvmk_portStop(pAdapter);
+
+  sfvmk_evStop(pAdapter);
 
   status = sfvmk_intrStop(pAdapter);
   if (status != VMK_OK) {
@@ -622,7 +670,9 @@ static vmk_Bool
 sfvmk_netPollCB(void *pEvq, vmk_uint32 budget)
 {
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  sfvmk_evqPoll(pEvq);
+
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_UPLINK);
   return VMK_FALSE;
 }

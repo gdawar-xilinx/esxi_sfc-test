@@ -17,7 +17,7 @@
 **
 ** \return: void
 */
-static void
+void
 sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
 {
   /* TODO add a proper implementation.

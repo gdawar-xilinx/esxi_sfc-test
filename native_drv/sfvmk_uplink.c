@@ -316,8 +316,10 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
     status = VMK_BAD_PARAM;
-    goto done;
+    goto failed_adapter_ptr;
   }
+
+  vmk_MutexLock(pAdapter->lock);
 
   if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
     status = VMK_FAILURE;
@@ -395,6 +397,9 @@ failed_intr_start:
   efx_nic_fini(pAdapter->pNic);
 
 done:
+  vmk_MutexUnlock(pAdapter->lock);
+
+failed_adapter_ptr:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -418,8 +423,10 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
     status = VMK_BAD_PARAM;
-    goto done;
+    goto failed_adapter_ptr;
   }
+
+  vmk_MutexLock(pAdapter->lock);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
     status = VMK_FAILURE;
@@ -449,6 +456,9 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   status = VMK_OK;
 
 done:
+  vmk_MutexUnlock(pAdapter->lock);
+
+failed_adapter_ptr:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

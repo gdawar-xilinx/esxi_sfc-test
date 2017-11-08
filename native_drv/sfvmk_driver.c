@@ -435,9 +435,8 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   limits.edl_min_rxq_count = limits.edl_min_evq_count;
   limits.edl_max_rxq_count = limits.edl_max_evq_count;
 
-  limits.edl_min_txq_count = MAX((limits.edl_min_evq_count + SFVMK_TXQ_NTYPES - 1),
-                                  SFVMK_TXQ_NTYPES);
-  limits.edl_max_txq_count = limits.edl_max_evq_count + SFVMK_TXQ_NTYPES - 1;
+  limits.edl_min_txq_count = limits.edl_min_evq_count;
+  limits.edl_max_txq_count = limits.edl_max_evq_count;
 
   status = efx_nic_set_drv_limits(pAdapter->pNic, &limits);
   if (status != VMK_OK) {

@@ -188,13 +188,8 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  /* For each TXQ_TYPE_IP_TCP_UDP_CKSUM TXQ there is one EVQ
-   * EVQ-0 also handles:
-   * Events for one (shared) TXQ_TYPE_NON_CKSUM TXQ
-   * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
-   */
-  pAdapter->numTxqsAllocated = MIN((SFVMK_TXQ_NTYPES - 1 + pAdapter->numEvqsAllocated),
-                                    pAdapter->numTxqsAllotted);
+  pAdapter->numTxqsAllocated = MIN(pAdapter->numEvqsAllocated,
+                                   pAdapter->numTxqsAllotted);
 
   txqArraySize = sizeof(sfvmk_txq_t *) * pAdapter->numTxqsAllocated;
 
@@ -202,53 +197,39 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   if (pAdapter->ppTxq == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter,"vmk_HeapAlloc failed");
     status = VMK_NO_MEMORY;
-    goto done;
+    goto failed_txq_alloc;
   }
   vmk_Memset(pAdapter->ppTxq, 0, txqArraySize);
 
-  status = sfvmk_txqInit(pAdapter, SFVMK_TXQ_TYPE_NON_CKSUM,
-                         SFVMK_TXQ_TYPE_NON_CKSUM, evqIndex);
-  if(status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_txqInit(%u) failed status: %s",
-                        SFVMK_TXQ_TYPE_NON_CKSUM, vmk_StatusToString(status));
-    goto failed_non_cksum_txq_init;
-  }
-
-  status = sfvmk_txqInit(pAdapter, SFVMK_TXQ_TYPE_IP_CKSUM,
-                         SFVMK_TXQ_TYPE_IP_CKSUM, evqIndex);
-  if(status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqInit(%u) failed status: %s",
-                        SFVMK_TXQ_TYPE_IP_CKSUM, vmk_StatusToString(status));
-    goto failed_ip_cksum_txq_init;
-  }
-
-  /* Initialize SFVMK_TXQ_IP_TCP_UDP_CKSUM transmit queues */
-  for (qIndex = SFVMK_TXQ_NTYPES - 1; qIndex < pAdapter->numTxqsAllocated;
+  /* Initialize all transmit queues as capable of performing CSO & FATSO
+   * on incoming packets. Queues will be started (TBD) with call to
+   * efx_tx_qcreate with flags parameter including EFX_TXQ_FATSOV2, if HW
+   * supports FATSOv2. Then, whether checksum offload is required will be
+   * determined on per packet basis and if required, checksum offload option
+   * descriptor will be created at run time if it doesn't exist on that queue.
+   */
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated;
        qIndex++, evqIndex++) {
     status = sfvmk_txqInit(pAdapter, qIndex, SFVMK_TXQ_TYPE_IP_TCP_UDP_CKSUM,
                            evqIndex);
     if (status) {
       SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqInit(%u) failed status: %s",
                           qIndex, vmk_StatusToString(status));
-      goto failed_tcpudp_cksum_txq_init;
+      goto failed_txq_init;
     }
   }
 
   goto done;
 
-failed_tcpudp_cksum_txq_init:
-  while (qIndex >= SFVMK_TXQ_NTYPES)
+failed_txq_init:
+  while (qIndex)
     sfvmk_txqFini(pAdapter, --qIndex);
 
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_TYPE_IP_CKSUM);
-
-failed_ip_cksum_txq_init:
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_TYPE_NON_CKSUM);
-
-failed_non_cksum_txq_init:
-  pAdapter->numTxqsAllocated = 0;
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->ppTxq);
   pAdapter->ppTxq = NULL;
+
+failed_txq_alloc:
+  pAdapter->numTxqsAllocated = 0;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);

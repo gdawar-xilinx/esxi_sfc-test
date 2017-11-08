@@ -618,12 +618,11 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   /* Build an event queue with room for one event per TX and RX buffer,
    * plus some extra for link state events and MCDI completions.
-   * There are three tx queues of type (NON_CKSUM, IP_CKSUM, IP_TCP_UDP_CKSUM)
-   * in the first event queue and one in other. */
+   */
 
   if (qIndex == 0) {
     pEvq->numDesc = pAdapter->numRxqBuffDesc +
-                    (SFVMK_TXQ_NTYPES * pAdapter->numTxqBuffDesc) +
+                    pAdapter->numTxqBuffDesc +
                     SFVMK_EVQ_EXTRA_EVENT_SPACE;
   } else {
     pEvq->numDesc = pAdapter->numRxqBuffDesc + pAdapter->numTxqBuffDesc;

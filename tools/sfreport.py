@@ -15,6 +15,10 @@ from threading import Timer
 from collections import defaultdict
 from operator import itemgetter
 
+# sfreport version to be incremented for any changes made before releases:
+# major minor build
+sfreport_version = "v0.1.0"
+
 #- function to terminate a process
 def terminate(process,timeout,cmd):
     timeout["value"] = True
@@ -44,10 +48,10 @@ def execute(cmd):
     else:
        return 1
 
-def file_header(output_file,current_time,mode):
+def file_header(output_file,current_time,mode,sf_ver):
     output_file.write('<HTML><HEAD>')
     output_file.write('<TITLE>Solarflare system report</TITLE></HEAD>')
-    output_file.write('<h1 style="font-size:36px;"> SOLARFLARE System Report</H1>')
+    output_file.write('<h1 style="font-size:36px;"> Solarflare System Report (version: %s)</H1>'% sf_ver)
     output_file.write("Time:"+current_time)
     output_file.write("</br>Report generation: " + mode+"</br>")
     if mode != "vcli":
@@ -55,7 +59,7 @@ def file_header(output_file,current_time,mode):
        user = "(User : " + user + " )"
        output_file.write(user)
        output_file.write('<h1 <br></H1>')
-       output_file.write('<h1 style="font-size:36px;"> System uptime:</H1>')
+       output_file.write('<h1 style="font-size:26px;"> System uptime:</H1>')
        uptime = (execute('uptime'))
        output_file.write(uptime)
     return 0
@@ -668,7 +672,8 @@ def virtual_machine_info(output_file,server):
         table += '<th>%s' % hdr + '</th>'
     vm_info = execute(vm_cmd)
     if vm_info == 1:
-       table = '<table id="Virtual Machine"style="font-size:18px;"><th>"INFO:No Active Virtual Machines found.."</th><table border="1">'
+       table = '<table id="Virtual Machine"style="font-size:26px;"><th>Virtual Machine Information:</th><table border="1">'
+       table += "INFO:No Active Virtual Machines found.."
        output_file.write(table)
        return
     for line in vm_info.split('\n'):
@@ -723,6 +728,17 @@ def vswitch_details(output_file,server):
     vswitch_info = vswitch_info.split('\n')
     lines = ('<p>')
     for line in vswitch_info:
+        lines += '<small>%s</small><br>' % line
+    output_file.write('%s</p>' % lines)
+    output_file.write('<h1 style="font-size:26px;">Distributed vSwitch Information: <br></H1>')
+    dvs_cmd = "esxcli " + server + " network vswitch dvs vmware list"
+    dvs_info = execute(dvs_cmd)
+    if dvs_info == 1:
+       output_file.write("INFO:No Distributed vSwitches were found")
+       return
+    dvs_info = dvs_info.split('\n')
+    lines = ('<p>')
+    for line in dvs_info:
         lines += '<small>%s</small><br>' % line
     output_file.write('%s</p>' % lines)
     return 0
@@ -796,7 +812,7 @@ if __name__=="__main__":
     cmd = 'esxcli ' + server + ' network nic list |grep sfvmk'
     sf_adapters = execute(cmd)
     if sf_adapters == 1:
-       print("CAUTION: No sfreport will be generated for Non-Native SolarFlare driver\n")
+       print("CAUTION: Sfreport will be generated for sfvmk driver only.\n")
        sys.exit()
     if sf_adapters:
        for line in sf_adapters.split('\n'):
@@ -805,13 +821,14 @@ if __name__=="__main__":
               sfvmk_adapter_list.append(interface.group(1))
               sfvmk_tlp_list.append(interface.group(2))
     if "sfvmk" in sf_adapters:
-       print("SolarFlare Adapters detected..")
+       print("sfreport version: "+sfreport_version)
+       print("Solarflare Adapters detected..")
        print("Please be patient.\nSolarFlare system report generation is in progress....")
        current_time = (execute('date +"%Y-%m-%d-%H-%M-%S"'))
        html_file = 'sfreport-' + current_time.strip('\n') + '.html'
        output_file = open(html_file, 'w')
        # Call the feature specific funtions.
-       file_header(output_file, current_time, mode)
+       file_header(output_file, current_time, mode,sfreport_version)
        output_file.write('<h1 style="font-size:26px;">-> Report Index:<br></H1>')
        output_file.write('<a href="#System Summary">-> System Summary</a><br>')
        output_file.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')

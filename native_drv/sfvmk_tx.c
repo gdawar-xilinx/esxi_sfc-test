@@ -440,6 +440,10 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
   struct sfvmk_adapter_s *pAdapter = pTxq->pAdapter;
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_TX);
+  if(VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) && (pEvq != pAdapter->pEvq[0]))) {
+    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_TX);
+    return;
+  }
 
   completed = pTxq->completed;
   while (completed != pTxq->pending) {
@@ -462,7 +466,9 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq)
       if(pStmp->u.pkt) {
         SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
                   "Free pkt: %p", pStmp->u.pkt);
-        if(pTxq->initState == SFVMK_TXQ_STARTED)
+        if(VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC)))
+          vmk_PktReleasePanic(pStmp->u.pkt);
+        else if(pTxq->initState == SFVMK_TXQ_STARTED)
           vmk_NetPollQueueCompPkt(pEvq->netPoll, pStmp->u.pkt);
         else
           vmk_PktRelease(pStmp->u.pkt);

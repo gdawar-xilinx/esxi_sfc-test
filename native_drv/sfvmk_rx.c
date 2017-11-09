@@ -184,9 +184,15 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter, struct
   if (flags & EFX_CKSUM_TCPUDP)
     vmk_PktSetCsumVfd(pPkt);
 
-  /* deliver the pkt to uplink layer */
-  vmk_NetPollRxPktQueue(pAdapter->pEvq[qIndex]->netPoll, pPkt);
-
+  if(VMK_UNLIKELY(pAdapter->pEvq[qIndex]->pktList != NULL)) {
+    VMK_ASSERT_BUG(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC),
+                   "pktList valid in normal system state");
+    vmk_PktListAppendPkt(pAdapter->pEvq[qIndex]->pktList, pPkt);
+  }
+  else {
+    /* deliver the pkt to uplink layer */
+    vmk_NetPollRxPktQueue(pAdapter->pEvq[qIndex]->netPoll, pPkt);
+  }
   pRxDesc->flags = EFX_DISCARD;
   pRxDesc->pPkt = NULL;
 

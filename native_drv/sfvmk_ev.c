@@ -362,6 +362,13 @@ sfvmk_evTX(void *arg, uint32_t label, uint32_t id)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_EVQ);
 
+  /* process only default transmit queue when system is in panic state */
+  if(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) && (pEvq != pAdapter->pEvq[0])) {
+    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_EVQ);
+    /* ignore subsequent events on this queue */
+    return VMK_TRUE;
+  }
+
   pTxq = pEvq->pAdapter->pTxq[pEvq->index];
 
   SFVMK_NULL_PTR_CHECK(pTxq);
@@ -720,6 +727,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   pEvq->pAdapter = pAdapter;
   pEvq->index = qIndex;
+  pEvq->pktList = NULL;
 
   pAdapter->pEvq[qIndex] =pEvq;
   pEvqMem = &pEvq->mem;

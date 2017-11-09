@@ -171,6 +171,22 @@ static vmk_UplinkPauseParamsOps sfvmkPauseParamsOps = {
 };
 
 /****************************************************************************
+ *                vmk_UplinkNetDumpOps Handler                              *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_panicTx(vmk_AddrCookie cookie,
+                                      vmk_PktList pktList);
+static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
+                                        vmk_PktList pktList);
+static VMK_ReturnStatus sfvmk_panicInfoGet(vmk_AddrCookie cookie,
+                                           vmk_UplinkPanicInfo *panicInfo);
+
+static vmk_UplinkNetDumpOps sfvmkNetDumpOps = {
+  .panicTx = sfvmk_panicTx,
+  .panicPoll = sfvmk_panicPoll,
+  .panicInfoGet = sfvmk_panicInfoGet,
+};
+
+/****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
@@ -915,7 +931,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
 
    SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
 
-  return (status);
+   /* Register network dump capability */
+   status = vmk_UplinkCapRegister(pAdapter->uplink, VMK_UPLINK_CAP_NETWORK_DUMP,
+                                  &sfvmkNetDumpOps);
+   if (status != VMK_OK) {
+      SFVMK_ERR(pAdapter, "Network dump cap register failed, err :%s",
+                vmk_StatusToString(status));
+      VMK_ASSERT_BUG(0);
+   }
+
+ return (status);
 }
 
 /*! \brief  uplink callback function to associate uplink device with driver and
@@ -1134,6 +1159,84 @@ sfvmk_release_pkt:
    vmk_PktRelease(pkt);
    continue;
   }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return VMK_OK;
+}
+
+/*! \brief uplink callback function to transmit pkts in panic state
+**
+** \param[in]  cookie  pointer to sfvmk_adapter_t
+** \param[in]  pktList List of packets to be transmitted
+**
+** \return: VMK_OK on success, VMK_BUSY otherwise.
+**
+*/
+static VMK_ReturnStatus
+sfvmk_panicTx(vmk_AddrCookie cookie, vmk_PktList pktList)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  vmk_UplinkSharedData *pSharedData = &pAdapter->sharedData;
+  vmk_UplinkSharedQueueInfo *pQueueInfo = pSharedData->queueInfo;
+  vmk_PktHandle *pkt = vmk_PktListGetFirstPkt(pktList);
+  VMK_ReturnStatus status;
+
+  /*
+   * Set the default tx queue for pktList
+   */
+  vmk_PktQueueIDSet(pkt, pQueueInfo->defaultTxQueueID);
+  status = sfvmk_uplinkTx(cookie, pktList);
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return status;
+}
+
+/*! \brief uplink callback function to poll for rx pkts in panic state
+**
+** \param[in]   cookie  pointer to sfvmk_adapter_t
+** \param[out]  pktList list of packets received
+**
+** \return: VMK_OK always
+**
+*/
+static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
+                                         vmk_PktList pktList)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  int qIndex;
+
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  for (qIndex = 0; qIndex < pAdapter->evqCount ; qIndex++) {
+    sfvmk_evq_t *pEvq = pAdapter->pEvq[qIndex];
+    pEvq->pktList = pktList;
+    sfvmk_evqPoll(pEvq);
+  }
+
+  SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
+  return VMK_OK;
+}
+
+/*! \brief uplink callback function to get panic-time polling properties
+**
+** \param[in]   cookie    pointer to sfvmk_adapter_t
+** \param[out]  panicInfo Panic-time polling properties of the device
+**
+** \return: VMK_OK always
+**
+*/
+static VMK_ReturnStatus sfvmk_panicInfoGet(vmk_AddrCookie cookie,
+                                            vmk_UplinkPanicInfo *panicInfo)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  SFVMK_NULL_PTR_CHECK(pAdapter);
+  SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
+
+  /* Fill in data for sfvmk_panicPoll function */
+  panicInfo->clientData = cookie;
 
   SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_UPLINK);
   return VMK_OK;

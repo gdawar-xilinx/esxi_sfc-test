@@ -1175,14 +1175,15 @@ sfvmk_release_pkt:
 static VMK_ReturnStatus
 sfvmk_panicTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 {
+  VMK_ReturnStatus status;
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+
   SFVMK_NULL_PTR_CHECK(pAdapter);
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_UPLINK);
 
   vmk_UplinkSharedData *pSharedData = &pAdapter->sharedData;
   vmk_UplinkSharedQueueInfo *pQueueInfo = pSharedData->queueInfo;
   vmk_PktHandle *pkt = vmk_PktListGetFirstPkt(pktList);
-  VMK_ReturnStatus status;
 
   /*
    * Set the default tx queue for pktList
@@ -1212,7 +1213,11 @@ static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
 
   for (qIndex = 0; qIndex < pAdapter->evqCount ; qIndex++) {
     sfvmk_evq_t *pEvq = pAdapter->pEvq[qIndex];
+
+    SFVMK_EVQ_LOCK(pEvq);
     pEvq->pktList = pktList;
+    SFVMK_EVQ_UNLOCK(pEvq);
+
     sfvmk_evqPoll(pEvq);
   }
 

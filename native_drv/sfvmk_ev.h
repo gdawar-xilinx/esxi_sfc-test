@@ -103,6 +103,7 @@ typedef struct sfvmk_evq_s {
 
   /* used for storing pktList passed in sfvmk_panicPoll */
   vmk_PktList           pktList;
+
   enum sfvmk_evq_state  initState;
 
 } sfvmk_evq_t VMK_ATTRIBUTE_L1_ALIGNED;

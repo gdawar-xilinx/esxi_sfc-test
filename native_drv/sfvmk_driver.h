@@ -97,12 +97,13 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              index;
   /* Number of event queue descriptors in EVQ */
   vmk_uint32              numDesc;
-  /* EVQ state */
-  sfvmk_evqState_t        state;
   vmk_NetPoll             netPoll;
   efx_evq_t               *pCommonEvq;
   vmk_Bool                exception;
   vmk_uint32              readPtr;
+  /* Following fields are protected by spinlock across multiple threads */
+  /* EVQ state */
+  sfvmk_evqState_t        state;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_flushState_e {
@@ -293,6 +294,14 @@ void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
                               vmk_IOA *ioAddr);
 
 vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
+
+/* Get time in USEC */
+static inline void sfvmk_getTime(vmk_uint64 *pTime)
+{
+  vmk_TimeVal time;
+  vmk_GetTimeOfDay(&time);
+  *pTime = (time.sec * VMK_USEC_PER_SEC) + time.usec;
+}
 
 /* Functions for MCDI handling */
 VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);

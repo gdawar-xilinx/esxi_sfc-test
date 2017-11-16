@@ -11,7 +11,7 @@
 
 /* Wait time  for common EVQ to start */
 #define SFVMK_EVQ_START_POLL_TIME_USEC   VMK_USEC_PER_MSEC
-#define SFVMK_EVQ_START_POLL_COUNT       200
+#define SFVMK_EVQ_START_TIME_OUT_USEC    (200 *  VMK_USEC_PER_MSEC)
 
 /* TODO: Needs to revisit when dynamic interrupt moderation support
  * is added and performance tuning is done */
@@ -335,7 +335,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 {
   sfvmk_evq_t *pEvq = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
-  vmk_uint32 count;
+  vmk_uint64 timeout, currentTime;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
 
@@ -396,10 +396,12 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   vmk_SpinlockUnlock(pEvq->lock);
 
-  count = 0;
-  do {
+  sfvmk_getTime(&currentTime);
+  timeout = currentTime + SFVMK_EVQ_START_TIME_OUT_USEC;
+
+  while (currentTime < timeout) {
     status = vmk_WorldSleep(SFVMK_EVQ_START_POLL_TIME_USEC);
-    if ((status != VMK_OK) || (status != VMK_WAIT_INTERRUPTED)) {
+    if ((status != VMK_OK) && (status != VMK_WAIT_INTERRUPTED)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
                           vmk_StatusToString(status));
       goto failed_world_sleep;
@@ -412,8 +414,8 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
       goto done;
     }
     vmk_SpinlockUnlock(pEvq->lock);
-
-  } while (++count < SFVMK_EVQ_START_POLL_COUNT);
+    sfvmk_getTime(&currentTime);
+  }
 
   SFVMK_ADAPTER_ERROR(pAdapter, "Event queue[%u] is not started", qIndex);
   status = VMK_TIMEOUT;

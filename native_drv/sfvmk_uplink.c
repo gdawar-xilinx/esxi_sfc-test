@@ -904,7 +904,7 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
     } else {
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR;
-      pQueueData->maxFilters = pQueueData->maxFilters / pQueueInfo->maxRxQueues;
+      pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }
 
     pEvq = pAdapter->ppEvq[queueIndex];

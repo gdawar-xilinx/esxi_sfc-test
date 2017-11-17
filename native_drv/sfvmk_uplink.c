@@ -37,6 +37,8 @@
  */
 #define SFVMK_MAX_FILTER 2048
 
+static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter);
+
 /****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
@@ -64,6 +66,24 @@ static vmk_UplinkOps sfvmkUplinkOps = {
   .uplinkCapDisable = sfvmk_uplinkCapDisable,
   .uplinkAssociate = sfvmk_uplinkAssociate,
   .uplinkDisassociate = sfvmk_uplinkDisassociate,
+};
+
+/****************************************************************************
+*                vmk_UplinkCableTypeOps Handler                             *
+****************************************************************************/
+static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie,
+                                         vmk_UplinkCableType *);
+
+static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie,
+                                           vmk_UplinkCableType *);
+
+static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie,
+                                         vmk_UplinkCableType);
+
+struct vmk_UplinkCableTypeOps sfvmkCableTypeOps = {
+  .getCableType = sfvmk_getCableType,
+  .getSupportedCableTypes = sfvmk_getSupportedCableTypes,
+  .setCableType = sfvmk_setCableType,
 };
 
 /*! \brief  Uplink callback function to associate uplink device with driver and
@@ -101,7 +121,13 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "%s associated",  pAdapter->uplink.name.string);
 
-  status = VMK_OK;
+  status = sfvmk_registerIOCaps(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_registerIOCaps failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto done;
+  }
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -293,6 +319,137 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
   /* TODO: Add implementation */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  return status;
+}
+
+/*! \brief uplink callback function to get the cable type
+**
+** \param[in]   cookie     pointer to sfvmk_adapter_t
+** \param[out]  cableType  ptr to cable type
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
+                                           vmk_UplinkCableType *pCableType)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  efx_phy_media_type_t mediumType;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  efx_phy_media_type_get(pAdapter->pNic, &mediumType);
+
+  switch (mediumType) {
+    case EFX_PHY_MEDIA_QSFP_PLUS:
+      *pCableType = sfvmk_decodeQsfpCableType(pAdapter);
+      break;
+    case EFX_PHY_MEDIA_SFP_PLUS:
+      *pCableType = sfvmk_decodeSfpCableType(pAdapter);
+      break;
+    default:
+      *pCableType = VMK_UPLINK_CABLE_TYPE_OTHER;
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                          "Unknown media = %d", mediumType);
+      break;
+  }
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to set the cable type
+**
+** \param[in]   cookie     pointer to sfvmk_adapter_t
+** \param[out]  cableType  cable type
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
+                                           vmk_UplinkCableType cableType)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  SFVMK_ADAPTER_ERROR(pAdapter, "setCableType is not supported");
+
+  status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to get all cable type supported by interface.
+**
+** \param[in]   cookie     pointer to sfvmk_adapter_t
+** \param[out]  cableType  ptr to cable type
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
+                                                     vmk_UplinkCableType *pCableType)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  *pCableType = VMK_UPLINK_CABLE_TYPE_FIBRE | VMK_UPLINK_CABLE_TYPE_DA;
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief function to register all driver cap with uplink device.
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    goto done;
+  }
+
+  /* Driver supports getting and setting cable type */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_CABLE_TYPE, &sfvmkCableTypeOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"vmk_UplinkCapRegister failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
 }
 

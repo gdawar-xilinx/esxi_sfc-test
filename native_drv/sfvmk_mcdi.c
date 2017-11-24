@@ -54,6 +54,19 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
   return;
 }
 
+/*! \brief routine called for getting current system time
+**
+** \param[in] pointer to vmk_uint64
+**
+** \return: void
+*/
+static inline void sfvmk_getTime(vmk_uint64 *pTime)
+{
+  vmk_TimeVal time;
+  vmk_GetTimeOfDay(&time);
+  *pTime = (time.sec * VMK_USEC_PER_SEC) + time.usec;
+}
+
 /*! \brief Routine for polling mcdi response.
 **
 ** \param[in] adapter pointer to sfvmk_adapter_t
@@ -64,42 +77,51 @@ static int
 sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
 {
   efx_nic_t *pNic;
-  vmk_uint32 delayTotal;
   vmk_uint32 delayUS;
   boolean_t aborted;
+  vmk_uint64 timeout, currentTime;
+  vmk_uint64 startTime;
+  VMK_ReturnStatus status = VMK_OK;
 
   SFVMK_NULL_PTR_CHECK(pAdapter);
 
-  delayTotal = 0;
   delayUS = SFVMK_MCDI_POLL_INTERVAL_MIN;
   pNic = pAdapter->pNic;
 
   SFVMK_NULL_PTR_CHECK(pNic);
 
-  do {
+  sfvmk_getTime(&currentTime);
+  startTime = currentTime;
+  timeout = currentTime + timeoutUS;
+  while (currentTime < timeout)
+  {
     if (efx_mcdi_request_poll(pNic)) {
-      EFSYS_PROBE1(mcdi_delay, vmk_uint32, delayTotal);
+      EFSYS_PROBE1(mcdi_delay, vmk_uint32, currentTime - startTime);
       return 0;
     }
-
-    if (delayTotal > timeoutUS) {
-      aborted = efx_mcdi_request_abort(pNic);
-      VMK_ASSERT_BUG(!aborted, "abort failed");
-      sfvmk_mcdiTimeout(pAdapter);
-      return ETIMEDOUT;
+    status = vmk_WorldSleep(delayUS);
+    if ((status != VMK_OK) && (status != VMK_WAIT_INTERRUPTED)) {
+      SFVMK_ERR(pAdapter, "vmk_WorldSleep failed status: %s",
+                vmk_StatusToString(status));
+      break;
     }
-
-    vmk_DelayUsecs(delayUS);
-    delayTotal += delayUS;
 
     /* Exponentially back off the poll frequency. */
     delayUS = delayUS * 2;
     if (delayUS > SFVMK_MCDI_POLL_INTERVAL_MAX)
       delayUS = SFVMK_MCDI_POLL_INTERVAL_MAX;
 
-  } while (1);
+    sfvmk_getTime(&currentTime);
+  }
 
-  return 0;
+  if (currentTime >= timeout) {
+    aborted = efx_mcdi_request_abort(pNic);
+    VMK_ASSERT_BUG(aborted, "abort failed");
+    sfvmk_mcdiTimeout(pAdapter);
+    return ETIMEDOUT;
+  }
+
+  return status;
 }
 
 /*! \brief Routine for sending mcdi cmd.

@@ -61,7 +61,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 ** \return: 0 <success> error code <failure>
 */
 static int
-sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
+sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
 {
   efx_nic_t *pNic;
   vmk_uint32 delayTotal;
@@ -82,7 +82,7 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter)
       return 0;
     }
 
-    if (delayTotal > SFVMK_MCDI_WATCHDOG_INTERVAL) {
+    if (delayTotal > timeoutUS) {
       aborted = efx_mcdi_request_abort(pNic);
       VMK_ASSERT_BUG(!aborted, "abort failed");
       sfvmk_mcdiTimeout(pAdapter);
@@ -114,6 +114,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
   sfvmk_adapter_t *pAdapter;
   sfvmk_mcdi_t *pMcdi;
   int status;
+  vmk_uint32 timeoutUS;
 
   pAdapter = (sfvmk_adapter_t *)arg;
 
@@ -127,8 +128,9 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *emrp)
                     "MCDI not initialized");
 
   /* Issue request and poll for completion. */
+  efx_mcdi_get_timeout(pAdapter->pNic, emrp, &timeoutUS);
   efx_mcdi_request_start(pAdapter->pNic, emrp, B_FALSE);
-  status = sfvmk_mcdiPoll(pAdapter);
+  status = sfvmk_mcdiPoll(pAdapter, timeoutUS);
 
   SFVMK_MCDI_UNLOCK(pMcdi);
 

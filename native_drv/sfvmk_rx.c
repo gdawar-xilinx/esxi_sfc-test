@@ -600,8 +600,8 @@ static int sfvmk_rxqStart( sfvmk_adapter_t *pAdapter, unsigned int qIndex)
 
   /* Create the common code receive queue. */
   if ((rc = efx_rx_qcreate(pAdapter->pNic, qIndex, 0, EFX_RXQ_TYPE_DEFAULT,
-                            pRxqMem, pAdapter->rxqEntries, 0, pEvq->pCommonEvq,
-                            &pRxq->pCommonRxq)) != 0) {
+                            pRxqMem, pAdapter->rxqEntries, 0, EFX_RXQ_FLAG_NONE,
+                            pEvq->pCommonEvq, &pRxq->pCommonRxq)) != 0) {
     SFVMK_ERR(pAdapter, "Failed to create rxQ %u", qIndex);
     goto sfvmk_rxq_create_fail;
   }

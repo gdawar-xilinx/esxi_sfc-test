@@ -37,6 +37,8 @@ sfvmk_modInfo_t sfvmk_modInfo = {
    .logThrottledID   = VMK_INVALID_LOG_HANDLE,
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
    .mgmtHandle       = NULL,
+   .vmkdevHashTable  = VMK_INVALID_HASH_HANDLE,
+   .lock             = NULL
 };
 
 static void
@@ -45,6 +47,21 @@ sfvmk_modInfoCleanup(void)
   if (sfvmk_modInfo.mgmtHandle) {
     vmk_MgmtDestroy(sfvmk_modInfo.mgmtHandle);
     sfvmk_modInfo.mgmtHandle = NULL;
+  }
+
+  if (sfvmk_modInfo.vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
+    if (vmk_HashDeleteAll(sfvmk_modInfo.vmkdevHashTable) != VMK_OK)
+      vmk_WarningMessage("Error in deleting vmkdevHashTable entries");
+
+    if (vmk_HashIsEmpty(sfvmk_modInfo.vmkdevHashTable)) {
+      /* Free the hash table */
+      vmk_HashRelease(sfvmk_modInfo.vmkdevHashTable);
+      sfvmk_modInfo.vmkdevHashTable = VMK_INVALID_HASH_HANDLE;
+    }
+  }
+
+  if (sfvmk_modInfo.lock != NULL) {
+    vmk_SemaDestroy(&sfvmk_modInfo.lock);
   }
 
   if (sfvmk_modInfo.driverID != NULL) {
@@ -91,6 +108,7 @@ init_module(void)
   vmk_LogThrottleProperties logThrottledProps;
   vmk_MemPoolProps memPoolProps;
   vmk_MgmtProps mgmtProps;
+  vmk_HashProperties hashProps;
 
   /* TBD :  Memory for other modules needs to be added */
   vmk_HeapAllocationDescriptor allocDesc[] = {
@@ -185,6 +203,15 @@ init_module(void)
     goto failed_driver_register;
   }
 
+  status = vmk_BinarySemaCreate(&sfvmk_modInfo.lock,
+                                sfvmk_modInfo.heapID,
+                                (const char *)"Module Lock");
+  if (status != VMK_OK) {
+    vmk_WarningMessage("Initialization of Module level lock failed (%s)",
+                       vmk_StatusToString(status));
+    goto failed_sema_init;
+  }
+
   mgmtProps.modId = vmk_ModuleCurrentID;
   mgmtProps.heapId = sfvmk_modInfo.heapID;
   mgmtProps.sig = (vmk_MgmtApiSignature *)&sfvmk_mgmtSig;
@@ -200,6 +227,22 @@ init_module(void)
     goto failed_mgmt_init;
   }
 
+  hashProps.moduleID  = vmk_ModuleCurrentID;
+  hashProps.heapID    = sfvmk_modInfo.heapID;
+  hashProps.keyType   = VMK_HASH_KEY_TYPE_STR;
+  hashProps.keyFlags  = VMK_HASH_KEY_FLAGS_LOCAL_COPY;
+  hashProps.keySize   = SFVMK_DEV_NAME_LEN;
+  hashProps.nbEntries = SFVMK_ADAPTER_TABLE_SIZE;
+  hashProps.acquire   = NULL;
+  hashProps.release   = NULL;
+
+  status = vmk_HashAlloc(&hashProps, &sfvmk_modInfo.vmkdevHashTable);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of sfvmk_vmkdevHashTable failed: (%s)",
+                 vmk_StatusToString(status));
+    goto failed_hash_init;
+  }
+
   vmk_LogMessage("Initialization of SFC  driver successful");
   return status;
 
@@ -210,7 +253,9 @@ failed_throttled_log_register:
 failed_lock_domain_create:
 failed_mem_pool_create:
 failed_driver_register:
+failed_sema_init:
 failed_mgmt_init:
+failed_hash_init:
   sfvmk_modInfoCleanup();
 
   return status;

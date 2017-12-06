@@ -40,6 +40,9 @@
 /* Type of command */
 #define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
 
+/* Device name hash table size */
+#define SFVMK_ADAPTER_TABLE_SIZE  64
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -280,6 +283,12 @@ typedef struct sfvmk_adapter_s {
    * Used only for debugging */
   vmk_Name                   devName;
 } sfvmk_adapter_t;
+
+/* Structure for device instance hash table  */
+typedef struct sfvmk_adapterHashEntry_s {
+   char *pUplinkName;
+   sfvmk_adapter_t *pAdapter;
+} sfvmk_adapterHashEntry_t;
 
 /* Functions for interrupt handling */
 VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);

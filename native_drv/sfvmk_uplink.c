@@ -86,6 +86,71 @@ struct vmk_UplinkCableTypeOps sfvmkCableTypeOps = {
   .setCableType = sfvmk_setCableType,
 };
 
+/****************************************************************************
+*                vmk_UplinkQueueOps Handler                             *
+****************************************************************************/
+static VMK_ReturnStatus sfvmk_allocQueue(vmk_AddrCookie cookie,
+                                         vmk_UplinkQueueType qType,
+                                         vmk_UplinkQueueID *pQID,
+                                         vmk_NetPoll *pNetpoll);
+
+static VMK_ReturnStatus sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie,
+                                                 vmk_UplinkQueueType qType,
+                                                 vmk_uint16 numAttr,
+                                                 vmk_UplinkQueueAttr *pAttr,
+                                                 vmk_UplinkQueueID *pQID,
+                                                 vmk_NetPoll *pNetpoll);
+
+static VMK_ReturnStatus sfvmk_freeQueue(vmk_AddrCookie cookie,
+                                        vmk_UplinkQueueID qid);
+
+static VMK_ReturnStatus sfvmk_quiesceQueue(vmk_AddrCookie cookie,
+                                           vmk_UplinkQueueID qid);
+
+static VMK_ReturnStatus sfvmk_startQueue(vmk_AddrCookie cookie,
+                                         vmk_UplinkQueueID qid);
+
+static VMK_ReturnStatus sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
+                                                vmk_UplinkQueueID qid,
+                                                vmk_UplinkQueueFilterID fid);
+
+static VMK_ReturnStatus sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
+                                               vmk_UplinkQueueID qid,
+                                               vmk_UplinkQueueFilter *pFilter,
+                                               vmk_UplinkQueueFilterID *pFID,
+                                               vmk_uint32 *pPairHwQid);
+
+static VMK_ReturnStatus sfvmk_getQueueStats(vmk_AddrCookie cookie,
+                                            vmk_UplinkQueueID qid,
+                                            vmk_UplinkStats *pStats);
+
+static VMK_ReturnStatus sfvmk_toggleQueueFeature(vmk_AddrCookie cookie,
+                                                 vmk_UplinkQueueID qid,
+                                                 vmk_UplinkQueueFeature feature,
+                                                 vmk_Bool setUnset);
+
+static VMK_ReturnStatus sfvmk_setQueueTxPriority(vmk_AddrCookie cookie,
+                                                 vmk_UplinkQueueID qid,
+                                                 vmk_UplinkQueuePriority priority);
+
+static VMK_ReturnStatus sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
+                                                     vmk_UplinkQueueID qid,
+                                                     vmk_UplinkCoalesceParams *pParams);
+
+static vmk_UplinkQueueOps sfvmkQueueOps = {
+   .queueAlloc             = sfvmk_allocQueue,
+   .queueAllocWithAttr     = sfvmk_allocQueueWithAttr,
+   .queueFree              = sfvmk_freeQueue,
+   .queueQuiesce           = sfvmk_quiesceQueue,
+   .queueStart             = sfvmk_startQueue,
+   .queueApplyFilter       = sfvmk_applyQueueFilter,
+   .queueRemoveFilter      = sfvmk_removeQueueFilter,
+   .queueGetStats          = sfvmk_getQueueStats,
+   .queueToggleFeature     = sfvmk_toggleQueueFeature,
+   .queueSetPriority       = sfvmk_setQueueTxPriority,
+   .queueSetCoalesceParams = sfvmk_setQueueCoalesceParams,
+};
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -491,6 +556,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                                  VMK_UPLINK_CAP_CABLE_TYPE, &sfvmkCableTypeOps);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,"vmk_UplinkCapRegister failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Register capability for Netqueue support */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_MULTI_QUEUE,
+                                 &sfvmkQueueOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_MULTI_QUEUE failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
@@ -1540,5 +1615,272 @@ sfvmk_uplinkDataFini(sfvmk_adapter_t * pAdapter)
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
+/*! \brief  callback to allocate netqueue queue
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qType    Queue Type (Rx/Tx).
+** \param[out] pQID     pointer to newly created uplink queue.
+** \param[out] pNetpoll Potential paired tx queue hardware index.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_allocQueue(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
+                 vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetpoll)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to allocate netqueue queue with attribute
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qType    Queue Type (Rx/Tx).
+** \param[in]  numAttr  Number of attributes.
+** \param[in]  pAttr    Queue attributes.
+** \param[out] pQID     pointer to newly created uplink queue.
+** \param[out] pNetpoll Potential paired tx queue hardware index.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
+                         vmk_uint16 numAttr, vmk_UplinkQueueAttr *pAttr,
+                         vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetpoll)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to free queue
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_freeQueue(vmk_AddrCookie cookie,
+                vmk_UplinkQueueID qid)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to quiesce queue
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_quiesceQueue(vmk_AddrCookie cookie,
+                   vmk_UplinkQueueID qid)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to start queue
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_startQueue(vmk_AddrCookie cookie,
+                 vmk_UplinkQueueID qid)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to remove netqueue queue filter
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+** \param[in]  fid      ID of already created filter.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
+                        vmk_UplinkQueueID qid,
+                        vmk_UplinkQueueFilterID fid)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to apply netqueue queue filter
+**
+** \param[in]  cookie     pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid        ID of already created queue.
+** \param[in]  pFilter    New queue filter to be applied.
+** \param[out] pFID       New Filter ID.
+** \param[out] pPairHwQid Potential paired tx queue hardware index.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
+                       vmk_UplinkQueueID qid,
+                       vmk_UplinkQueueFilter *pFilter,
+                       vmk_UplinkQueueFilterID *pFID,
+                       vmk_uint32 *pPairHwQid)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to get queue stats
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+** \param[out] pStats   Uplink queue stats
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_getQueueStats(vmk_AddrCookie cookie,
+                    vmk_UplinkQueueID qid,
+                    vmk_UplinkStats *pStats)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to toggle queue feature
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+** \param[in]  feature  Queue feature.
+** \param[in]  setUnset Set or remove queue feature
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_toggleQueueFeature(vmk_AddrCookie cookie,
+                         vmk_UplinkQueueID qid,
+                         vmk_UplinkQueueFeature feature,
+                         vmk_Bool setUnset)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to set netqueue queue priority
+**
+** \param[in]  cookie    pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid       ID of already created queue.
+** \param[in]  priority  Queue priority
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_setQueueTxPriority(vmk_AddrCookie cookie,
+                         vmk_UplinkQueueID qid,
+                         vmk_UplinkQueuePriority priority)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  callback to allocate netqueue queue
+**
+** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
+** \param[in]  qid      ID of already created queue.
+** \param[in]  pParams  Queue Coalesce parameters.
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
+                             vmk_UplinkQueueID qid,
+                             vmk_UplinkCoalesceParams *pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
 }
 

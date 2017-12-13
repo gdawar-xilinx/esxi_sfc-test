@@ -517,7 +517,7 @@ sfvmk_intrStop(sfvmk_adapter_t * pAdapter)
 VMK_ReturnStatus
 sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
 {
-  unsigned int numIntReq, numIntrsAlloc;
+  unsigned int numIntDesired, numIntrsAlloc;
   unsigned int index = 0;
   VMK_ReturnStatus status;
 
@@ -525,17 +525,17 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
 
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_INTR);
 
-  numIntReq = pAdapter->evqMax;
+  numIntDesired = pAdapter->evqMax;
 
   /* initializing interrupt cookie */
-  for (index = 0; index < numIntReq; index++)
+  for (index = 0; index < numIntDesired; index++)
     pAdapter->intr.intrCookies[index] = VMK_INVALID_INTRCOOKIE;
 
   /* allocate msix interrupt */
   status = vmk_PCIAllocIntrCookie(vmk_ModuleCurrentID,
                                   pAdapter->pciDevice,
                                   VMK_PCI_INTERRUPT_TYPE_MSIX,
-                                  numIntReq, numIntReq, NULL,
+                                  numIntDesired, 1, NULL,
                                   pAdapter->intr.intrCookies, &numIntrsAlloc);
   if (status == VMK_OK) {
     SFVMK_DBG(pAdapter, SFVMK_DBG_INTR, SFVMK_LOG_LEVEL_DBG,
@@ -546,7 +546,7 @@ sfvmk_intrInit(sfvmk_adapter_t *pAdapter)
 
   } else {
 
-    for (index = 0; index < numIntReq; index++)
+    for (index = 0; index < numIntDesired; index++)
       pAdapter->intr.intrCookies[index] = VMK_INVALID_INTRCOOKIE;
 
     SFVMK_ERR(pAdapter, "PCIAllocIntrCookie failed with error %s ",

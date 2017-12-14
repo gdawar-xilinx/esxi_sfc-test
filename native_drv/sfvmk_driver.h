@@ -79,6 +79,8 @@ typedef struct sfvmk_intr_s {
 typedef enum sfvmk_evqState_e {
   SFVMK_EVQ_STATE_UNINITIALIZED = 0,
   SFVMK_EVQ_STATE_INITIALIZED,
+  SFVMK_EVQ_STATE_STARTING,
+  SFVMK_EVQ_STATE_STARTED
 } sfvmk_evqState_t;
 
 typedef struct sfvmk_evq_s {
@@ -88,11 +90,15 @@ typedef struct sfvmk_evq_s {
   vmk_Lock                lock;
   /* Hardware EVQ index */
   vmk_uint32              index;
+  vmk_NetPoll             netPoll;
+  efx_evq_t               *pCommonEvq;
   /* Number of event queue descriptors in EVQ */
   vmk_uint32              numDesc;
+  /* Following fields are protected by spinlock across multiple threads */
   /* EVQ state */
   sfvmk_evqState_t        state;
-  vmk_NetPoll             netPoll;
+  vmk_Bool                exception;
+  vmk_uint32              readPtr;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_portState_e {
@@ -205,6 +211,8 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 numEvqsAllotted;
   vmk_uint32                 numTxqsAllotted;
   vmk_uint32                 numRxqsAllotted;
+  /* Interrupt moderation in micro seconds */
+  vmk_uint32                 intrModeration;
 
   vmk_uint32                 numRxqBuffDesc;
   vmk_uint32                 numTxqBuffDesc;
@@ -252,6 +260,15 @@ void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
 
 vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
 
+/* Get time in micro seconds */
+static inline void sfvmk_getTime(vmk_uint64 *pTime)
+{
+  vmk_TimeVal time;
+
+  vmk_GetTimeOfDay(&time);
+  *pTime = (time.sec * VMK_USEC_PER_SEC) + time.usec;
+}
+
 /* Functions for MCDI handling */
 VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
@@ -259,6 +276,9 @@ void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_evStart(sfvmk_adapter_t *pAdapter);
+void sfvmk_evStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
 
 /* Functions for port module handling */
 VMK_ReturnStatus sfvmk_portInit(sfvmk_adapter_t *pAdapter);
@@ -287,5 +307,7 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
   vmk_VersionedAtomicEndWrite(&pUplink->sharedData.lock);
   vmk_SpinlockUnlock(pUplink->shareDataLock);
 }
+
+void sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
 #endif /* __SFVMK_DRIVER_H__ */

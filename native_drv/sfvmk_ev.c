@@ -9,6 +9,462 @@
 /* EVQ budget (in descriptors) to allow for MCDI and Rx/Tx error events. */
 #define SFVMK_EVQ_EXTRA_EVENT_SPACE   128
 
+/* Wait time  for common EVQ to start */
+#define SFVMK_EVQ_START_POLL_TIME_USEC   VMK_USEC_PER_MSEC
+#define SFVMK_EVQ_START_TIME_OUT_USEC    (200 *  VMK_USEC_PER_MSEC)
+
+/* TODO: Needs to revisit when dynamic interrupt moderation support
+ * is added and performance tuning is done */
+#define SFVMK_MODERATION_USEC         30
+
+/* Call back functions which needs to be registered with common EVQ module */
+static boolean_t sfvmk_evInitialized(void *arg);
+static boolean_t sfvmk_evException(void *arg, uint32_t code, uint32_t data);
+
+static const efx_ev_callbacks_t sfvmk_evCallbacks = {
+  .eec_exception = sfvmk_evException,
+  .eec_initialized = sfvmk_evInitialized,
+};
+
+/*! \brief Gets called when initilized event comes for an eventQ.
+**
+** \param[in] arg        Pointer to eventQ
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+static boolean_t
+sfvmk_evInitialized(void *arg)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+
+  if (pEvq == NULL) {
+    SFVMK_ERROR("NULL event queue ptr");
+    goto fail;
+  }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
+
+  if (pEvq->state != SFVMK_EVQ_STATE_STARTING) {
+    SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "Invalid EVQ state(%u)", pEvq->state);
+    goto fail;
+  }
+
+  pEvq->state = SFVMK_EVQ_STATE_STARTED;
+
+  SFVMK_ADAPTER_DEBUG(pEvq->pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_INFO,
+                      "EventQ is started");
+
+  return VMK_FALSE;
+
+fail:
+  return VMK_TRUE;
+}
+
+/*! \brief Gets called when an exception received on eventQ.
+**
+** \param[in] arg      Pointer to event queue
+** \param[in] code     Exception code
+** \param[in] data     Exception data
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+static boolean_t
+sfvmk_evException(void *arg, uint32_t code, uint32_t data)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+
+  if (pEvq == NULL) {
+    SFVMK_ERROR("NULL event queue ptr");
+    goto fail;
+  }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
+
+  if (pEvq->state != SFVMK_EVQ_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "Invalid EVQ state(%u)", pEvq->state);
+    goto fail;
+  }
+
+  pEvq->exception = VMK_TRUE;
+
+  SFVMK_ADAPTER_DEBUG(pEvq->pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_INFO,
+                      "[%u] %s", pEvq->index,
+                      (code == EFX_EXCEPTION_RX_RECOVERY) ? "RX_RECOVERY" :
+                      (code == EFX_EXCEPTION_RX_DSC_ERROR) ? "RX_DSC_ERROR" :
+                      (code == EFX_EXCEPTION_TX_DSC_ERROR) ? "TX_DSC_ERROR" :
+                      (code == EFX_EXCEPTION_UNKNOWN_SENSOREVT) ? "UNKNOWN_SENSOREVT" :
+                      (code == EFX_EXCEPTION_FWALERT_SRAM) ? "FWALERT_SRAM" :
+                      (code == EFX_EXCEPTION_UNKNOWN_FWALERT) ? "UNKNOWN_FWALERT" :
+                      (code == EFX_EXCEPTION_RX_ERROR) ? "RX_ERROR" :
+                      (code == EFX_EXCEPTION_TX_ERROR) ? "TX_ERROR" :
+                      (code == EFX_EXCEPTION_EV_ERROR) ? "EV_ERROR" :
+                      "UNKNOWN");
+
+
+
+  if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
+    sfvmk_scheduleReset(pEvq->pAdapter);
+  }
+
+  return VMK_FALSE;
+
+fail:
+  return VMK_TRUE;
+}
+
+/*! \brief  Poll event from eventQ and process it. function should be called in thread
+**          context only.
+**
+** \param[in] pEvq     Pointer to event queue
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+VMK_ReturnStatus
+sfvmk_evqPoll(sfvmk_evq_t *pEvq)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
+
+  if (pEvq == NULL) {
+    SFVMK_ERROR("NULL event queue ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_SpinlockLock(pEvq->lock);
+
+  if ((pEvq->state != SFVMK_EVQ_STATE_STARTING) &&
+      (pEvq->state != SFVMK_EVQ_STATE_STARTED)) {
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* Poll the queue */
+  efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
+
+  /* Re-prime the event queue for interrupts */
+  status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "efx_ev_qprime failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  vmk_SpinlockUnlock(pEvq->lock);
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
+  return status;
+}
+
+/*! \brief    Create common code EVQ and wait for initilize event from the fw.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      EventQ index
+**
+** \return: 0 <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_evq_t *pEvq = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint64 timeout, currentTime;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (qIndex >= pAdapter->numEvqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid EVQ index %u", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  vmk_SpinlockLock(pEvq->lock);
+  if (pEvq->state != SFVMK_EVQ_STATE_INITIALIZED) {
+    vmk_SpinlockUnlock(pEvq->lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "EVQ is not initialized");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* Lock has been released here as there is no need to have a lock when
+   * state is set to initialized.
+   */
+  vmk_SpinlockUnlock(pEvq->lock);
+
+  /* Build an event queue with room for one event per TX and RX buffer,
+   * plus some extra for link state events and MCDI completions.
+   */
+
+  if (qIndex == 0) {
+    pEvq->numDesc = pAdapter->numRxqBuffDesc +
+                    (SFVMK_TXQ_NTYPES * pAdapter->numTxqBuffDesc) +
+                    SFVMK_EVQ_EXTRA_EVENT_SPACE;
+  } else {
+    pEvq->numDesc = pAdapter->numRxqBuffDesc + pAdapter->numTxqBuffDesc;
+  }
+  /* Make number of descriptors to nearest power of 2 */
+  pEvq->numDesc = sfvmk_pow2GE(pEvq->numDesc);
+
+  pEvq->mem.ioElem.length = EFX_EVQ_SIZE(pEvq->numDesc);
+
+  /* Allocate the event queue DMA buffer */
+  pEvq->mem.pEsmBase = sfvmk_allocDMAMappedMem(pAdapter->dmaEngine,
+                                               pEvq->mem.ioElem.length,
+                                               &pEvq->mem.ioElem.ioAddr);
+  if(pEvq->mem.pEsmBase == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_allocDMAMappedMem failed");
+    status = VMK_NO_MEMORY;
+    goto failed_dma_alloc;
+  }
+  pEvq->mem.esmHandle = pAdapter->dmaEngine;
+
+  vmk_Memset(pEvq->mem.pEsmBase, 0xff, EFX_EVQ_SIZE(pEvq->numDesc));
+
+  /* Create common code event queue. */
+  status = efx_ev_qcreate(pAdapter->pNic, qIndex, &pEvq->mem, pEvq->numDesc, 0,
+                          pAdapter->intrModeration, EFX_EVQ_FLAGS_NOTIFY_INTERRUPT,
+                          &pEvq->pCommonEvq);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_qcreate failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_ev_qcreate;
+  }
+
+  vmk_SpinlockLock(pEvq->lock);
+
+  pEvq->state = SFVMK_EVQ_STATE_STARTING;
+
+  /* Enable netpoll to process events */
+  vmk_NetPollEnable(pEvq->netPoll);
+
+  /* Prime the event queue for interrupts */
+  status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
+  if (status != VMK_OK) {
+    vmk_SpinlockUnlock(pEvq->lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_qprime failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_ev_qprime;
+  }
+
+  vmk_SpinlockUnlock(pEvq->lock);
+
+  sfvmk_getTime(&currentTime);
+  timeout = currentTime + SFVMK_EVQ_START_TIME_OUT_USEC;
+
+  while (currentTime < timeout) {
+    status = vmk_WorldSleep(SFVMK_EVQ_START_POLL_TIME_USEC);
+    if ((status != VMK_OK) && (status != VMK_WAIT_INTERRUPTED)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_world_sleep;
+    }
+
+    /* Check to see if the test event has been processed */
+    vmk_SpinlockLock(pEvq->lock);
+    if (pEvq->state == SFVMK_EVQ_STATE_STARTED) {
+      vmk_SpinlockUnlock(pEvq->lock);
+      goto done;
+    }
+    vmk_SpinlockUnlock(pEvq->lock);
+    sfvmk_getTime(&currentTime);
+  }
+
+  SFVMK_ADAPTER_ERROR(pAdapter, "Event queue[%u] is not started", qIndex);
+  status = VMK_TIMEOUT;
+
+failed_world_sleep:
+failed_ev_qprime:
+  vmk_NetPollDisable(pEvq->netPoll);
+  efx_ev_qdestroy(pEvq->pCommonEvq);
+
+failed_ev_qcreate:
+  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
+                         pEvq->mem.pEsmBase,
+                         pEvq->mem.ioElem.ioAddr,
+                         pEvq->mem.ioElem.length);
+
+  vmk_SpinlockLock(pEvq->lock);
+  pEvq->state = SFVMK_EVQ_STATE_INITIALIZED;
+  vmk_SpinlockUnlock(pEvq->lock);
+
+failed_dma_alloc:
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
+
+  return status;
+}
+
+/*! \brief   Destroy a common code EVQ.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[in]  qIndex      EVQ index
+**
+** \return: void
+*/
+static void
+sfvmk_evqStop(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  sfvmk_evq_t *pEvq = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (qIndex >= pAdapter->numEvqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid EVQ index %u", qIndex);
+    goto done;
+  }
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    goto done;
+  }
+
+  vmk_SpinlockLock(pEvq->lock);
+
+  if (pEvq->state != SFVMK_EVQ_STATE_STARTED) {
+    vmk_SpinlockUnlock(pEvq->lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "EVQ is not started");
+    goto done;
+  }
+
+  pEvq->state = SFVMK_EVQ_STATE_INITIALIZED;
+  pEvq->readPtr = 0;
+  pEvq->exception = VMK_FALSE;
+  vmk_SpinlockUnlock(pEvq->lock);
+
+  vmk_NetPollDisable(pEvq->netPoll);
+  efx_ev_qdestroy(pEvq->pCommonEvq);
+
+  /* Free DMA memory allocated for event queue */
+  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
+                         pEvq->mem.pEsmBase,
+                         pEvq->mem.ioElem.ioAddr,
+                         pEvq->mem.ioElem.length);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
+}
+
+/*! \brief   Create all common code EVQs.
+**
+** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
+**
+** \return:  VMK_OK <success> error code <failure>
+*/
+VMK_ReturnStatus
+sfvmk_evStart(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 qIndex;
+  VMK_ReturnStatus status = VMK_BAD_PARAM;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (pAdapter->intr.state != SFVMK_INTR_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Interrupt is not started");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* Initialize the event module */
+  status = efx_ev_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  for (qIndex = 0; qIndex < pAdapter->numEvqsAllocated; qIndex++) {
+
+    status = sfvmk_evqStart(pAdapter, qIndex);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evqStart(%u) failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto failed_evqstart;
+    }
+  }
+
+  goto done;
+
+failed_evqstart:
+  while (qIndex--) {
+    sfvmk_evqStop(pAdapter, qIndex);
+  }
+  /* Tear down the event module */
+  efx_ev_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
+
+  return status;
+}
+
+/*! \brief Destroy all common code EVQs
+**
+** \param[in]  pAdapter Pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+void
+sfvmk_evStop(sfvmk_adapter_t *pAdapter)
+{
+  int qIndex;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  if (pAdapter->intr.state != SFVMK_INTR_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Interrupt is not started");
+    goto done;
+  }
+
+  qIndex = pAdapter->numEvqsAllocated;
+  while (qIndex--)
+    sfvmk_evqStop(pAdapter, qIndex);
+
+  /* Tear down the event module */
+  if (pAdapter->pNic != NULL)
+    efx_ev_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
+}
+
 /*! \brief  Allocate resources for a particular EVQ
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
@@ -43,34 +499,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   vmk_Memset(pEvq, 0 , sizeof(sfvmk_evq_t));
 
   pEvq->index = qIndex;
-
-  /* Build an event queue with room for one event per TX and RX buffer,
-   * plus some extra for link state events and MCDI completions.
-   * There are three tx queues of type (NON_CKSUM, IP_CKSUM, IP_TCP_UDP_CKSUM)
-   * in the first event queue and one in other. */
-
-  if (qIndex == 0) {
-    pEvq->numDesc = pAdapter->numRxqBuffDesc +
-                    (SFVMK_TXQ_NTYPES * pAdapter->numTxqBuffDesc) +
-                    SFVMK_EVQ_EXTRA_EVENT_SPACE;
-  } else {
-    pEvq->numDesc = pAdapter->numRxqBuffDesc + pAdapter->numTxqBuffDesc;
-  }
-  /* Make number of descriptors to nearest power of 2 */
-  pEvq->numDesc = sfvmk_pow2GE(pEvq->numDesc);
-
-  pEvq->mem.ioElem.length = EFX_EVQ_SIZE(pEvq->numDesc);
-
-  /* Allocate the event queue DMA buffer */
-  pEvq->mem.pEsmBase = sfvmk_allocDMAMappedMem(pAdapter->dmaEngine,
-                                               pEvq->mem.ioElem.length,
-                                               &pEvq->mem.ioElem.ioAddr);
-  if(pEvq->mem.pEsmBase == NULL) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_allocDMAMappedMem failed");
-    status = VMK_NO_MEMORY;
-    goto failed_dma_alloc;
-  }
-  pEvq->mem.esmHandle = pAdapter->dmaEngine;
+  pEvq->pAdapter = pAdapter;
 
   status = sfvmk_createLock(pAdapter, "evqLock",
                             SFVMK_SPINLOCK_RANK_EVQ_LOCK,
@@ -87,12 +516,6 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
   goto done;
 
 failed_create_lock:
-  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
-                         pEvq->mem.pEsmBase,
-                         pEvq->mem.ioElem.ioAddr,
-                         pEvq->mem.ioElem.length);
-
-failed_dma_alloc:
   vmk_HeapFree(sfvmk_modInfo.heapID, pEvq);
 
 done:
@@ -137,12 +560,6 @@ sfvmk_evqFini(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   }
 
   sfvmk_destroyLock(pEvq->lock);
-
-  /* Free DMA memory allocated for event queue */
-  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
-                         pEvq->mem.pEsmBase,
-                         pEvq->mem.ioElem.ioAddr,
-                         pEvq->mem.ioElem.length);
 
   /* Free memory allocated for event queue object */
   vmk_HeapFree(sfvmk_modInfo.heapID, pEvq);
@@ -191,6 +608,9 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
     goto failed_evq_alloc;
   }
   vmk_Memset(pAdapter->ppEvq, 0, evqArraySize);
+
+  /* Setting default event moderation */
+  pAdapter->intrModeration = SFVMK_MODERATION_USEC;
 
   pAdapter->numRxqBuffDesc = SFVMK_NUM_RXQ_DESC;
   pAdapter->numTxqBuffDesc = SFVMK_NUM_TXQ_DESC;
@@ -242,6 +662,8 @@ sfvmk_evFini(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter, "Interrupt is not yet initialized");
     goto done;
   }
+
+  pAdapter->intrModeration = 0;
 
   /* Tear down the event queue(s). */
   qIndex = pAdapter->numEvqsAllocated;

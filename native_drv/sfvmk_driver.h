@@ -116,15 +116,15 @@ typedef struct sfvmk_evq_s {
   vmk_Lock                lock;
   /* Hardware EVQ index */
   vmk_uint32              index;
-  /* Number of event queue descriptors in EVQ */
-  vmk_uint32              numDesc;
   vmk_NetPoll             netPoll;
   efx_evq_t               *pCommonEvq;
-  vmk_Bool                exception;
-  vmk_uint32              readPtr;
+  /* Number of event queue descriptors in EVQ */
+  vmk_uint32              numDesc;
   /* Following fields are protected by spinlock across multiple threads */
   /* EVQ state */
   sfvmk_evqState_t        state;
+  vmk_Bool                exception;
+  vmk_uint32              readPtr;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_flushState_e {

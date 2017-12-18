@@ -33,16 +33,8 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  status = sfvmk_createLock(pAdapter, "portLock",
-                            SFVMK_SPINLOCK_RANK_PORT_LOCK,
-                            &pPort->lock);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createLock failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
-  }
-
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
+  status = VMK_OK;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
@@ -74,7 +66,6 @@ sfvmk_portFini(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  sfvmk_destroyLock(pPort->lock);
   pPort->state = SFVMK_PORT_STATE_UNINITIALIZED;
 
 done:

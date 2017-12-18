@@ -48,6 +48,29 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
   [EFX_LINK_40000FDX] = VMK_LINK_DUPLEX_FULL,
 };
 
+/*! \brief  Helper world queue function for link update
+**
+** \param[in]  vmk_AddrCookie  Pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+void sfvmk_macLinkUpdateHelper(vmk_AddrCookie data)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)data.ptr;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+  /* TODO Adapter lock will come over here */
+  sfvmk_macLinkUpdate(pAdapter);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+}
+
 /*! \brief  Update link mode and populate it to uplink device.
 **
 ** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
@@ -55,10 +78,10 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
 **
 ** \return: void
 */
-void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
-                         efx_link_mode_t linkMode)
+void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
 {
   vmk_UplinkSharedData *pSharedData = NULL;
+  efx_link_mode_t linkMode;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
@@ -67,11 +90,15 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
+  linkMode = pAdapter->port.linkMode;
   pSharedData =  &pAdapter->uplink.sharedData;
+
   sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
 
-  pSharedData->link.speed = sfvmk_linkBaudrate[linkMode];
-  pSharedData->link.duplex = sfvmk_linkDuplex[linkMode];
+  if (linkMode < EFX_LINK_NMODES) {
+    pSharedData->link.speed = sfvmk_linkBaudrate[linkMode];
+    pSharedData->link.duplex = sfvmk_linkDuplex[linkMode];
+  }
 
   switch (linkMode) {
     case EFX_LINK_10HDX:
@@ -101,7 +128,6 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
                       pSharedData->link.speed,
                       pSharedData->link.duplex);
 
-  pAdapter->port.linkMode = linkMode;
   /* TODO: This should not be called if admin link status is down.
    * Check will be added along with admin link status capability in uplink.
    * Right now it is safe to call this always as by default admin link status is up */
@@ -109,8 +135,47 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter,
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+}
 
-  return;
+/*! \brief Fuction to submit link update request.
+**
+** \param[in]  Pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+VMK_ReturnStatus
+sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter)
+{
+  vmk_HelperRequestProps props = {0};
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Create a request and submit */
+  props.requestMayBlock = VMK_FALSE;
+  props.tag = (vmk_AddrCookie)NULL;
+  props.cancelFunc = NULL;
+  props.worldToBill = VMK_INVALID_WORLD_ID;
+  status = vmk_HelperSubmitRequest(pAdapter->helper,
+                                   sfvmk_macLinkUpdateHelper,
+                                   (vmk_AddrCookie *)pAdapter,
+                                   &props);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HelperSubmitRequest failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+
+  return status;
 }
 
 /*! \brief  Initialize port, filters, flow control and link status.
@@ -124,7 +189,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_port_t *pPort = NULL;
   efx_nic_t *pNic = NULL;
-  efx_link_mode_t mode;
   size_t pdu;
   VMK_ReturnStatus status = VMK_FAILURE;
 
@@ -139,8 +203,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   pPort = &pAdapter->port;
   pNic = pAdapter->pNic;
 
-  vmk_SpinlockLock(pPort->lock);
-
   if (pPort->state != SFVMK_PORT_STATE_INITIALIZED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Port is not yet initialized");
     status = VMK_FAILURE;
@@ -151,7 +213,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_filter_init failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_filter_init;
   }
 
@@ -160,7 +221,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_port_init failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_port_init;
   }
 
@@ -170,7 +230,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_pdu_set failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_mac_pdu;
   }
 
@@ -179,7 +238,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_fcntl failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_mac_fcntl;
   }
 
@@ -188,7 +246,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_set failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_mac_filter_set;
   }
 
@@ -196,20 +253,25 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_drain failed status: %s",
                         vmk_StatusToString(status));
-    status = VMK_FAILURE;
     goto failed_mac_drain;
   }
 
   pPort->state = SFVMK_PORT_STATE_STARTED;
 
-  vmk_SpinlockUnlock(pPort->lock);
-
   /* Single poll in case there were missing initial events */
-  efx_port_poll(pNic, &mode);
-  sfvmk_macLinkUpdate(pAdapter, mode);
+  status = efx_port_poll(pNic, &pPort->linkMode);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_port_poll failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_port_poll;
+  }
+  /* Safe to call directly instead of through helper as portStart gets
+   * called inside adapter lock */
+  sfvmk_macLinkUpdate(pAdapter);
 
   goto done;
 
+failed_port_poll:
 failed_mac_drain:
 failed_mac_filter_set:
 failed_mac_fcntl:
@@ -220,7 +282,6 @@ failed_port_init:
   efx_filter_fini(pNic);
 
 failed_filter_init:
-  vmk_SpinlockUnlock(pPort->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
@@ -248,11 +309,9 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   pPort = &pAdapter->port;
   pNic = pAdapter->pNic;
 
-  vmk_SpinlockLock(pPort->lock);
-
   if (pPort->state != SFVMK_PORT_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Port is not yet started");
-    goto unlock_spinlock;
+    goto done;
   }
 
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
@@ -265,9 +324,6 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   efx_port_fini(pNic);
 
   efx_filter_fini(pNic);
-
-unlock_spinlock:
-  vmk_SpinlockUnlock(pPort->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

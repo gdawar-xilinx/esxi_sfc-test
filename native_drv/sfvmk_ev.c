@@ -48,7 +48,7 @@ static boolean_t sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex);
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_exception = sfvmk_evException,
   .eec_link_change = sfvmk_evLinkChange,
-  .eec_initialized  = sfvmk_evInitialized,
+  .eec_initialized = sfvmk_evInitialized,
   .eec_txq_flush_done = sfvmk_evTxqFlushDone,
   .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
   .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
@@ -58,7 +58,8 @@ static const efx_ev_callbacks_t sfvmk_evCallbacks = {
 **
 ** \param[in] arg        Pointer to eventQ
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
 */
 static boolean_t
 sfvmk_evInitialized(void *arg)
@@ -144,18 +145,22 @@ fail:
 ** \param[in] arg        Pointer to event queue
 ** \param[in] linkMode   Specify link status (up/down, speed)
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE <Success>
+** \return: VMK_True  <Failure>
 */
 static boolean_t
 sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
 {
   sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
   sfvmk_adapter_t *pAdapter = NULL;
+  VMK_ReturnStatus status;
 
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
     goto fail;
   }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
 
   pAdapter = pEvq->pAdapter;
   if (pAdapter == NULL) {
@@ -172,7 +177,13 @@ sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_INFO,
                       "Link change is detected: %d", linkMode);
 
-  sfvmk_macLinkUpdate(pAdapter, linkMode);
+  pAdapter->port.linkMode = linkMode;
+  status = sfvmk_scheduleLinkUpdate(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleLinkUpdate failed status: %s",
+                        vmk_StatusToString(status));
+    goto fail;
+  }
 
 done:
   return VMK_FALSE;

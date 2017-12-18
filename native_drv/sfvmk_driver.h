@@ -103,11 +103,13 @@ typedef struct sfvmk_evq_s {
 typedef enum sfvmk_portState_e {
   SFVMK_PORT_STATE_UNINITIALIZED = 0,
   SFVMK_PORT_STATE_INITIALIZED,
+  SFVMK_PORT_STATE_STARTED
 } sfvmk_portState_t;
 
 typedef struct sfvmk_port_s {
   sfvmk_portState_t   state;
-  vmk_Lock            lock;
+  efx_link_mode_t     linkMode;
+  vmk_uint32          fcRequested;
 } sfvmk_port_t;
 
 typedef enum sfvmk_txqType_e {
@@ -229,6 +231,8 @@ typedef struct sfvmk_adapter_s {
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
   vmk_Name                   devName;
+  /* Handle for helper world queue */
+  vmk_Helper                 helper;
 } sfvmk_adapter_t;
 
 /* Functions for interrupt handling */
@@ -282,6 +286,10 @@ VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
 /* Functions for port module handling */
 VMK_ReturnStatus sfvmk_portInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_portFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_portStart(sfvmk_adapter_t *pAdapter);
+void sfvmk_portStop(sfvmk_adapter_t *pAdapter);
+void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

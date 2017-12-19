@@ -361,9 +361,19 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto failed_port_start;
   }
 
+  status = sfvmk_rxStart(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_rxStart failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_rx_start;
+  }
+
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
   status = VMK_OK;
   goto done;
+
+failed_rx_start:
+  sfvmk_portStop(pAdapter);
 
 failed_port_start:
   sfvmk_evStop(pAdapter);
@@ -413,6 +423,8 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
    * link should be down before proceeding further. */
   pAdapter->port.linkMode = EFX_LINK_DOWN;
   sfvmk_macLinkUpdate(pAdapter);
+
+  sfvmk_rxStop(pAdapter);
 
   sfvmk_portStop(pAdapter);
 

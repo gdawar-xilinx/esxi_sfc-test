@@ -21,11 +21,15 @@
 static boolean_t sfvmk_evInitialized(void *arg);
 static boolean_t sfvmk_evException(void *arg, uint32_t code, uint32_t data);
 static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode);
+static boolean_t sfvmk_evRxqFlushDone(void *arg, uint32_t rxq_index);
+static boolean_t sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex);
 
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_exception = sfvmk_evException,
   .eec_link_change = sfvmk_evLinkChange,
   .eec_initialized = sfvmk_evInitialized,
+  .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
+  .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
 };
 
 /*! \brief Gets called when initilized event comes for an eventQ.
@@ -167,6 +171,88 @@ done:
 fail:
   return VMK_TRUE;
 
+}
+
+/*! \brief Check flushed event received for a RXQ.
+**
+** \param[in] arg       Pointer to event queue
+** \param[in] rxqIndex  RXQ index
+** \param[in] swEvent   Software event.
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+static boolean_t
+sfvmk_evRxqFlush(void *arg, uint32_t rxqIndex, sfvmk_flushState_t flushState)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+  sfvmk_adapter_t *pAdapter = NULL;
+  sfvmk_rxq_t *pRxq = NULL;
+
+  if (pEvq == NULL) {
+    SFVMK_ERROR("NULL event queue ptr");
+    goto fail;
+  }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
+
+  pAdapter = pEvq->pAdapter;
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto fail;
+  }
+
+  if (rxqIndex >= pAdapter->numRxqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid RXQ index %u", rxqIndex);
+    goto fail;
+  }
+
+  if (pAdapter->ppRxq != NULL)
+    pRxq = pAdapter->ppRxq[rxqIndex];
+
+  if (pRxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL RXQ ptr");
+    goto fail;
+  }
+
+  if (pRxq->index == pEvq->index) {
+    sfvmk_setRxqFlushState(pRxq, flushState);
+    goto done;
+  }
+
+done:
+  return VMK_FALSE;
+
+fail:
+  return VMK_TRUE;
+}
+
+/*! \brief  Gets called when flushing RXQ is done.
+**
+** \param[in] arg       Pointer to event queue
+** \param[in] rxqIndex  RXQ Index
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+static boolean_t
+sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
+{
+  return sfvmk_evRxqFlush(arg, rxqIndex, SFVMK_FLUSH_STATE_DONE);
+}
+
+/*! \brief  Gets called when flushing RXQ is failed.
+**
+** \param[in] arg       Pointer to event queue
+** \param[in] rxqIndex  RXQ Index
+**
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
+*/
+static boolean_t
+sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
+{
+  return sfvmk_evRxqFlush(arg, rxqIndex, SFVMK_FLUSH_STATE_FAILED);
 }
 
 /*! \brief  Poll event from eventQ and process it. function should be called in thread

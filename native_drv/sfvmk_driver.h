@@ -100,6 +100,13 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              readPtr;
 } sfvmk_evq_t;
 
+typedef enum sfvmk_flushState_e {
+  SFVMK_FLUSH_STATE_DONE = 0,
+  SFVMK_FLUSH_STATE_REQUIRED,
+  SFVMK_FLUSH_STATE_PENDING,
+  SFVMK_FLUSH_STATE_FAILED
+} sfvmk_flushState_t;
+
 typedef enum sfvmk_portState_e {
   SFVMK_PORT_STATE_UNINITIALIZED = 0,
   SFVMK_PORT_STATE_INITIALIZED,
@@ -140,15 +147,18 @@ typedef struct sfvmk_txq_s {
 typedef enum sfvmk_rxqState_e {
   SFVMK_RXQ_STATE_UNINITIALIZED = 0,
   SFVMK_RXQ_STATE_INITIALIZED,
+  SFVMK_RXQ_STATE_STARTED
 } sfvmk_rxqState_t;
 
 typedef struct sfvmk_rxq_s {
-  vmk_Lock          lock;
-  efsys_mem_t       mem;
-  vmk_uint32        index;
-  vmk_uint32        numDesc;
-  vmk_uint32        ptrMask;
-  sfvmk_rxqState_t  state;
+  efsys_mem_t         mem;
+  vmk_uint32          index;
+  vmk_uint32          numDesc;
+  vmk_uint32          ptrMask;
+  efx_rxq_t           *pCommonRxq;
+  /* Following fields are protected by associated EVQ's spinlock */
+  sfvmk_rxqState_t    state;
+  sfvmk_flushState_t  flushState;
 } sfvmk_rxq_t;
 
 typedef struct sfvmk_uplink_s {
@@ -225,6 +235,9 @@ typedef struct sfvmk_adapter_s {
   /* Ptr to array of numRxqsAllocated RXQs */
   sfvmk_rxq_t                **ppRxq;
   vmk_uint32                 numRxqsAllocated;
+  vmk_uint32                 defRxqIndex;
+  vmk_Bool                   enableRSS;
+
   sfvmk_port_t               port;
 
   sfvmk_uplink_t             uplink;
@@ -298,6 +311,9 @@ void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
 /* Functions for RXQ module handling */
 VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
+void sfvmk_rxStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_rxStart(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState);
 
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);

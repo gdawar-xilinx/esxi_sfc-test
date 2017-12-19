@@ -738,6 +738,11 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
+  /* Called sfvmk_macLinkUpdate directly insted of using helper as
+   * link should be down before proceeding further. */
+  pAdapter->port.linkMode = EFX_LINK_DOWN;
+  sfvmk_macLinkUpdate(pAdapter);
+  
   sfvmk_txStop(pAdapter);
 
   sfvmk_rxStop(pAdapter);

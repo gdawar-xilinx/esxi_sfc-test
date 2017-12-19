@@ -180,14 +180,14 @@ typedef enum sfvmk_rxqState_e {
 } sfvmk_rxqState_t;
 
 typedef struct sfvmk_rxq_s {
-  vmk_Lock            lock;
   efsys_mem_t         mem;
   vmk_uint32          index;
   vmk_uint32          numDesc;
   vmk_uint32          ptrMask;
+  efx_rxq_t           *pCommonRxq;
+  /* Following fields are protected by associated EVQ's spinlock */
   sfvmk_rxqState_t    state;
   sfvmk_flushState_t  flushState;
-  efx_rxq_t           *pCommonRxq;
 } sfvmk_rxq_t;
 
 typedef struct sfvmk_uplink_s {
@@ -268,9 +268,6 @@ typedef struct sfvmk_adapter_s {
   sfvmk_rxq_t                **ppRxq;
   vmk_uint32                 numRxqsAllocated;
   vmk_uint32                 defRxqIndex;
-  size_t                     rxPrefixSize;
-  size_t                     rxBufferSize;
-  size_t                     rxBufferAlign;
   vmk_Bool                   enableRSS;
 
   sfvmk_port_t               port;
@@ -322,10 +319,11 @@ void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
 
 vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
 
-/* Get time in USEC */
+/* Get time in micro seconds */
 static inline void sfvmk_getTime(vmk_uint64 *pTime)
 {
   vmk_TimeVal time;
+
   vmk_GetTimeOfDay(&time);
   *pTime = (time.sec * VMK_USEC_PER_SEC) + time.usec;
 }

@@ -193,14 +193,14 @@ fail:
 
 }
 
-/*! \brief Checked flushed event received for a RXQ, resend the event to
-**         the EVQ associated with the given RXQ.
+/*! \brief Check flushed event received for a RXQ.
 **
 ** \param[in] arg       Pointer to event queue
 ** \param[in] rxqIndex  RXQ index
 ** \param[in] swEvent   Software event.
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
 */
 static boolean_t
 sfvmk_evRxqFlush(void *arg, uint32_t rxqIndex, sfvmk_flushState_t flushState)
@@ -213,6 +213,8 @@ sfvmk_evRxqFlush(void *arg, uint32_t rxqIndex, sfvmk_flushState_t flushState)
     SFVMK_ERROR("NULL event queue ptr");
     goto fail;
   }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
 
   pAdapter = pEvq->pAdapter;
   if (pAdapter == NULL) {
@@ -233,11 +235,9 @@ sfvmk_evRxqFlush(void *arg, uint32_t rxqIndex, sfvmk_flushState_t flushState)
     goto fail;
   }
 
-  if (flushState == SFVMK_FLUSH_STATE_DONE) {
-    if (pRxq->index == pEvq->index) {
-      sfvmk_setRxqFlushState(pRxq, flushState);
-      goto done;
-    }
+  if (pRxq->index == pEvq->index) {
+    sfvmk_setRxqFlushState(pRxq, flushState);
+    goto done;
   }
 
 done:
@@ -252,7 +252,8 @@ fail:
 ** \param[in] arg       Pointer to event queue
 ** \param[in] rxqIndex  RXQ Index
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
 */
 static boolean_t
 sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
@@ -265,7 +266,8 @@ sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
 ** \param[in] arg       Pointer to event queue
 ** \param[in] rxqIndex  RXQ Index
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE <Success>
+** \return: VMK_TRUE  <Failure>
 */
 static boolean_t
 sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)

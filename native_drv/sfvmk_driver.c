@@ -523,54 +523,6 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
 
-/*! \brief  Routine to set bus mastering mode
-**
-** \param[in]  pAdapter Pointer to sfvmk_adapter_t
-**
-** \return: VMK_OK <success> or error code <failure>
-*/
-static VMK_ReturnStatus
-sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
-{
-  vmk_uint32 cmd;
-  VMK_ReturnStatus status = VMK_FAILURE;
-
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
-
-  if (pAdapter == NULL) {
-    SFVMK_ERROR("NULL adapter ptr");
-    status = VMK_BAD_PARAM;
-    goto done;
-  }
-
-  status = vmk_PCIReadConfig(vmk_ModuleCurrentID,
-                             pAdapter->pciDevice,
-                             VMK_PCI_CONFIG_ACCESS_16,
-                             SFVMK_PCI_COMMAND, &cmd);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIReadConfig failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
-  }
-
-  if (!(cmd & SFVMK_PCI_COMMAND_BUS_MASTER)) {
-
-    cmd |= SFVMK_PCI_COMMAND_BUS_MASTER;
-    status = vmk_PCIWriteConfig(vmk_ModuleCurrentID,
-                                pAdapter->pciDevice,
-                                VMK_PCI_CONFIG_ACCESS_16,
-                                SFVMK_PCI_COMMAND, cmd);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIWriteConfig(%u) failed status: %s",
-                          cmd, vmk_StatusToString(status));
-    }
-  }
-
-done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
-
-  return status;
-}
 
 /*! \brief  Routine to create a VMK Helper queue
 **
@@ -633,6 +585,103 @@ sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
   vmk_HelperDestroy(pAdapter->helper);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+}
+
+/* \brief  Handle packet completion. The function works in netPoll context.
+**
+** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pPkt     pointer to pkt
+**
+** \return: None
+*/
+static void
+sfvmk_pktReleaseNetPoll(sfvmk_pktCompCtx_t *pCompCtx,
+                        vmk_PktHandle *pPkt)
+{
+   VMK_ASSERT_EQ(pCompCtx->type, SFVMK_PKT_COMPLETION_NETPOLL);
+   vmk_NetPollQueueCompPkt(pCompCtx->netPoll, pPkt);
+}
+
+/* \brief  Handle packet release request. The function works
+**         in Others (other than netPoll and panic) context.
+**
+** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pPkt     pointer to pkt
+**
+** \return: None
+*/
+static void
+sfvmk_pktReleaseOthers(sfvmk_pktCompCtx_t *pCompCtx,
+                       vmk_PktHandle *pPkt)
+{
+   VMK_ASSERT_EQ(pCompCtx->type, SFVMK_PKT_COMPLETION_OTHERS);
+   vmk_PktRelease(pPkt);
+}
+
+/* \brief  Initialize pktops to be invoked at different context to
+**         handle pkt release and pkt completion.
+**
+** \param[in]  pAdapter Pointer to adapter
+**
+** \return: None
+*/
+static void sfvmk_setPktOps(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_pktOps_t ops[SFVMK_PKT_COMPLETION_MAX] = {
+    [SFVMK_PKT_COMPLETION_NETPOLL] = { sfvmk_pktReleaseNetPoll },
+    [SFVMK_PKT_COMPLETION_OTHERS]  = { sfvmk_pktReleaseOthers },
+  };
+
+  vmk_Memcpy(pAdapter->pktOps, ops, sizeof(ops));
+}
+
+/*! \brief  Routine to set bus mastering mode
+**
+** \param[in]  pAdapter Pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> or error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 cmd;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  status = vmk_PCIReadConfig(vmk_ModuleCurrentID,
+                             pAdapter->pciDevice,
+                             VMK_PCI_CONFIG_ACCESS_16,
+                             SFVMK_PCI_COMMAND, &cmd);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIReadConfig failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (!(cmd & SFVMK_PCI_COMMAND_BUS_MASTER)) {
+
+    cmd |= SFVMK_PCI_COMMAND_BUS_MASTER;
+    status = vmk_PCIWriteConfig(vmk_ModuleCurrentID,
+                                pAdapter->pciDevice,
+                                VMK_PCI_CONFIG_ACCESS_16,
+                                SFVMK_PCI_COMMAND, cmd);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIWriteConfig(%u) failed status: %s",
+                          cmd, vmk_StatusToString(status));
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
 }
 
 /************************************************************************
@@ -840,6 +889,8 @@ sfvmk_attachDevice(vmk_Device dev)
                         vmk_StatusToString(status));
     goto failed_create_helper;
   }
+
+  sfvmk_setPktOps(pAdapter);
 
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;

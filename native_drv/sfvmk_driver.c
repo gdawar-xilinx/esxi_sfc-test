@@ -114,6 +114,11 @@ sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter)
   SFVMK_DBG_FUNC_ENTRY(pAdapter, SFVMK_DBG_DRIVER);
 
   /*check adapter's family */
+  SFVMK_DBG(pAdapter, SFVMK_DBG_TX, SFVMK_LOG_LEVEL_DBG,
+                      "PCI VendorID %x DevID %x",
+                      pAdapter->pciDeviceID.vendorID,
+                      pAdapter->pciDeviceID.deviceID);
+
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
                   pAdapter->pciDeviceID.deviceID,
                   &pAdapter->efxFamily, &pAdapter->memBar);
@@ -122,7 +127,8 @@ sfvmk_verifyDevice(sfvmk_adapter_t *pAdapter)
     return VMK_FAILURE;
   }
   /* driver support only Medford Family */
-  if (pAdapter->efxFamily == EFX_FAMILY_MEDFORD) {
+  if ((pAdapter->efxFamily == EFX_FAMILY_MEDFORD) ||
+      (pAdapter->efxFamily == EFX_FAMILY_MEDFORD2)) {
     SFVMK_DBG_FUNC_EXIT(pAdapter, SFVMK_DBG_DRIVER);
     return VMK_OK;
   }
@@ -532,6 +538,21 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
 
       case EFX_PHY_CAP_10000FDX:
         pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_25000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_50000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
+        pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
+        break ;
+
+      case EFX_PHY_CAP_100000FDX:
+        pAdapter->supportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
         pAdapter->supportedModes[index++].duplex = VMK_LINK_DUPLEX_FULL;
         break ;
 

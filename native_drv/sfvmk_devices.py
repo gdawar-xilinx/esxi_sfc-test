@@ -11,6 +11,10 @@ DEV = {
                   "device id"         : "0a03",
                   "description"       : "SFC9200 family",
                },
+               {
+                  "device id"         : "0b03",
+                  "description"       : "SFCX2522 family",
+               },
 
             ],
          },

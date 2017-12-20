@@ -346,7 +346,10 @@ typedef struct sfvmk_linkStatus_s {
 #define SFVMK_LINK_SPEED_100_MBPS   100
 #define SFVMK_LINK_SPEED_1000_MBPS  1000
 #define SFVMK_LINK_SPEED_10000_MBPS 10000
+#define SFVMK_LINK_SPEED_25000_MBPS 25000
 #define SFVMK_LINK_SPEED_40000_MBPS 40000
+#define SFVMK_LINK_SPEED_50000_MBPS 50000
+#define SFVMK_LINK_SPEED_100000_MBPS 100000
 
 /*! \brief struct sfvmk_linkSpeed_s for get or
  **        set link speed and autoneg

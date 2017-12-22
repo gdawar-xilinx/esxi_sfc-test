@@ -66,7 +66,7 @@ end:
  **
  ** \param[in]  pCookies    Pointer to cookie
  ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface   Pointer to mgmt param
+ ** \param[in/out]  pDevIface   Pointer to device interface structure
  ** \param[in/out]  pMgmtMcdi   Pointer to MCDI cmd struct
  **
  ** \return: VMK_OK  <success>

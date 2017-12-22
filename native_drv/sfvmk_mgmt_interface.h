@@ -35,7 +35,7 @@
  ** The identifiers 0 through VMK_MGMT_RESERVED_CALLBACKS
  ** are reserved and must not be used by consumers of the
  ** management APIs.  Here, we declare all callback
- ** identifiers start at (VMK_MGMT_RESERVED_CALLBACKS + 1).
+ ** identifiers starting at (VMK_MGMT_RESERVED_CALLBACKS + 1).
  ** These identifiers are used by consumers of
  ** the API at runtime to invoke the associated callback.
  **
@@ -48,7 +48,7 @@
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST = (VMK_MGMT_RESERVED_CALLBACKS + 1),
   SFVMK_CB_MAX
-}sfvmk_mgmtCbTypes_t;
+} sfvmk_mgmtCbTypes_t;
 
 /*
  * The name used to describe management interface ABI between kernel
@@ -56,6 +56,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
  */
 #define SFVMK_INTERFACE_NAME   "sfvmkMgmtToKernel"
 
+/* Length of uplink device name string */
 #define SFVMK_DEV_NAME_LEN     10
 
 /*
@@ -77,8 +78,8 @@ typedef struct sfvmk_mgmtDevInfo_s {
 } __attribute__((__packed__)) sfvmk_mgmtDevInfo_t;
 
 /*
- * The maximum payload length is 0x400 (MCDI_CTL_SDU_LEN_MAX_V2) - 4 bytes
- * = 255 x 32 bit words as MCDI_CTL_SDU_LEN_MAX_V2 doesn't take account of
+ * The maximum payload length is 0x400 (MCDI_CTL_SDU_LEN_MAX_V2) - uint32
+ * = 255 x 32 bit as MCDI_CTL_SDU_LEN_MAX_V2 doesn't take account of
  * the space required by the V1 header, which still exists in a V2 command.
  */
 #define SFVMK_MCDI_MAX_PAYLOAD_ARRAY 255
@@ -141,7 +142,8 @@ typedef struct sfvmk_mcdiRequest_s {
  ** specific instances or tracking instance-specific callback invocations, just
  ** use MGMT_NO_INSTANCE_ID for this parameter.
  **
- ** Other two parameters are user defined.
+ ** Other parameters are user defined and are defined in the
+ ** structure sfvmk_mgmtCallbacks
  **
  ** The return type merely indicates that the callback ran to completion without
  ** error, it does not indicate the semantic success or failure of the operation

@@ -39,6 +39,8 @@
 #define SFVMK_PCI_COMMAND             0x04
 /* Type of command */
 #define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
+/* Uplink Rxq start index */
+#define SFVMK_UPLINK_RXQ_START_INDEX    0
 
 #define	SFVMK_MAGIC_RESERVED	      0x8000
 #define	SFVMK_SW_EV_MAGIC(_sw_ev)     (SFVMK_MAGIC_RESERVED | (_sw_ev))
@@ -127,6 +129,7 @@ typedef struct sfvmk_evq_s {
   /* EVQ state */
   sfvmk_evqState_t        state;
   vmk_Bool                exception;
+  vmk_uint32              txDone;
   vmk_uint32              readPtr;
   vmk_uint32              rxDone;
 } sfvmk_evq_t;
@@ -163,19 +166,40 @@ typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_STARTED
 } sfvmk_txqState_t;
 
+/* Buffer mapping information for descriptors in flight */
+typedef struct sfvmk_txMapping_s {
+  vmk_PktHandle *pXmitPkt;
+  vmk_SgElem    sgElem;
+} sfvmk_txMapping_t;
+
 typedef struct sfvmk_txq_s {
-  vmk_Lock            lock;
+  struct sfvmk_adapter_s  *pAdapter;
+  /* Lock to synchronize transmit flow with tx completion context */
+  vmk_Lock                lock;
   /* HW TXQ index */
-  vmk_uint32          index;
+  vmk_uint32              index;
   /* Associated eventq Index */
-  vmk_uint32          evqIndex;
-  vmk_uint32          numDesc;
-  vmk_uint32          ptrMask;
-  efsys_mem_t         mem;
-  sfvmk_txqState_t    state;
-  sfvmk_txqType_t     type;
-  sfvmk_flushState_t  flushState;
-  efx_txq_t           *pCommonTxq;
+  vmk_uint32              evqIndex;
+  /* Number of buffer desc in the TXQ */
+  vmk_uint32              numDesc;
+  vmk_uint32              ptrMask;
+  efsys_mem_t             mem;
+  sfvmk_txqState_t        state;
+  sfvmk_txqType_t         type;
+  sfvmk_flushState_t      flushState;
+  efx_txq_t               *pCommonTxq;
+  efx_desc_t              *pPendDesc;
+
+  /* Lock also protects following fields in txqStop and txqStart */
+  sfvmk_txMapping_t       *pTxMap;  /* Packets in flight. */
+  vmk_uint32              nPendDesc;
+  vmk_uint32              added;
+  vmk_uint32              reaped;
+  vmk_uint32              completed;
+  /* The following fields change more often and are read regularly
+   * on the transmit and transmit completion path */
+  vmk_uint32              pending VMK_ATTRIBUTE_L1_ALIGNED;
+  vmk_Bool                blocked VMK_ATTRIBUTE_L1_ALIGNED;
 } sfvmk_txq_t;
 
 /* Descriptor for each buffer */
@@ -322,6 +346,7 @@ typedef struct sfvmk_adapter_s {
   vmk_Helper                 helper;
 
   sfvmk_pktOps_t             pktOps[SFVMK_PKT_COMPLETION_MAX];
+  vmk_uint32                 txDmaDescMaxSize;
 } sfvmk_adapter_t;
 
 /* Structure for device instance hash table  */
@@ -405,6 +430,11 @@ void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_txStop(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_txStart(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_txqFlushDone(sfvmk_txq_t *pTxq);
+vmk_Bool sfvmk_isTxqStopped(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex);
+VMK_ReturnStatus sfvmk_transmitPkt(sfvmk_txq_t *pTxq, vmk_PktHandle *pkt);
+void sfvmk_txqReap(sfvmk_txq_t *pTxq);
+void sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq,
+                       sfvmk_pktCompCtx_t *pCompCtx);
 
 /* Functions for RXQ module handling */
 VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);
@@ -431,9 +461,43 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
   vmk_SpinlockUnlock(pUplink->shareDataLock);
 }
 
+/*! \brief Get the start index of uplink TXQs in vmk_UplinkSharedQueueData array
+**
+** \param[in]  pUplink  pointer to uplink structure
+**
+** \return: index from where TXQs is starting in vmk_UplinkSharedQueueData array
+*/
+static inline vmk_uint32 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
+{
+  /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
+   * It is structured to record information about maxRxQueues receive
+   * queues first followed by maxTxQueuestransmit queues.
+   */
+  return (SFVMK_UPLINK_RXQ_START_INDEX + pUplink->queueInfo.maxRxQueues);
+}
+
+/*! \brief Get the pointer to tx shared queue data
+**
+** \param[in]  pAdapter  pointer to adapter structure
+**
+** \return: pointer to queue data from where TXQs is starting
+*/
+static inline vmk_UplinkSharedQueueData* sfvmk_getUplinkTxSharedQueueData(sfvmk_uplink_t *pUplink)
+{
+  /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
+   * It is structured to record information about maxRxQueues receive
+   * queues first followed by maxTxQueuestransmit queues.
+   */
+  return &pUplink->queueInfo.queueData[sfvmk_getUplinkTxqStartIndex(pUplink)];
+}
+
 void sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
 vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter);
 vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter);
+
+void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
+                             vmk_UplinkQueueState qState,
+                             vmk_uint32 qIndex);
 
 #endif /* __SFVMK_DRIVER_H__ */

@@ -300,6 +300,7 @@ typedef struct sfvmk_adapter_s {
   /* EFX /efsys related information */
   /* EFX family */
   efx_family_t               efxFamily;
+  vmk_uint32                 memBar;
   /* Struct to store mapped memory BAR info */
   efsys_bar_t                bar;
   /* Lock required by common code nic module */

@@ -344,6 +344,9 @@ typedef struct efsys_mem_s {
                                                                         \
         } while (B_FALSE)
 
+#define EFSYS_MEM_SIZE(_esmp)                                           \
+        ((_esmp)->ioElem.length)
+
 #define EFSYS_MEM_ADDR(_esmp)                                           \
         ((_esmp)->ioElem.ioAddr)
 
@@ -622,6 +625,7 @@ typedef uint64_t    efsys_stat_t;
 #define memcmp(src1, src2, n)   vmk_Memcmp(src1, src2, n)
 
 #define strncpy(src1, src2, n)  vmk_Strncpy(src1, src2, n)
+#define strnlen(src, n)         vmk_Strnlen(src, n)
 
 #define _NOTE(_note)
 

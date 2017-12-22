@@ -72,7 +72,8 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
 
   /* Check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
-                  pAdapter->pciDeviceID.deviceID, &pAdapter->efxFamily);
+                  pAdapter->pciDeviceID.deviceID,
+                  &pAdapter->efxFamily, &pAdapter->memBar);
   if (rc != 0) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_family failed status: %d", rc);
     goto done;
@@ -287,49 +288,19 @@ static VMK_ReturnStatus
 sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_BAD_PARAM;
-  vmk_uint32 barIndex;
-  vmk_PCIResource pciResource[VMK_PCI_NUM_BARS];
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
-  if (pAdapter == NULL) {
-    SFVMK_ERROR("NULL adapter ptr");
-    goto done;
-  }
-
-  status = vmk_PCIQueryIOResources(pAdapter->pciDevice,
-                                   VMK_PCI_NUM_BARS,
-                                   pciResource);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIQueryIOResources failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_query_io_resource;
-  }
-
-  /* Look for first 64bit memory BAR containing VI aperture */
-  for(barIndex = 0; barIndex < VMK_PCI_NUM_BARS; barIndex++) {
-    if ((pciResource[barIndex].flags & VMK_PCI_BAR_FLAGS_IO_MASK) ==
-        VMK_PCI_BAR_FLAGS_IO)
-      continue;
-
-    if (pciResource[barIndex].flags & VMK_PCI_BAR_FLAGS_MEM_64_BITS)
-      break;
-  }
-
-  /* Check if BAR has been found */
-  if (barIndex == VMK_PCI_NUM_BARS) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get BAR for VI register");
-    goto failed_fetch_mem_bar_info;
-  }
-
   status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                                        barIndex, VMK_MAPATTRS_READWRITE |
+                                        pAdapter->memBar, VMK_MAPATTRS_READWRITE |
                                         VMK_MAPATTRS_UNCACHED,
                                         &pAdapter->bar.esbBase);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_PCIMapIOResourceWithAttr for BAR%d failed status: %s",
-                        barIndex, vmk_StatusToString(status));
+                        pAdapter->memBar, vmk_StatusToString(status));
     goto failed_map_io_resource;
   }
 
@@ -338,21 +309,20 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
                             &pAdapter->bar.esbLock);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createLock for BAR%d failed status  %s",
-                        barIndex, vmk_StatusToString(status));
+                        pAdapter->memBar, vmk_StatusToString(status));
     goto failed_create_lock;
   }
 
   /* Storing BAR index to be used for unmapping resource */
-  pAdapter->bar.index = barIndex;
+  pAdapter->bar.index = pAdapter->memBar;
 
   goto done;
 
 failed_create_lock:
-  vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice, barIndex);
+  vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
+                         pAdapter->memBar);
 
 failed_map_io_resource:
-failed_fetch_mem_bar_info:
-failed_query_io_resource:
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 

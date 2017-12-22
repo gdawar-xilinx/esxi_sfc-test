@@ -740,6 +740,7 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
                           EFX_RXQ_TYPE_DEFAULT,
                           &pRxq->mem,
                           pRxq->numDesc, 0,
+                          EFX_RXQ_FLAG_NONE,
                           pEvq->pCommonEvq,
                           &pRxq->pCommonRxq);
   if (status != VMK_OK) {

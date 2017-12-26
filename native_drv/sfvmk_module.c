@@ -49,9 +49,14 @@ sfvmk_modInfoCleanup(void)
     sfvmk_modInfo.mgmtHandle = NULL;
   }
 
+  if (sfvmk_modInfo.driverID != NULL) {
+    sfvmk_driverUnregister();
+    sfvmk_modInfo.driverID = NULL;
+  }
+
   if (sfvmk_modInfo.vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
     if (vmk_HashDeleteAll(sfvmk_modInfo.vmkdevHashTable) != VMK_OK)
-      vmk_WarningMessage("Error in deleting vmkdevHashTable entries");
+      SFVMK_ERROR("Error in deleting vmkdevHashTable entries");
 
     if (vmk_HashIsEmpty(sfvmk_modInfo.vmkdevHashTable)) {
       /* Free the hash table */
@@ -64,10 +69,6 @@ sfvmk_modInfoCleanup(void)
     vmk_SemaDestroy(&sfvmk_modInfo.lock);
   }
 
-  if (sfvmk_modInfo.driverID != NULL) {
-    sfvmk_driverUnregister();
-    sfvmk_modInfo.driverID = NULL;
-  }
   if (sfvmk_modInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
     vmk_LockDomainDestroy(sfvmk_modInfo.lockDomain);
     sfvmk_modInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
@@ -195,36 +196,13 @@ init_module(void)
     goto failed_mem_pool_create;
   }
 
-  /* Register Driver with with device layer */
-  status = sfvmk_driverRegister();
-  if (status != VMK_OK) {
-    vmk_WarningMessage("Initialization of SFC driver failed (%s)",
-                       vmk_StatusToString(status));
-    goto failed_driver_register;
-  }
-
   status = vmk_BinarySemaCreate(&sfvmk_modInfo.lock,
                                 sfvmk_modInfo.heapID,
                                 (const char *)"Module Lock");
   if (status != VMK_OK) {
-    vmk_WarningMessage("Initialization of Module level lock failed (%s)",
-                       vmk_StatusToString(status));
-    goto failed_sema_init;
-  }
-
-  mgmtProps.modId = vmk_ModuleCurrentID;
-  mgmtProps.heapId = sfvmk_modInfo.heapID;
-  mgmtProps.sig = (vmk_MgmtApiSignature *)&sfvmk_mgmtSig;
-  mgmtProps.cleanupFn = NULL;
-  mgmtProps.sessionAnnounceFn = NULL;
-  mgmtProps.sessionCleanupFn = NULL;
-  mgmtProps.handleCookie = 0;
-
-  status = vmk_MgmtInit(&mgmtProps, &sfvmk_modInfo.mgmtHandle);
-  if (status != VMK_OK) {
-    SFVMK_ERROR("Initialization of mgmtProps failed: (%s)",
+    SFVMK_ERROR("Initialization of Module level lock failed (%s)",
                  vmk_StatusToString(status));
-    goto failed_mgmt_init;
+    goto failed_sema_init;
   }
 
   hashProps.moduleID  = vmk_ModuleCurrentID;
@@ -243,6 +221,29 @@ init_module(void)
     goto failed_hash_init;
   }
 
+  /* Register Driver with with device layer */
+  status = sfvmk_driverRegister();
+  if (status != VMK_OK) {
+    vmk_WarningMessage("Initialization of SFC driver failed (%s)",
+                       vmk_StatusToString(status));
+    goto failed_driver_register;
+  }
+
+  mgmtProps.modId = vmk_ModuleCurrentID;
+  mgmtProps.heapId = sfvmk_modInfo.heapID;
+  mgmtProps.sig = (vmk_MgmtApiSignature *)&sfvmk_mgmtSig;
+  mgmtProps.cleanupFn = NULL;
+  mgmtProps.sessionAnnounceFn = NULL;
+  mgmtProps.sessionCleanupFn = NULL;
+  mgmtProps.handleCookie = 0;
+
+  status = vmk_MgmtInit(&mgmtProps, &sfvmk_modInfo.mgmtHandle);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of mgmtProps failed: (%s)",
+                 vmk_StatusToString(status));
+    goto failed_mgmt_init;
+  }
+
   vmk_LogMessage("Initialization of SFC  driver successful");
   return status;
 
@@ -252,10 +253,10 @@ failed_log_register:
 failed_throttled_log_register:
 failed_lock_domain_create:
 failed_mem_pool_create:
-failed_driver_register:
 failed_sema_init:
-failed_mgmt_init:
 failed_hash_init:
+failed_driver_register:
+failed_mgmt_init:
   sfvmk_modInfoCleanup();
 
   return status;

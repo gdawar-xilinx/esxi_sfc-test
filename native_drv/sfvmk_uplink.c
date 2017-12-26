@@ -164,12 +164,10 @@ static VMK_ReturnStatus
 sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  sfvmk_adapterHashEntry_t *pHashTblEntry = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  vmk_SemaLock(&sfvmk_modInfo.lock);
   if ((pAdapter == NULL) || (uplinkHandle == NULL)) {
     SFVMK_ERROR("Invalid argument(s)");
     status = VMK_FAILURE;
@@ -185,26 +183,19 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
   pAdapter->uplink.handle = uplinkHandle;
   pAdapter->uplink.name = vmk_UplinkNameGet(uplinkHandle);
 
-  pHashTblEntry = vmk_HeapAlloc(sfvmk_modInfo.heapID, sizeof(*pHashTblEntry));
-  if (!pHashTblEntry) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HeapAlloc failed for pHashTblEntry");
-    status = VMK_FAILURE;
-    goto done;
-  }
-
-  pHashTblEntry->pAdapter = pAdapter;
-  pHashTblEntry->pUplinkName = pAdapter->uplink.name.string;
-
+  vmk_SemaLock(&sfvmk_modInfo.lock);
   status = vmk_HashKeyInsert(sfvmk_modInfo.vmkdevHashTable,
                              pAdapter->uplink.name.string,
-                             (vmk_HashValue) pHashTblEntry);
+                             (vmk_HashValue) pAdapter);
   if (status != VMK_OK) {
+    vmk_SemaUnlock(&sfvmk_modInfo.lock);
     SFVMK_ADAPTER_ERROR(pAdapter, "Hash Key Insertion failed, %s",
                         vmk_StatusToString(status));
-    vmk_HeapFree(sfvmk_modInfo.heapID, pHashTblEntry);
     status = VMK_FAILURE;
     goto done;
   }
+
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "%s associated",  pAdapter->uplink.name.string);
@@ -235,12 +226,10 @@ static VMK_ReturnStatus
 sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  sfvmk_adapterHashEntry_t *pHashTblEntry = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  vmk_SemaLock(&sfvmk_modInfo.lock);
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
     status = VMK_BAD_PARAM;
@@ -253,31 +242,25 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
     goto done;
   }
 
+  vmk_SemaLock(&sfvmk_modInfo.lock);
   status = vmk_HashKeyDelete(sfvmk_modInfo.vmkdevHashTable,
-                              pAdapter->uplink.name.string,
-                              (vmk_HashValue *)&pHashTblEntry);
+                             pAdapter->uplink.name.string,
+                             NULL);
   if (status != VMK_OK) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "%s: Failed to find node in vmkDevice "
-                         "table status: %s", pAdapter->uplink.name.string,
-                         vmk_StatusToString(status));
+    vmk_SemaUnlock(&sfvmk_modInfo.lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "%s: Failed to find node in vmkDevice "
+                        "table status: %s", pAdapter->uplink.name.string,
+                        vmk_StatusToString(status));
     status = VMK_FAILURE;
     goto done;
   }
 
-  if (!pHashTblEntry) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "%s: No vmkDevice (node: %p)",
-                         pAdapter->uplink.name.string, pHashTblEntry);
-    status = VMK_FAILURE;
-    goto done;
-  }
-
-  vmk_HeapFree(sfvmk_modInfo.heapID, pHashTblEntry);
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
 
   pAdapter->uplink.handle = NULL;
   status = VMK_OK;
 
 done:
-  vmk_SemaUnlock(&sfvmk_modInfo.lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

@@ -350,12 +350,6 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 txDmaDescMaxSize;
 } sfvmk_adapter_t;
 
-/* Structure for device instance hash table  */
-typedef struct sfvmk_adapterHashEntry_s {
-   char *pUplinkName;
-   sfvmk_adapter_t *pAdapter;
-} sfvmk_adapterHashEntry_t;
-
 /* Release pkt in different context by using different release functions */
 static inline void sfvmk_pktRelease(sfvmk_adapter_t *pAdapter,
                                     sfvmk_pktCompCtx_t *pCompCtx,

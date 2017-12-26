@@ -36,27 +36,26 @@
 static sfvmk_adapter_t *
 sfvmk_mgmtFindAdapter(sfvmk_mgmtDevInfo_t *pMgmtParm)
 {
-  sfvmk_adapterHashEntry_t *pHashTblEntry = NULL;
-  int rc;
+  sfvmk_adapter_t *pAdapter;
+  VMK_ReturnStatus status;
 
-  rc = vmk_HashKeyFind(sfvmk_modInfo.vmkdevHashTable,
-                       pMgmtParm->deviceName,
-                       (vmk_HashValue *)&pHashTblEntry);
-  if (rc != VMK_OK) {
+  status = vmk_HashKeyFind(sfvmk_modInfo.vmkdevHashTable,
+                           pMgmtParm->deviceName,
+                           (vmk_HashValue *)&pAdapter);
+  if (status != VMK_OK) {
     SFVMK_ERROR("%s: Failed to find node in vmkDevice "
                 "table status: %s", pMgmtParm->deviceName,
-                vmk_StatusToString(rc));
+                vmk_StatusToString(status));
     goto end;
   }
 
-  if ((pHashTblEntry == NULL) || (pHashTblEntry->pAdapter == NULL)) {
-    SFVMK_ERROR("%s: No vmkDevice (node: %p)",
-                  pMgmtParm->deviceName, pHashTblEntry);
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("%s: No match found for vmkDevice", pMgmtParm->deviceName);
     pMgmtParm->status = VMK_NOT_FOUND;
     goto end;
   }
 
-  return pHashTblEntry->pAdapter;
+  return pAdapter;
 
 end:
   return NULL;
@@ -96,7 +95,7 @@ sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
     goto end;
   }
 
-  pDevIface->status = VMK_OK;
+  pDevIface->status = VMK_FAILURE;
 
   pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
   if (!pAdapter) {
@@ -108,6 +107,8 @@ sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
                       "Received MCDI request for interface %s",
                       pDevIface->deviceName);
+
+  pDevIface->status = VMK_OK;
 
 end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);

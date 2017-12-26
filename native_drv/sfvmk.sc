@@ -39,6 +39,7 @@ module_def = {
                          "sfvmk_tx.c",
                          "sfvmk_rx.c",
                          "sfvmk_qsfp_module.c",
+                         "sfvmk_filter.c",
                          "sfvmk_uplink.c",
                          "sfvmk_port.c",
                          "sfvmk_utils.c",

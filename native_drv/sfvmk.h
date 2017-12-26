@@ -78,7 +78,8 @@ typedef enum sfvmk_debugMask_e {
   SFVMK_DEBUG_EVQ    = 1 << 9,
   SFVMK_DEBUG_PORT   = 1 << 10,
   SFVMK_DEBUG_MCDI   = 1 << 11,
-  SFVMK_DEBUG_COMMON_CODE  = 1 << 12
+  SFVMK_DEBUG_FILTER = 1 << 12,
+  SFVMK_DEBUG_COMMON_CODE  = 1 << 13
 } sfvmk_debugMask_t;
 
 typedef enum sfvmk_logLevel_e {

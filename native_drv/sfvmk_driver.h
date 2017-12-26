@@ -49,6 +49,14 @@
 /* Device name hash table size */
 #define SFVMK_ADAPTER_TABLE_SIZE  64
 
+/* Max number of filter supported by default RX queue.
+ * HW supports total 8192 filters.
+ * TODO: Using a smaller number of filters in driver as
+ * supporting only single queue right now.
+ * Needs to revisit during multiQ implementation.
+ */
+#define SFVMK_MAX_FILTER 2048
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -236,6 +244,14 @@ typedef struct sfvmk_rxq_s {
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 
+/* Data structure for filter database entry */
+typedef struct sfvmk_filterDBEntry_s {
+  vmk_UplinkQueueFilterClass class;
+  vmk_uint32                 key;
+  vmk_uint32                 qID;
+  efx_filter_spec_t          spec;
+} sfvmk_filterDBEntry_t;
+
 typedef struct sfvmk_uplink_s {
   /* Structure advertising a mode (speed/duplex/media) that is supported by an uplink. */
   vmk_UplinkSupportedMode    supportedModes[EFX_PHY_CAP_NTYPES];
@@ -348,6 +364,10 @@ typedef struct sfvmk_adapter_s {
 
   sfvmk_pktOps_t             pktOps[SFVMK_PKT_COMPLETION_MAX];
   vmk_uint32                 txDmaDescMaxSize;
+
+  /* Filter Database hash table and key generator */
+  vmk_HashTable              filterDBHashTable;
+  vmk_uint32                 filterKey;
 } sfvmk_adapter_t;
 
 /* Release pkt in different context by using different release functions */
@@ -440,8 +460,22 @@ VMK_ReturnStatus sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t fl
 void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
 void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
 
+/* Functions for Uplink filter handling */
+VMK_ReturnStatus sfvmk_allocFilterDBHash(sfvmk_adapter_t *pAdapter);
+void sfvmk_freeFilterDBHash(sfvmk_adapter_t *pAdapter);
+vmk_uint32 sfvmk_generateFilterKey(sfvmk_adapter_t *pAdapter);
+sfvmk_filterDBEntry_t * sfvmk_allocFilterRule(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
+                                         vmk_UplinkQueueFilter *pFilter,
+                                         sfvmk_filterDBEntry_t *pFdbEntry,
+                                         vmk_uint32 filterKey, vmk_uint32 qidVal);
+VMK_ReturnStatus sfvmk_insertFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdbEntry);
+sfvmk_filterDBEntry_t * sfvmk_removeFilterRule(sfvmk_adapter_t *pAdapter, vmk_uint32 filterKey);
+void sfvmk_freeFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdbEntry);
+
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
+void sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal);
 
 /* Locking mechanism to serialize multiple writers's access to protected sharedData area */
 static inline void sfvmk_sharedAreaBeginWrite(sfvmk_uplink_t *pUplink)

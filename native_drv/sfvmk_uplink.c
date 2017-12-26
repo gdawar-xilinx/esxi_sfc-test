@@ -29,15 +29,9 @@
 /* Default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
 
-/* Max number of filter supported by default RX queue.
- * HW supports total 8192 filters.
- * TODO: Using a smaller number of filters in driver as
- * supporting only single queue right now.
- * Needs to revisit during multiQ implementation.
- */
-#define SFVMK_MAX_FILTER 2048
-
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter);
+static void sfvmk_addUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal,
+                                  vmk_uint32 *pPairHwQid);
 
 /****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
@@ -819,9 +813,19 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto failed_tx_start;
   }
 
+  status = sfvmk_allocFilterDBHash(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_allocFilterDBHash failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_filter_db_init;
+  }
+
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
   status = VMK_OK;
   goto done;
+
+failed_filter_db_init:
+  sfvmk_txStop(pAdapter);
 
 failed_tx_start:
   sfvmk_rxStop(pAdapter);
@@ -882,7 +886,9 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
    * link should be down before proceeding further. */
   pAdapter->port.linkMode = EFX_LINK_DOWN;
   sfvmk_macLinkUpdate(pAdapter);
-  
+
+  sfvmk_freeFilterDBHash(pAdapter);
+
   sfvmk_txStop(pAdapter);
 
   sfvmk_rxStop(pAdapter);
@@ -1878,16 +1884,63 @@ sfvmk_startQueue(vmk_AddrCookie cookie,
 */
 static VMK_ReturnStatus
 sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
-                        vmk_UplinkQueueID qid,
-                        vmk_UplinkQueueFilterID fid)
+                         vmk_UplinkQueueID qid,
+                         vmk_UplinkQueueFilterID fid)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  vmk_uint32 qidVal = vmk_UplinkQueueIDVal(qid);
+  vmk_uint32 filterKey = vmk_UplinkQueueFilterIDVal(fid);
+  vmk_UplinkSharedQueueInfo *pQueueInfo;
+  vmk_UplinkSharedQueueData *pQueueData;
+  sfvmk_filterDBEntry_t *pFdbEntry;
+  VMK_ReturnStatus status = VMK_OK;
+
+  if (!pAdapter) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Adapter pointer is NULL");
+    status = VMK_FAILURE;
+    goto end;
+  }
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  vmk_MutexLock(pAdapter->lock);
 
+  if (qidVal == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Queue ID value is 0, Ignoring filterKey:%u", filterKey);
+    goto done;
+  }
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+  pQueueData = &pQueueInfo->queueData[0];
+
+  if (pQueueData[qidVal].activeFilters == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "qData[%u].activeFilters = %u (max %u), Ignoring",
+                         qidVal, pQueueData[qidVal].activeFilters,
+                         pQueueData[qidVal].maxFilters);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pFdbEntry = sfvmk_removeFilterRule(pAdapter, filterKey);
+  if (!pFdbEntry) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Filter not found for filterKey: %u", filterKey);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  status = vmk_HashKeyDelete(pAdapter->filterDBHashTable,
+                             (vmk_HashKey)(vmk_uint64)filterKey,
+                             (vmk_HashValue *)&pFdbEntry);
+  sfvmk_removeUplinkFilter(pAdapter, qidVal);
+  sfvmk_freeFilterRule(pAdapter, pFdbEntry);
+
+done:
+  vmk_MutexUnlock(pAdapter->lock);
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+end:
   return status;
 }
 
@@ -1904,18 +1957,88 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
 */
 static VMK_ReturnStatus
 sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
-                       vmk_UplinkQueueID qid,
-                       vmk_UplinkQueueFilter *pFilter,
-                       vmk_UplinkQueueFilterID *pFID,
-                       vmk_uint32 *pPairHwQid)
+                        vmk_UplinkQueueID qid,
+                        vmk_UplinkQueueFilter *pFilter,
+                        vmk_UplinkQueueFilterID *pFId,
+                        vmk_uint32 *pPairHwQid)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  sfvmk_filterDBEntry_t *pFdbEntry = NULL;
+  vmk_UplinkSharedQueueInfo *pQueueInfo;
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_uint32 qidVal = vmk_UplinkQueueIDVal(qid);
+  vmk_uint32 filterKey;
+  VMK_ReturnStatus status = VMK_OK;
+
+  if (!pAdapter) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Adapter pointer is NULL");
+    status = VMK_FAILURE;
+    goto end;
+  }
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  vmk_MutexLock(pAdapter->lock);
+
+  if (qidVal == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Apply filters not allowed on default queue ID %d", qidVal);
+    goto done;
+  }
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+  pQueueData = &pQueueInfo->queueData[0];
+
+  if (pQueueData[qidVal].activeFilters >= pQueueData[qidVal].maxFilters) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Reached max filter count for QID %u\n", qidVal);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pFdbEntry = sfvmk_allocFilterRule(pAdapter);
+  if (!pFdbEntry) {
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  filterKey = sfvmk_generateFilterKey(pAdapter);
+
+  status = sfvmk_prepareFilterRule(pAdapter, pFilter,
+                                   pFdbEntry, filterKey, qidVal);
+  if (status != VMK_OK) {
+    vmk_LogMessage("Failed to prepare filter rule with error %s",
+                   vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto free_filter_rule;
+  }
+
+  status = sfvmk_insertFilterRule(pAdapter, pFdbEntry);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed in Hw filter rule creation, %s\n",
+                        vmk_StatusToString(status));
+    goto free_filter_rule;
+  }
+
+  status = vmk_HashKeyInsert(pAdapter->filterDBHashTable,
+                             (vmk_HashKey)(vmk_uint64)filterKey,
+                             (vmk_HashValue) pFdbEntry);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Hash Key Insertion failed, %s\n",
+                        vmk_StatusToString(status));
+    goto free_filter_rule;
+  }
+
+  vmk_UplinkQueueMkFilterID(pFId, filterKey);
+  sfvmk_addUplinkFilter(pAdapter, qidVal, pPairHwQid);
+  goto done;
+
+free_filter_rule:
+  sfvmk_freeFilterRule(pAdapter, pFdbEntry);
+done:
+  vmk_MutexUnlock(pAdapter->lock);
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+end:
   return status;
 }
 
@@ -2017,3 +2140,89 @@ sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
   return status;
 }
 
+/*! \brief add uplink filter
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  qidVal   Queue ID value
+**
+** \return: void
+**
+*/
+static void
+sfvmk_addUplinkFilter(sfvmk_adapter_t *pAdapter,
+                      vmk_uint32 qidVal,
+                      vmk_uint32 *pPairHwQid)
+{
+  vmk_UplinkSharedQueueInfo *pQueueInfo;
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_uint32 txQueueStartIndex;
+
+  if (!pAdapter) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter pointer is NULL");
+    return;
+  }
+
+  if (qidVal == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Queue ID value is 0, no filter applied on default queue");
+    return;
+  }
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+  pQueueData = &pQueueInfo->queueData[0];
+
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+  txQueueStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+  *pPairHwQid = qidVal + txQueueStartIndex;
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "Rx queue ID %d paired with TX queue ID %d",
+                       qidVal, *pPairHwQid);
+
+  pQueueData[qidVal].activeFeatures |= VMK_UPLINK_QUEUE_FEAT_PAIR;
+  pQueueData[qidVal].activeFilters++;
+
+  pQueueData[txQueueStartIndex + qidVal].activeFeatures |= VMK_UPLINK_QUEUE_FEAT_PAIR;
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+}
+
+/*! \brief remove uplink filter
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  qidVal   Queue ID value
+**
+** \return: void
+**
+*/
+void
+sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter,
+                         vmk_uint32 qidVal)
+{
+  vmk_UplinkSharedQueueInfo *pQueueInfo;
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_uint32 txQueueStartIndex;
+
+  if (!pAdapter) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter pointer is NULL");
+    return;
+  }
+
+  if (qidVal == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Queue ID value is 0, no filter applied on default queue");
+    return;
+  }
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+  pQueueData = &pQueueInfo->queueData[0];
+
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+  pQueueData[qidVal].activeFilters--;
+
+  /* Clear _FEAT_PAIR for RX queue */
+  pQueueData[qidVal].activeFeatures &= ~VMK_UPLINK_QUEUE_FEAT_PAIR;
+
+  /* Clear _FEAT_PAIR for TX queue */
+  txQueueStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+  pQueueData[txQueueStartIndex + qidVal].activeFeatures &= ~VMK_UPLINK_QUEUE_FEAT_PAIR;
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+}

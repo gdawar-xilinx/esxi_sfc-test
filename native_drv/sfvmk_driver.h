@@ -423,6 +423,8 @@ static inline void sfvmk_getTime(vmk_uint64 *pTime)
 /* Functions for MCDI handling */
 VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
+int sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
+                        efx_mcdi_req_t *pEmReq);
 
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);

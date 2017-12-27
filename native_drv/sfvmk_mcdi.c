@@ -249,6 +249,95 @@ done:
   return status;
 }
 
+#if EFSYS_OPT_MCDI_LOGGING
+
+#define SFVMK_MCDI_LOG_BUF_SIZE 128
+
+/*! \brief helper routine to log mcdi request.
+**
+** \param[in/out] pBuffer   processed message buffer
+** \param[in]     pData     input message buffer
+** \param[in]     dataSize  input message buffer size
+** \param[in]     pfxsize   offset at which prefix finishes
+** \param[in]     position  position to start writing
+**
+** \return: number of bytes written
+*/
+static size_t
+sfvmk_mcdiDoLog(char *pBuffer, void *pData, size_t dataSize,
+                size_t pfxsize, size_t position)
+{
+  uint32_t *pWords = pData;
+  vmk_ByteCount bytesCopied;
+  VMK_ReturnStatus status = VMK_OK;
+  size_t i;
+
+  for (i = 0; i < dataSize; i += sizeof(*pWords)) {
+    if (position + 2 * sizeof(*pWords) + 1 >= SFVMK_MCDI_LOG_BUF_SIZE) {
+      pBuffer[position] = '\0';
+      vmk_LogMessage(" %s \\\n", pBuffer);
+      position = pfxsize;
+    }
+
+    status = vmk_StringFormat(pBuffer + position,
+                              SFVMK_MCDI_LOG_BUF_SIZE - position,
+                              &bytesCopied, " %08x", *pWords);
+    if (status != VMK_OK)
+      return position + bytesCopied;
+
+    pWords++;
+    position += 2 * sizeof(uint32_t) + 1;
+  }
+  return (position);
+}
+
+/*! \brief Routine handling mcdi logging request.
+**
+** \param[in] pAdapter   pointer to sfvmk_adapter_t
+** \param[in] pHeader    message header
+** \param[in] headerSize message header size
+** \param[in] pData      message data
+** \param[in] dataSize   message data size
+**
+** \return: void
+*/
+static void
+sfvmk_mcdiLogger(void *pPriv, efx_log_msg_t type,
+                 void *pHeader, size_t headerSize,
+                 void *pData, size_t dataSize)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)pPriv;
+  sfvmk_mcdi_t *pMcdi;
+  char buffer[SFVMK_MCDI_LOG_BUF_SIZE];
+  vmk_ByteCount pfxsize;
+  VMK_ReturnStatus status = VMK_OK;
+  size_t start;
+
+  pMcdi = &pAdapter->mcdi;
+
+  status = vmk_StringFormat(buffer, sizeof(buffer), &pfxsize,
+                            "sfc %s %s MCDI RPC %s:",
+                            pAdapter->pciDeviceName.string,
+                            pAdapter->uplink.name.string,
+                            type == EFX_LOG_MCDI_REQUEST ? "REQ" :
+                            type == EFX_LOG_MCDI_RESPONSE ? "RESP" : "???");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "String format failed with error %s",
+                        vmk_StatusToString(status));
+    return;
+  }
+
+  start = sfvmk_mcdiDoLog(buffer, pHeader,
+                          headerSize, pfxsize, pfxsize);
+  start = sfvmk_mcdiDoLog(buffer, pData, dataSize, pfxsize, start);
+  if (start != pfxsize) {
+    buffer[start] = '\0';
+    vmk_LogMessage(" %s\n", buffer);
+  }
+
+}
+#endif
+
 /*! \brief Routine allocating resource for mcdi cmd handling and initializing
 **        mcdi module
 **
@@ -308,6 +397,9 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   pMcdi->transport.emt_dma_mem = &pMcdi->mem;
   pMcdi->transport.emt_execute = sfvmk_mcdiExecute;
   pMcdi->transport.emt_exception = sfvmk_mcdiException;
+#if EFSYS_OPT_MCDI_LOGGING
+  pMcdi->transport.emt_logger = sfvmk_mcdiLogger;
+#endif
 
   if ((status = efx_mcdi_init(pAdapter->pNic, &pMcdi->transport)) != 0) {
     SFVMK_ADAPTER_ERROR(pAdapter,"efx_mcdi_init failed status %s",

@@ -866,7 +866,7 @@ sfvmk_ringParamsSet(vmk_AddrCookie cookie,
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkQuiesceIO failed status: %s",
                         vmk_StatusToString(status));
     status = VMK_FAILURE;
-    goto sfvmk_mutex_quiesce_failed;
+    goto failed_quiesce_io;
   }
 
   /* Configure requested RX & TX queue buffer descs */
@@ -878,13 +878,13 @@ sfvmk_ringParamsSet(vmk_AddrCookie cookie,
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkStartIO failed status: %s",
                         vmk_StatusToString(status));
     status = VMK_FAILURE;
-    goto sfvmk_mutex_startio_failed;
+    goto failed_start_io;
   }
 
   status = VMK_OK;
 
-sfvmk_mutex_quiesce_failed:
-sfvmk_mutex_startio_failed:
+failed_quiesce_io:
+failed_start_io:
   vmk_MutexUnlock(pAdapter->lock);
 
 done:

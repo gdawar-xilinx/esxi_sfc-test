@@ -147,6 +147,19 @@ static vmk_UplinkQueueOps sfvmkQueueOps = {
    .queueSetCoalesceParams = sfvmk_setQueueCoalesceParams,
 };
 
+/****************************************************************************
+*              vmk_UplinkRingParamsOps Handler                              *
+****************************************************************************/
+static VMK_ReturnStatus sfvmk_ringParamsGet(vmk_AddrCookie,
+                                            vmk_UplinkRingParams *);
+static VMK_ReturnStatus sfvmk_ringParamsSet(vmk_AddrCookie cookie,
+                                            vmk_UplinkRingParams *);
+
+const static vmk_UplinkRingParamsOps sfvmk_ringParamsOps = {
+  .ringParamsGet = sfvmk_ringParamsGet,
+  .ringParamsSet = sfvmk_ringParamsSet,
+};
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -667,6 +680,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /* Register capability for RX/TX ring params configuration */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_RING_PARAMS,
+                                 (vmk_UplinkRingParamsOps *)
+                                 &sfvmk_ringParamsOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_RING_PARAMS register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
@@ -709,6 +734,163 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
+/*! \brief uplink callback function to get ring params
+**
+** \param[in]  cookie   pointer to sfvmk_adapter_t
+** \param[out] params   pointer to vmk_UplinkRingParams
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_ringParamsGet(vmk_AddrCookie cookie,
+                    vmk_UplinkRingParams *params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (params == NULL) {
+    SFVMK_ERROR("NULL vmk_UplinkRingParams ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* rxMaxPending and txMaxPending denotes max number of
+   * RX/TX descs supported by device */
+  params->txMaxPending = pNicCfg->enc_txq_max_ndescs;
+  params->rxMaxPending = EFX_RXQ_MAXNDESCS;
+
+  /* rxPending and txPending denotes currently configured
+   * RX/TX descs values */
+  params->txPending = pAdapter->numTxqBuffDesc;
+  params->rxPending = pAdapter->numRxqBuffDesc;
+
+  /* There are no dedicated rings for mini/jumbo frames so
+   * these entries are not supported */
+  params->rxMiniMaxPending = 0;
+  params->rxJumboMaxPending = 0;
+  params->rxMiniPending = 0;
+  params->rxJumboPending = 0;
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to set RX & TX ring params
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[in]  params    pointer to vmk_UplinkRingParams
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_ringParamsSet(vmk_AddrCookie cookie,
+                    vmk_UplinkRingParams *params)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (params == NULL) {
+    SFVMK_ERROR("NULL vmk_UplinkRingParams ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if ((params->rxPending < EFX_RXQ_MINNDESCS) ||
+      (params->rxPending > EFX_RXQ_MAXNDESCS) ||
+      (!ISP2(params->rxPending))) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Unsupported RX ring param :%d", params->rxPending);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if ((params->txPending < EFX_TXQ_MINNDESCS) ||
+      (params->txPending > pNicCfg->enc_txq_max_ndescs) ||
+      (!ISP2(params->txPending))) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Unsupported TX ring param :%d", params->txPending);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Nothing to be done if requested ring params values
+   * are same as configured value */
+  if ((params->txPending == pAdapter->numTxqBuffDesc) &&
+      (params->rxPending == pAdapter->numRxqBuffDesc)) {
+    status = VMK_OK;
+    goto done;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+
+  status = sfvmk_quiesceIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkQuiesceIO failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto sfvmk_mutex_quiesce_failed;
+  }
+
+  /* Configure requested RX & TX queue buffer descs */
+  pAdapter->numTxqBuffDesc = params->txPending;
+  pAdapter->numRxqBuffDesc = params->rxPending;
+
+  status = sfvmk_startIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkStartIO failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto sfvmk_mutex_startio_failed;
+  }
+
+  status = VMK_OK;
+
+sfvmk_mutex_quiesce_failed:
+sfvmk_mutex_startio_failed:
+  vmk_MutexUnlock(pAdapter->lock);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
 }
 
 /*! \brief Set the driver limit in fw.

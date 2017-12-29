@@ -1074,6 +1074,7 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
   /* Setting default event moderation */
   pAdapter->intrModeration = SFVMK_MODERATION_USEC;
 
+  /* Setting default rx & tx ring params */
   pAdapter->numRxqBuffDesc = SFVMK_NUM_RXQ_DESC;
   pAdapter->numTxqBuffDesc = SFVMK_NUM_TXQ_DESC;
 

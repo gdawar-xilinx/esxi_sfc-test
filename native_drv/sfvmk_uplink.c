@@ -2463,14 +2463,17 @@ sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter,
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t
 **
-** \return: void
+** \return: VMK_OK <success> error code <failure>
 **
 */
-void
+VMK_ReturnStatus
 sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
 {
+  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
   /* TODO: Add implementation */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
-  VMK_ASSERT_BUG(0);
+
+  return status;
 }

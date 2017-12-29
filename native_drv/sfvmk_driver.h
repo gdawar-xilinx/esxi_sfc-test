@@ -530,7 +530,7 @@ static inline vmk_UplinkSharedQueueData* sfvmk_getUplinkTxSharedQueueData(sfvmk_
   return &pUplink->queueInfo.queueData[sfvmk_getUplinkTxqStartIndex(pUplink)];
 }
 
-void sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
 vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter);
 vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter);

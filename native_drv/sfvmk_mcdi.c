@@ -30,20 +30,6 @@
 #define SFVMK_MCDI_POLL_INTERVAL_MIN 10   /* 10us in 1us units */
 #define SFVMK_MCDI_POLL_INTERVAL_MAX 100000 /* 100ms in 1us units */
 
-/*! \brief routine to be for scheduling reset.
-**
-** \param[in] pAdapter pointer to sfvmk_adapter_t
-**
-** \return: void
-*/
-void
-sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
-{
-  /* TODO add a proper implementation.
-   * This will be done after startIO impl */
-  VMK_ASSERT_BUG(0);
-}
-
 /*! \brief routine to be called on mcdi timeout.
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t

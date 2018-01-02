@@ -73,7 +73,7 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
   /* Check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
                   pAdapter->pciDeviceID.deviceID,
-                  &pAdapter->efxFamily, &pAdapter->memBar);
+                  &pAdapter->efxFamily, &pAdapter->bar.index);
   if (rc != 0) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_family failed status: %d", rc);
     goto done;
@@ -294,13 +294,14 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
   status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                                        pAdapter->memBar, VMK_MAPATTRS_READWRITE |
+                                        pAdapter->bar.index,
+                                        VMK_MAPATTRS_READWRITE |
                                         VMK_MAPATTRS_UNCACHED,
                                         &pAdapter->bar.esbBase);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_PCIMapIOResourceWithAttr for BAR%d failed status: %s",
-                        pAdapter->memBar, vmk_StatusToString(status));
+                        pAdapter->bar.index, vmk_StatusToString(status));
     goto failed_map_io_resource;
   }
 
@@ -309,20 +310,18 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
                             &pAdapter->bar.esbLock);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createLock for BAR%d failed status  %s",
-                        pAdapter->memBar, vmk_StatusToString(status));
+                        pAdapter->bar.index, vmk_StatusToString(status));
     goto failed_create_lock;
   }
-
-  /* Storing BAR index to be used for unmapping resource */
-  pAdapter->bar.index = pAdapter->memBar;
 
   goto done;
 
 failed_create_lock:
   vmk_PCIUnmapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                         pAdapter->memBar);
+                         pAdapter->bar.index);
 
 failed_map_io_resource:
+  pAdapter->bar.index = VMK_PCI_NUM_BARS;
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 

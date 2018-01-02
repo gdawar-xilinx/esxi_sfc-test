@@ -180,9 +180,20 @@ typedef enum sfvmk_txqState_e {
 
 /* Buffer mapping information for descriptors in flight */
 typedef struct sfvmk_txMapping_s {
+  /*TODO: TSO related fields */
   vmk_PktHandle *pXmitPkt;
   vmk_SgElem    sgElem;
 } sfvmk_txMapping_t;
+
+typedef enum {
+   /*TODO: TSO offload type */
+   SFVMK_TX_VLAN   = 1 << 0,
+} sfvmk_offloadType_t;
+
+typedef struct sfvmk_xmitInfo_s {
+   sfvmk_offloadType_t offloadFlag;
+   vmk_PktHandle       *pXmitPkt;
+} sfvmk_xmitInfo_t;
 
 typedef struct sfvmk_txq_s {
   struct sfvmk_adapter_s  *pAdapter;
@@ -208,6 +219,10 @@ typedef struct sfvmk_txq_s {
   vmk_uint32              added;
   vmk_uint32              reaped;
   vmk_uint32              completed;
+
+  /* The last VLAN TCI seen on the queue if FW-assisted tagging is used */
+  vmk_uint16              hwVlanTci;
+
   /* The following fields change more often and are read regularly
    * on the transmit and transmit completion path */
   vmk_uint32              pending VMK_ATTRIBUTE_L1_ALIGNED;

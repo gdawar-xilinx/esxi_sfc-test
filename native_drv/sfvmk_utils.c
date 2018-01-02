@@ -343,3 +343,40 @@ void sfvmk_mutexDestroy(vmk_Mutex mutex)
   if(mutex)
     vmk_MutexDestroy(mutex);
 }
+
+/*! \brief  World Sleep function ensures that
+**          the world sleeps for specified time
+**          even when VMK_WAIT_INTERRUPTED is
+**          returned.
+**          Note: The time to wait is in microseconds.
+**
+** \param[in] sleepTime  Duration to wait in microseconds.
+**
+** \return: VMK_OK Awakened after at least the specified delay.
+**          VMK_DEATH_PENDING Awakened because the world is
+**          dying and being reaped by the scheduler. The
+**          entire delay may not have passed.
+**
+*/
+VMK_ReturnStatus
+sfvmk_worldSleep(vmk_uint64 sleepTime)
+{
+  vmk_uint64 currentTime;
+  vmk_uint64 timeOut;
+  VMK_ReturnStatus status;
+
+  sfvmk_getTime(&currentTime);
+  timeOut = currentTime + sleepTime;
+
+  while (currentTime < timeOut) {
+    status = vmk_WorldSleep(sleepTime);
+    if (status != VMK_WAIT_INTERRUPTED)
+      return status;
+
+    sfvmk_getTime(&currentTime);
+    sleepTime = timeOut-currentTime;
+  }
+
+  return VMK_OK;
+}
+

@@ -29,11 +29,15 @@
 /* Default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
 
+/* Wait time for StartIO on Reset */
+#define SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC    (100 * VMK_USEC_PER_MSEC)
+
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter);
 static void sfvmk_addUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal,
                                   vmk_uint32 *pPairHwQid);
 static VMK_ReturnStatus sfvmk_startIO(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter);
+static void sfvmk_uplinkResetHelper(vmk_AddrCookie data);
 
 /****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
@@ -2483,6 +2487,63 @@ sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter,
   sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
 }
 
+/*! \brief Helper callback to reset NIC.
+**
+** \param[in]  cookie  pointer to sfvmk_adapter_t
+**
+** \return: None
+**
+*/
+static void
+sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status;
+  unsigned int attempt;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  vmk_MutexLock(pAdapter->lock);
+  status = sfvmk_quiesceIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceIO failed with error %s",
+                        vmk_StatusToString(status));
+    goto end;
+  }
+
+  status = efx_nic_reset(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",
+                        vmk_StatusToString(status));
+    goto end;
+  }
+
+  for (attempt = 0; attempt < 3; ++attempt) {
+    status = sfvmk_startIO(pAdapter);
+    if (status == VMK_OK) {
+      goto end;
+    }
+
+    /* Sleep for 100 milliseconds */
+    status = sfvmk_worldSleep(SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                          vmk_StatusToString(status));
+      /* World is dying */
+      break;
+    }
+  }
+
+  SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_startIO failed");
+
+end:
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
 /*! \brief Fuction to submit driver reset request.
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t
@@ -2493,10 +2554,26 @@ sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter,
 VMK_ReturnStatus
 sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
 {
+  vmk_HelperRequestProps props;
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  /* Create a request and submit */
+  props.requestMayBlock = VMK_FALSE;
+  props.tag = (vmk_AddrCookie)NULL;
+  props.cancelFunc = NULL;
+  props.worldToBill = VMK_INVALID_WORLD_ID;
+  status = vmk_HelperSubmitRequest(pAdapter->helper,
+                                   sfvmk_uplinkResetHelper,
+                                   (vmk_AddrCookie *)pAdapter,
+                                   &props);
+  if (status != VMK_OK) {
+     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to submit reset request to "
+                         "helper world queue with error %s",
+                         vmk_StatusToString(status));
+  }
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

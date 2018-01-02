@@ -429,6 +429,9 @@ void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
 
 vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
 
+/* Function to handle world sleep */
+VMK_ReturnStatus sfvmk_worldSleep(vmk_uint64 sleepTime);
+
 /* Get time in micro seconds */
 static inline void sfvmk_getTime(vmk_uint64 *pTime)
 {

@@ -513,7 +513,7 @@ typedef uint64_t    efsys_stat_t;
 
 /* Probes */
 
-#define EFSYS_PROBES
+//#define EFSYS_PROBES
 
 #ifndef EFSYS_PROBES
 

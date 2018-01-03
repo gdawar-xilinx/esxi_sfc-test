@@ -521,10 +521,41 @@ static VMK_ReturnStatus
 sfvmk_uplinkReset(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+
+  status = sfvmk_quiesceIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkQuiesceIO failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto failed_quiesce_io;
+  }
+
+  status = sfvmk_startIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkStartIO failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto failed_start_io;
+  }
+
+  status = VMK_OK;
+
+failed_quiesce_io:
+failed_start_io:
+  vmk_MutexUnlock(pAdapter->lock);
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

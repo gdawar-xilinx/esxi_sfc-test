@@ -87,6 +87,20 @@ struct vmk_UplinkCableTypeOps sfvmkCableTypeOps = {
 };
 
 /****************************************************************************
+*                vmk_UplinkMessageLevelOps Handler                          *
+****************************************************************************/
+static VMK_ReturnStatus sfvmk_messageLevelGet(vmk_AddrCookie cookie,
+                                              vmk_uint32 *pLevel);
+
+static VMK_ReturnStatus sfvmk_messageLevelSet(vmk_AddrCookie cookie,
+                                              vmk_uint32 level);
+
+static const vmk_UplinkMessageLevelOps sfvmk_messageLevelOps = {
+  .getMessageLevel = sfvmk_messageLevelGet,
+  .setMessageLevel = sfvmk_messageLevelSet,
+};
+
+/****************************************************************************
 *                vmk_UplinkQueueOps Handler                             *
 ****************************************************************************/
 static VMK_ReturnStatus sfvmk_allocQueue(vmk_AddrCookie cookie,
@@ -660,6 +674,76 @@ done:
   return status;
 }
 
+/*! \brief uplink callback function to retrieve log level.
+**
+** \param[in]   cookie    pointer to sfvmk_adapter_t
+** \param[out]  level     pointer to log level
+**
+** \return: VMK_OK on success or error code otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_messageLevelGet(vmk_AddrCookie cookie, vmk_uint32 *pLevel)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  *pLevel = vmk_LogGetCurrentLogLevel(sfvmk_modInfo.logID);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "Log level: %u", *pLevel);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief uplink callback function to set log level.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[in]  level     log level
+**
+** \return: VMK_OK on success or error code otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_messageLevelSet(vmk_AddrCookie cookie, vmk_uint32 level)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "Seting log level to %u", level);
+
+  status = vmk_LogSetCurrentLogLevel(sfvmk_modInfo.logID, level);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_LogSetCurrentLogLevel failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
 /*! \brief function to register all driver cap with uplink device.
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
@@ -726,6 +810,17 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "VMK_UPLINK_CAP_RING_PARAMS register failed status: %s",
                         vmk_StatusToString(status));
     goto done;
+  }
+
+  /* Register capability to control logging level */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_MESSAGE_LEVEL,
+                                 (vmk_UplinkMessageLevelOps *)
+                                 &sfvmk_messageLevelOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_MESSAGE_LEVEL register failed status: %s",
+                        vmk_StatusToString(status));
   }
 
   pNicCfg = efx_nic_cfg_get(pAdapter->pNic);

@@ -417,21 +417,65 @@ done:
 /*! \brief Uplink callback function to set MTU
 **
 ** \param[in]  cookie  vmk_AddrCookie
-** \param[in]  mtu
+** \param[in]  mtu     MTU
 **
-** \return: VMK_OK <success>
-** \return: VMK_FAILURE <failure>
-** \return: VMK_BAD_PARAM <failure>
-**
+** \return: VMK_OK on success or error code otherwise
 */
 static VMK_ReturnStatus
 sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Not checking MTU validity as it is done by vmkernel itself */
+
+  vmk_MutexLock(pAdapter->lock);
+
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+  pAdapter->uplink.sharedData.mtu = mtu;
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "MTU update from %u to %u",
+                      pAdapter->uplink.sharedData.mtu, mtu);
+
+  /* Reset adapter to apply MTU changes if it is started, otherwise
+   * MTU would be applied later when adapter is started */
+  if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
+    status = sfvmk_quiesceIO(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkQuiesceIO failed status: %s",
+                          vmk_StatusToString(status));
+      status = VMK_FAILURE;
+      goto failed_quiesce_io;
+    }
+
+    status = sfvmk_startIO(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_uplinkStartIO failed status: %s",
+                          vmk_StatusToString(status));
+      status = VMK_FAILURE;
+      goto failed_start_io;
+    }
+
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Adapter has been reset, MTU %u applied", mtu);
+    status = VMK_OK;
+  }
+
+failed_quiesce_io:
+failed_start_io:
+  vmk_MutexUnlock(pAdapter->lock);
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

@@ -44,11 +44,13 @@
  **
  ** SFVMK_CB_MCDI_REQUEST:     For invoking MCDI callback
  ** SFVMK_CB_MC_LOGGING:       For controlling MC Logging dynamically
+ ** SFVMK_CB_PCI_INFO_GET:     Get PCI BDF and device information
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST = (VMK_MGMT_RESERVED_CALLBACKS + 1),
   SFVMK_CB_MC_LOGGING,
+  SFVMK_CB_PCI_INFO_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -60,6 +62,9 @@ typedef enum sfvmk_mgmtCbTypes_e {
 
 /* Length of uplink device name string */
 #define SFVMK_DEV_NAME_LEN     10
+
+/* Length of PCI BDF string*/
+#define SFVMK_PCI_BDF_LEN      16
 
 /*
  * The vendor name for interface. The vendor name cannot be changed for
@@ -148,6 +153,28 @@ typedef struct sfvmk_mcdiLogging_s {
   vmk_Bool            state;
 } __attribute__((__packed__)) sfvmk_mcdiLogging_t;
 
+/*! \brief struct sfvmk_pciInfo_s for
+ **        PCI BDF and device information
+ **
+ ** pciBDF[out]       Buffer to retrieve the PCI BDF string
+ **
+ ** vendorId[out]     PCI Vendor ID
+ **
+ ** deviceId[out]     PCI device ID
+ **
+ ** subVendorId[out]  PCI sub vendor ID
+ **
+ ** subDeviceId[out]  PCI sub device ID
+ **
+ */
+typedef struct sfvmk_pciInfo_s {
+  vmk_Name   pciBDF;
+  vmk_uint16 vendorId;
+  vmk_uint16 deviceId;
+  vmk_uint16 subVendorId;
+  vmk_uint16 subDeviceId;
+} __attribute__((__packed__))  sfvmk_pciInfo_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -185,6 +212,10 @@ VMK_ReturnStatus sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
                                              sfvmk_mgmtDevInfo_t *pDevIface,
                                              sfvmk_mcdiLogging_t *pMcdiLog);
 
+VMK_ReturnStatus sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies *pCookies,
+                                           vmk_MgmtEnvelope *pEnvelope,
+                                           sfvmk_mgmtDevInfo_t *pDevIface,
+                                           sfvmk_pciInfo_t *pPciInfo);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -193,6 +224,7 @@ VMK_ReturnStatus sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
  */
 #define sfvmk_mgmtMcdiCallback NULL
 #define sfvmk_mgmtMCLoggingCallback NULL
+#define sfvmk_mgmtPCIInfoCallback NULL
 #endif
 
 #endif

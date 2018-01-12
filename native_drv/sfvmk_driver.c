@@ -588,22 +588,10 @@ sfvmk_pktReleaseOthers(sfvmk_pktCompCtx_t *pCompCtx,
    vmk_PktRelease(pPkt);
 }
 
-/* \brief  Initialize pktops to be invoked at different context to
-**         handle pkt release and pkt completion.
-**
-** \param[in]  pAdapter Pointer to adapter
-**
-** \return: None
-*/
-static void sfvmk_setPktOps(sfvmk_adapter_t *pAdapter)
-{
-  sfvmk_pktOps_t ops[SFVMK_PKT_COMPLETION_MAX] = {
-    [SFVMK_PKT_COMPLETION_NETPOLL] = { sfvmk_pktReleaseNetPoll },
-    [SFVMK_PKT_COMPLETION_OTHERS]  = { sfvmk_pktReleaseOthers },
-  };
-
-  vmk_Memcpy(pAdapter->pktOps, ops, sizeof(ops));
-}
+const sfvmk_pktOps_t sfvmk_packetOps[SFVMK_PKT_COMPLETION_MAX] = {
+  [SFVMK_PKT_COMPLETION_NETPOLL] = { sfvmk_pktReleaseNetPoll },
+  [SFVMK_PKT_COMPLETION_OTHERS] = { sfvmk_pktReleaseOthers },
+};
 
 /*! \brief  Routine to set bus mastering mode
 **
@@ -859,8 +847,6 @@ sfvmk_attachDevice(vmk_Device dev)
                         vmk_StatusToString(status));
     goto failed_create_helper;
   }
-
-  sfvmk_setPktOps(pAdapter);
 
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;

@@ -387,12 +387,14 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 filterKey;
 } sfvmk_adapter_t;
 
+extern const sfvmk_pktOps_t sfvmk_packetOps[];
 /* Release pkt in different context by using different release functions */
 static inline void sfvmk_pktRelease(sfvmk_adapter_t *pAdapter,
                                     sfvmk_pktCompCtx_t *pCompCtx,
                                     vmk_PktHandle *pPkt)
 {
-  pAdapter->pktOps[(pCompCtx)->type].pktRelease(pCompCtx, pPkt);
+  if (pCompCtx->type < SFVMK_PKT_COMPLETION_MAX)
+    sfvmk_packetOps[pCompCtx->type].pktRelease(pCompCtx, pPkt);
 }
 
 /* Functions for interrupt handling */

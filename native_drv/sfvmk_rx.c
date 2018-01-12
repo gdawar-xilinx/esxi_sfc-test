@@ -355,9 +355,6 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
                         vmk_StatusToString(status));
   }
 
-  /* Set pkt len */
-  vmk_PktFrameLenSet(pPkt, pRxDesc->size);
-
   /* Convert checksum flags */
   if (pRxDesc->flags & EFX_CKSUM_TCPUDP)
     vmk_PktSetCsumVfd(pPkt);
@@ -416,7 +413,9 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       goto discard_pkt;
     }
 
-    /* Read the length from the pseudo header for fragmented pkt */
+    /* Length is stored in the packet preefix when EF10 hardware is operating
+     * in cut-through mode (so that the RX event is generated before the
+     * length is known). */
     if (pRxDesc->flags & EFX_PKT_PREFIX_LEN) {
       vmk_uint16 len = 0;
 
@@ -457,6 +456,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
           vmk_Memset((vmk_uint8 *)pFrameVa + pRxDesc->size, 0,
                      SFVMK_MIN_PKT_SIZE - pRxDesc->size);
           pRxDesc->size = SFVMK_MIN_PKT_SIZE;
+          vmk_PktFrameLenSet(pPkt, pRxDesc->size);
         } else {
           SFVMK_ADAPTER_ERROR(pAdapter, "Buff desc is not writable(pkt size = %u",
                               pRxDesc->size);
@@ -539,7 +539,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   vmk_uint32 posted, maxBuf;
   vmk_uint32 batch;
   vmk_uint32 rxfill;
-  vmk_uint32 mblkSize;
+  vmk_uint32 mblkAllocSize;
   vmk_uint32 headroom;
   vmk_uint32 id;
 
@@ -560,10 +560,11 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
 
   maxBuf = EFX_RXQ_LIMIT(pRxq->numDesc) - rxfill;
 
+  mblkAllocSize = pAdapter->rxBufferSize + pAdapter->rxBufferStartAlignment;
+
   for (posted = 0; posted < maxBuf; posted++) {
 
-    mblkSize = pAdapter->rxBufferSize;
-    status = vmk_PktAllocForDMAEngine(mblkSize, pAdapter->dmaEngine, &pNewpkt);
+    status = vmk_PktAllocForDMAEngine(mblkAllocSize, pAdapter->dmaEngine, &pNewpkt);
     if (VMK_UNLIKELY(status != VMK_OK)) {
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_INFO,
                           "vmk_PktAllocForDMAEngine failed status %s",
@@ -571,7 +572,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       break;
     }
 
-    vmk_PktFrameLenSet(pNewpkt, mblkSize);
+    vmk_PktFrameLenSet(pNewpkt, mblkAllocSize);
 
     pFrag = vmk_PktSgElemGet(pNewpkt, 0);
     if (pFrag == NULL) {
@@ -579,28 +580,31 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       break;
     }
 
-    headroom = pAdapter->rxBufferStartAlignment -
-               (pFrag->addr & (pAdapter->rxBufferStartAlignment - 1));
+    /* Align start addr to startAlignemnt */
+    if (pFrag->addr & (pAdapter->rxBufferStartAlignment - 1)) {
+      headroom = pAdapter->rxBufferStartAlignment -
+                 (pFrag->addr & (pAdapter->rxBufferStartAlignment - 1));
 
-    vmk_PktPushHeadroom(pNewpkt, headroom);
+      vmk_PktPushHeadroom(pNewpkt, headroom);
 
-    /* Called again to get the modifed address */
-    pFrag = vmk_PktSgElemGet(pNewpkt, 0);
-    if (pFrag == NULL) {
-      sfvmk_pktRelease(pAdapter, pCompCtx, pNewpkt);
-      break;
+      /* Called again to get the modifed address */
+      pFrag = vmk_PktSgElemGet(pNewpkt, 0);
+      if (pFrag == NULL) {
+        sfvmk_pktRelease(pAdapter, pCompCtx, pNewpkt);
+        break;
+      }
     }
 
-    mblkSize = pFrag->length;
     /* Map it io dma address */
     mapperIN.addr = pFrag->addr;
-    mapperIN.length = pFrag->length;
+    mapperIN.length = pAdapter->rxBufferSize;
     status = vmk_DMAMapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_TO_MEMORY,
                             &mapperIN, VMK_TRUE, &mapperOut, &dmaMapErr);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_INFO,
-                          "vmk_DMAMapElem failed to map %p size %d to IO address, status %s",
-                          pNewpkt, mblkSize, vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+                          "vmk_DMAMapElem failed to map %p size %lu to IO address, status %s",
+                          pNewpkt, pAdapter->rxBufferSize,
+                          vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
       sfvmk_pktRelease(pAdapter, pCompCtx, pNewpkt);
       break;
     }
@@ -611,12 +615,12 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     rxDesc->flags = EFX_DISCARD;
     rxDesc->ioAddr = mapperOut.ioAddr;
     rxDesc->pPkt = pNewpkt;
-    rxDesc->size = mblkSize;
+    rxDesc->size = pAdapter->rxBufferSize;
     addr[batch++] = mapperOut.ioAddr;
 
     if (batch == SFVMK_REFILL_BATCH) {
       /* Post buffer to RX module */
-      efx_rx_qpost(pRxq->pCommonRxq, addr, mblkSize, batch,
+      efx_rx_qpost(pRxq->pCommonRxq, addr, pAdapter->rxBufferSize, batch,
                    pRxq->completed, pRxq->added);
       pRxq->added += batch;
       batch = 0;
@@ -625,7 +629,7 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
 
   if (batch != 0) {
     /* Post buffer to rxq module */
-    efx_rx_qpost(pRxq->pCommonRxq, addr, mblkSize, batch,
+    efx_rx_qpost(pRxq->pCommonRxq, addr, pAdapter->rxBufferSize, batch,
                  pRxq->completed, pRxq->added);
     pRxq->added += batch;
     batch = 0;
@@ -725,7 +729,7 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     goto failed_dma_alloc;
   }
 
-  /* Allocate memory for RX descriptor */
+  /* Allocate memory for RX descriptors */
   pRxq->pQueue = vmk_HeapAlloc(sfvmk_modInfo.heapID, sizeof(sfvmk_rxSwDesc_t) * pRxq->numDesc);
   if (pRxq->pQueue == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HeapAlloc failed");
@@ -990,10 +994,11 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
 
   pAdapter->rxBufferStartAlignment = MAX(1, pNicCfg->enc_rx_buf_align_start);
   EFSYS_ASSERT(ISP2(pAdapter->rxBufferStartAlignment));
+  pAdapter->rxBufferStartAlignment = MAX(pAdapter->rxBufferStartAlignment,
+                                         MAX(alignEnd, VMK_L1_CACHELINE_SIZE));
 
   pAdapter->rxBufferSize = P2ROUNDUP(pAdapter->rxBufferSize, alignEnd);
 
-  pAdapter->rxBufferSize += pAdapter->rxBufferStartAlignment;
   /* Maximum frame size that should be accepted */
   pAdapter->rxMaxFrameSize = pAdapter->uplink.sharedData.mtu +
                              sizeof(vmk_EthHdr) + sizeof(vmk_VLANHdr);

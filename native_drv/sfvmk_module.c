@@ -91,6 +91,112 @@ sfvmk_modInfoCleanup(void)
   }
 }
 
+/*! \brief Local function to calculate heap size requirement.
+**
+** \param  None
+**
+** \return: Calculated heap size in bytes.
+*/
+static vmk_ByteCount
+sfvmk_calcHeapSize(void)
+{
+  vmk_ByteCount maxSize = 0;
+  vmk_HeapAllocationDescriptor allocDesc[19];
+  VMK_ReturnStatus status;
+
+  allocDesc[0].size = vmk_LogHeapAllocSize();
+  allocDesc[0].alignment = 0;
+  allocDesc[0].count = 2;
+
+  allocDesc[1].size = vmk_LockDomainAllocSize();
+  allocDesc[1].alignment = 0;
+  allocDesc[1].count = 1;
+
+  allocDesc[2].size = vmk_HashGetAllocSize(SFVMK_MAX_ADAPTER);
+  allocDesc[2].alignment = 0;
+  allocDesc[2].count = 1;
+
+  allocDesc[3].size = vmk_HashGetAllocSize(SFVMK_MAX_FILTER);
+  allocDesc[3].alignment = 0;
+  allocDesc[3].count = SFVMK_MAX_ADAPTER;
+
+  /* For MCDI lock, adapter lock */
+  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[4].size, &allocDesc[4].alignment);
+  allocDesc[4].count = 2;
+
+  /* Binary semaphore at the module level */
+  allocDesc[5].size = vmk_SemaAllocSize((vmk_uint32 *)&allocDesc[5].alignment);
+  allocDesc[5].count = 1;
+
+  allocDesc[6].size = vmk_SpinlockAllocSize(VMK_SPINLOCK);
+  allocDesc[6].alignment = 0;
+  /* Per adapter - memBarLock, nicLock, uplinkLock, evqLock for each EVQ,
+   * txqLock for each TXQ.
+   */
+  allocDesc[6].count = (3 + SFVMK_MAX_EVQ + SFVMK_MAX_TXQ) * SFVMK_MAX_ADAPTER;
+
+  /* Space for helper thread */
+  allocDesc[7].size = vmk_WorldCreateAllocSize(&allocDesc[7].alignment);
+  allocDesc[7].count = 1;
+
+  allocDesc[8].size = sizeof(sfvmk_adapter_t);
+  allocDesc[8].alignment = 0;
+  allocDesc[8].count = SFVMK_MAX_ADAPTER;
+
+  allocDesc[9].size = sizeof(sfvmk_evq_t);
+  allocDesc[9].alignment = 0;
+  allocDesc[9].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+
+  allocDesc[10].size = sizeof(sfvmk_evq_t *);
+  allocDesc[10].alignment = sizeof(sfvmk_evq_t *);
+  allocDesc[10].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+
+  allocDesc[11].size = sizeof(vmk_IntrCookie);
+  allocDesc[11].alignment = 0;
+  allocDesc[11].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_INTR;
+
+  allocDesc[12].size = sizeof(sfvmk_rxq_t);
+  allocDesc[12].alignment = 0;
+  allocDesc[12].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+
+  allocDesc[13].size = sizeof(sfvmk_rxq_t *);
+  allocDesc[13].alignment = sizeof(sfvmk_rxq_t *);
+  allocDesc[13].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+
+  allocDesc[14].size = sizeof(sfvmk_rxSwDesc_t);
+  allocDesc[14].alignment = 0;
+  allocDesc[14].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ * EFX_RXQ_MAXNDESCS;
+
+  allocDesc[15].size = sizeof(sfvmk_txq_t);
+  allocDesc[15].alignment = 0;
+  allocDesc[15].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+
+  allocDesc[16].size = sizeof(sfvmk_txq_t *);
+  allocDesc[16].alignment = sizeof(sfvmk_txq_t *);
+  allocDesc[16].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+
+  allocDesc[17].size = sizeof(vmk_UplinkSharedQueueData);
+  allocDesc[17].alignment = 0;
+  allocDesc[17].count = SFVMK_MAX_ADAPTER * (SFVMK_MAX_RXQ * SFVMK_MAX_TXQ);
+
+  allocDesc[18].size = sizeof(sfvmk_filterDBEntry_t);
+  allocDesc[18].alignment = 0;
+  allocDesc[18].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
+
+  /* TODO: Add space for firmware download */
+
+  status = vmk_HeapDetermineMaxSize(allocDesc,
+                                    sizeof(allocDesc) / sizeof(allocDesc[0]),
+                                    &maxSize);
+  if (status != VMK_OK) {
+    vmk_WarningMessage("Failed to determine heap max size: status:%s",
+                       vmk_StatusToString(status));
+  }
+
+  /* Add 20% more for fragmentation */
+  return (maxSize *120)/100;
+}
+
 /*! \brief This is the driver module entry point that gets invoked
 **         automatically when this module is loaded.
 **
@@ -102,8 +208,8 @@ sfvmk_modInfoCleanup(void)
 int
 init_module(void)
 {
-  VMK_ReturnStatus status;
-  vmk_ByteCount byteCount;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_ByteCount heapSize = 0;
   vmk_LogProperties logProps;
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
@@ -111,34 +217,21 @@ init_module(void)
   vmk_MgmtProps mgmtProps;
   vmk_HashProperties hashProps;
 
-  /* TBD :  Memory for other modules needs to be added */
-  vmk_HeapAllocationDescriptor allocDesc[] = {
-      /* size, alignment, count */
-      { SFVMK_HEAP_EST, 1, 1},
-      { vmk_LogHeapAllocSize(), 1, 1 },
-      { vmk_LockDomainAllocSize(), 1, 1 },
-      { vmk_SpinlockAllocSize(VMK_SPINLOCK), 1, 2}
-   };
-
-  /* Populate sfvmk_ModInfo fields */
-
   /* 1. Driver Name */
   vmk_NameInitialize(&sfvmk_modInfo.driverName, SFVMK_DRIVER_NAME);
 
   /* 2. Heap */
-  status = vmk_HeapDetermineMaxSize(allocDesc,
-                                     sizeof(allocDesc) / sizeof(allocDesc[0]),
-                                     &byteCount);
-  if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to determine heap max size (%x)", status);
-     goto failed_max_heap_size;
+  heapSize = sfvmk_calcHeapSize();
+  if (!heapSize) {
+    vmk_WarningMessage("Failed to determine heap max size");
+    goto failed_max_heap_size;
   }
 
   heapProps.type = VMK_HEAP_TYPE_SIMPLE;
   vmk_NameCopy(&heapProps.name, &sfvmk_modInfo.driverName);
   heapProps.module = vmk_ModuleCurrentID;
   heapProps.initial = 0;
-  heapProps.max = byteCount;
+  heapProps.max = heapSize;
   heapProps.creationTimeoutMS = VMK_TIMEOUT_UNLIMITED_MS;
 
   status = vmk_HeapCreate(&heapProps, &sfvmk_modInfo.heapID);
@@ -210,7 +303,7 @@ init_module(void)
   hashProps.keyType   = VMK_HASH_KEY_TYPE_STR;
   hashProps.keyFlags  = VMK_HASH_KEY_FLAGS_LOCAL_COPY;
   hashProps.keySize   = SFVMK_DEV_NAME_LEN;
-  hashProps.nbEntries = SFVMK_ADAPTER_TABLE_SIZE;
+  hashProps.nbEntries = SFVMK_MAX_ADAPTER;
   hashProps.acquire   = NULL;
   hashProps.release   = NULL;
 

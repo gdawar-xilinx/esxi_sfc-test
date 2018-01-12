@@ -31,11 +31,6 @@
 #include <lib/vmkapi_types.h>
 
 /* Constants/Defines */
-
-/* Size of heap to be allocated */
-/* TBD: Add a function to calculate the Heap Size */
-#define SFVMK_HEAP_EST  (8 * VMK_MEGABYTE)
-
 /* Define it to include  Unit test code.
 TBD : Move it to Makefile */
 //#define SFVMK_WITH_UNIT_TESTS

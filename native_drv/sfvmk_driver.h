@@ -46,16 +46,20 @@
 #define	SFVMK_SW_EV_MAGIC(_sw_ev)     (SFVMK_MAGIC_RESERVED | (_sw_ev))
 #define SFVMK_SW_EV_RX_QREFILL        1
 
-/* Device name hash table size */
-#define SFVMK_ADAPTER_TABLE_SIZE  64
-
 /* Max number of filter supported by default RX queue.
  * HW supports total 8192 filters.
  * TODO: Using a smaller number of filters in driver as
  * supporting only single queue right now.
  * Needs to revisit during multiQ implementation.
  */
-#define SFVMK_MAX_FILTER 2048
+#define SFVMK_MAX_FILTER              2048
+#define SFVMK_MAX_ADAPTER             16
+
+/* 12 EVQs, 8 for NetQ and 4 for RSS */
+#define SFVMK_MAX_EVQ                 12
+#define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
+#define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
+#define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ
 
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);

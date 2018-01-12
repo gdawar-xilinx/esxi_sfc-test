@@ -194,6 +194,19 @@ const static vmk_UplinkPrivStatsOps sfvmkPrivStatsOps = {
    .privStatsGet           = sfvmk_privStatsGet,
 };
 
+/****************************************************************************
+ *               vmk_UplinkCoalesceParamsOps Handlers                       *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_coalesceParamsGet(vmk_AddrCookie,
+                                                vmk_UplinkCoalesceParams *);
+static VMK_ReturnStatus sfvmk_coalesceParamsSet(vmk_AddrCookie,
+                                                vmk_UplinkCoalesceParams *);
+
+const static vmk_UplinkCoalesceParamsOps sfvmkCoalesceParamsOps = {
+  .getParams = sfvmk_coalesceParamsGet,
+  .setParams = sfvmk_coalesceParamsSet,
+};
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -1219,6 +1232,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   else {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                         "VMK_UPLINK_CAP_VLAN_TX_INSERT: not supported by hw");
+  }
+
+  /* Register capability coalesce param configuration */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_COALESCE_PARAMS,
+                                 (vmk_UplinkCoalesceParamsOps *)
+                                 &sfvmkCoalesceParamsOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_COALESCE_PARAMS register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
   }
 
 done:
@@ -3084,6 +3109,210 @@ sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
                          vmk_StatusToString(status));
   }
 
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief function to set requested intr moderation settings.
+**
+** \param[in] pAdapter    pointer to sfvmk_adapter_t
+** \param[in] moderation  Interrupt moderation value
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+VMK_ReturnStatus
+sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
+                           vmk_uint32 moderation)
+{
+  vmk_uint32 qIndex=0;
+  const efx_nic_cfg_t *pNicCfg;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* Parameter Validation */
+  if (moderation > pNicCfg->enc_evq_timer_max_us) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid moderation value(%u)", moderation);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+
+  /* Firmware doesn't support different moderation settings for
+   * different queues, so apply same config to all queues */
+  for (qIndex=0; qIndex < pAdapter->numEvqsAllocated; qIndex++) {
+    status = sfvmk_evqModerate(pAdapter, qIndex, moderation);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evqModerate failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+  pAdapter->intrModeration = moderation;
+
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "Configured static interupt moderation to %d (us)",
+                      moderation);
+
+done:
+  return status;
+}
+
+/*! \brief function to copy the current coalesce params in shared queue area.
+**
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
+** \param[in] pParams   pointer to vmk_UplinkCoalesceParams
+**
+** \return: void
+**
+*/
+void
+sfvmk_configQueueDataCoalescParams(sfvmk_adapter_t *pAdapter,
+                                   vmk_UplinkCoalesceParams *pParams)
+{
+  vmk_UplinkSharedQueueData *pQueueData;
+  vmk_UplinkSharedQueueInfo *pQueueInfo;
+  vmk_uint32 qIndex = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pParam);
+
+  /* Once gloabl coalesce params are set, set to every TX/RX queues */
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+  pQueueData = &pQueueInfo->queueData[0];
+
+  /* Configure RX queue data */
+  qIndex = sfvmk_getUplinkRxqStartIndex(&pAdapter->uplink);
+  for (qIndex=0; qIndex < pQueueInfo->maxRxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, pParams, sizeof(*pParams));
+  }
+
+  /* Configure TX queue data */
+  qIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+  for (qIndex=0; qIndex < pQueueInfo->maxTxQueues; qIndex++) {
+    vmk_Memcpy(&pQueueData[qIndex].coalesceParams, pParams, sizeof(*pParams));
+  }
+
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return;
+}
+
+/*! \brief uplink callback function to get current coalesce params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] pParams   pointer to vmk_UplinkCoalesceParams
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_coalesceParamsGet(vmk_AddrCookie cookie,
+                        vmk_UplinkCoalesceParams *pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pParams == NULL) {
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_Memset(pParams, 0, sizeof(vmk_UplinkCoalesceParams));
+
+  /* Firmware doesn't support different moderation settings for
+   * different rx and tx event types. Only txUsecs parameter is being
+   * used for both rx & tx queue interrupt moderation conifguration */
+  vmk_MutexLock(pAdapter->lock);
+  pParams->txUsecs = pParams->rxUsecs = pAdapter->intrModeration;
+  vmk_MutexUnlock(pAdapter->lock);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to set requested coalesce params.
+**
+** \param[in] cookie    pointer to sfvmk_adapter_t
+** \param[in] pParams   pointer to vmk_UplinkCoalesceParams
+**
+** \return: VMK_OK or error code
+**
+*/
+static VMK_ReturnStatus
+sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
+                        vmk_UplinkCoalesceParams *pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (pParams == NULL) {
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Firmware doesn't support different moderation settings for
+   * different (rx/tx) event types. Only txUsecs would be considered
+   * and rxUsecs value would be ignored */
+  if (!(pParams->txUsecs)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid txUsecs value(%d)", pParams->txUsecs);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Update interrupt moderation settings for both RX & TX queues */
+  status = sfvmk_configIntrModeration(pAdapter, pParams->txUsecs);
+  if (status != VMK_OK)
+    goto done;
+
+  /* Update RX param with the same value as TX params,
+   * as FW supports same moderation setting for both */
+  pParams->rxUsecs = pParams->txUsecs;
+
+  /* Update shared queue data with the latest interrupt moderation values */
+  sfvmk_configQueueDataCoalescParams(pAdapter, pParams);
+
+  status = VMK_OK;
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

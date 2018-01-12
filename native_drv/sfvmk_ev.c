@@ -1151,3 +1151,54 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
 }
 
+/*! \brief  Fucntion to configure evq interrupt moderation
+**
+** \param[in]  pAdapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex       event queue index
+** \param[in]  uSec         interrupt moderaion value in uSec
+**
+** \return:    VMK_OK or error code
+*/
+VMK_ReturnStatus
+sfvmk_evqModerate(sfvmk_adapter_t *pAdapter,
+                  unsigned int qIndex,
+                  unsigned int uSec)
+{
+  sfvmk_evq_t *pEvq = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  VMK_ASSERT_LT(qIndex, pAdapter->numEvqsAllocated);
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (pEvq->state != SFVMK_EVQ_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid EVQ state(%u)", pEvq->state);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  status = efx_ev_qmoderate(pEvq->pCommonEvq, uSec);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_qmoderate failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
+
+  return status;
+}

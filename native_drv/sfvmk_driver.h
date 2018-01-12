@@ -469,6 +469,9 @@ void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_evStart(sfvmk_adapter_t *pAdapter);
 void sfvmk_evStop(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
+VMK_ReturnStatus sfvmk_evqModerate(sfvmk_adapter_t *pAdapter,
+                                   unsigned int qIndex,
+                                   unsigned int uSec);
 
 /* Functions for port module handling */
 VMK_ReturnStatus sfvmk_portInit(sfvmk_adapter_t *pAdapter);
@@ -570,4 +573,11 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
                              vmk_UplinkQueueState qState,
                              vmk_uint32 qIndex);
 
+VMK_ReturnStatus
+sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
+                           vmk_uint32 moderation);
+
+void
+sfvmk_configQueueDataCoalescParams(sfvmk_adapter_t *pAdapter,
+                                   vmk_UplinkCoalesceParams *pParams);
 #endif /* __SFVMK_DRIVER_H__ */

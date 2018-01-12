@@ -519,12 +519,71 @@ static VMK_ReturnStatus
 sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_Memset(pNicStats, 0, sizeof(*pNicStats));
+
+  vmk_MutexLock(pAdapter->lock);
+
+  status = sfvmk_macStatsUpdate(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Stats update failed with error %s",
+                        vmk_StatusToString(status));
+    goto failed_stats_update;
+  }
+
+  pNicStats->rxPkts = pAdapter->adapterStats[EFX_MAC_RX_PKTS];
+  pNicStats->txPkts = pAdapter->adapterStats[EFX_MAC_TX_PKTS];
+  pNicStats->rxBytes = pAdapter->adapterStats[EFX_MAC_RX_OCTETS];
+  pNicStats->txBytes = pAdapter->adapterStats[EFX_MAC_TX_OCTETS];
+
+  pNicStats->rxErrors = pAdapter->adapterStats[EFX_MAC_RX_ERRORS];
+  pNicStats->txErrors = pAdapter->adapterStats[EFX_MAC_TX_ERRORS];
+
+  pNicStats->rxDrops = pAdapter->adapterStats[EFX_MAC_RX_DROP_EVENTS];
+
+  /* TODO: The pNicStats->txDrops counter support will be added in
+   * transmit path. Bugzilla ID for this task is Bug76590 */
+
+  pNicStats->rxMulticastPkts = pAdapter->adapterStats[EFX_MAC_RX_MULTICST_PKTS];
+  pNicStats->rxBroadcastPkts = pAdapter->adapterStats[EFX_MAC_RX_BRDCST_PKTS];
+  pNicStats->txMulticastPkts = pAdapter->adapterStats[EFX_MAC_TX_MULTICST_PKTS];
+  pNicStats->txBroadcastPkts = pAdapter->adapterStats[EFX_MAC_TX_BRDCST_PKTS];
+
+  pNicStats->collisions = pAdapter->adapterStats[EFX_MAC_TX_SGL_COL_PKTS] +
+                         pAdapter->adapterStats[EFX_MAC_TX_MULT_COL_PKTS] +
+                         pAdapter->adapterStats[EFX_MAC_TX_EX_COL_PKTS] +
+                         pAdapter->adapterStats[EFX_MAC_TX_LATE_COL_PKTS];
+
+  pNicStats->rxLengthErrors = pAdapter->adapterStats[EFX_MAC_RX_LE_64_PKTS] +
+                             pAdapter->adapterStats[EFX_MAC_RX_JABBER_PKTS];
+
+  pNicStats->rxOverflowErrors = pAdapter->adapterStats[EFX_MAC_RX_NODESC_DROP_CNT];
+  pNicStats->rxCRCErrors = pAdapter->adapterStats[EFX_MAC_RX_FCS_ERRORS];
+  pNicStats->rxFrameAlignErrors = pAdapter->adapterStats[EFX_MAC_RX_ALIGN_ERRORS];
+
+  pNicStats->rxFifoErrors = pAdapter->adapterStats[EFX_MAC_PM_TRUNC_BB_OVERFLOW] +
+	                    pAdapter->adapterStats[EFX_MAC_PM_DISCARD_BB_OVERFLOW] +
+	                    pAdapter->adapterStats[EFX_MAC_PM_TRUNC_VFIFO_FULL] +
+	                    pAdapter->adapterStats[EFX_MAC_PM_DISCARD_VFIFO_FULL];
+
+  pNicStats->rxMissErrors = pAdapter->adapterStats[EFX_MAC_RXDP_DI_DROPPED_PKTS];
+
+  status = VMK_OK;
+
+failed_stats_update:
+  vmk_MutexUnlock(pAdapter->lock);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
 }
 

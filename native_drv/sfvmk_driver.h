@@ -163,6 +163,7 @@ typedef struct sfvmk_port_s {
   efx_link_mode_t     linkMode;
   vmk_uint32          fcRequested;
   vmk_uint32          advertisedCapabilities;
+  efsys_mem_t	      macStatsDmaBuf;
 } sfvmk_port_t;
 
 typedef enum sfvmk_txqType_e {
@@ -386,6 +387,9 @@ typedef struct sfvmk_adapter_s {
   /* Filter Database hash table and key generator */
   vmk_HashTable              filterDBHashTable;
   vmk_uint32                 filterKey;
+
+  /* MAC stats copy */
+  efsys_stat_t               adapterStats[EFX_MAC_NSTATS];
 } sfvmk_adapter_t;
 
 extern const sfvmk_pktOps_t sfvmk_packetOps[];
@@ -468,6 +472,7 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter);
 void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed);
+VMK_ReturnStatus sfvmk_macStatsUpdate(sfvmk_adapter_t *pAdapter);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

@@ -29,6 +29,20 @@
 /* Default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
 
+/* Number of supported offline diagnostics (PHY,MEM & REG) test */
+#define SFVMK_SELF_TEST_COUNT       3
+#define SFVMK_SELF_TEST_RESULT_LEN 32
+
+typedef enum sfvmk_selfTest_e {
+  SFVMK_SELFTEST_PHY = 1 << 0,
+  SFVMK_SELFTEST_REG = 1 << 1,
+  SFVMK_SELFTEST_MEM = 1 << 2
+} sfvmk_selfTest_t;
+
+#define SFVMK_SELFTEST_ALL (SFVMK_SELFTEST_PHY | \
+                            SFVMK_SELFTEST_REG | \
+                            SFVMK_SELFTEST_MEM)
+
 /* Wait time for StartIO on Reset */
 #define SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC    (100 * VMK_USEC_PER_MSEC)
 
@@ -205,6 +219,22 @@ static VMK_ReturnStatus sfvmk_coalesceParamsSet(vmk_AddrCookie,
 const static vmk_UplinkCoalesceParamsOps sfvmkCoalesceParamsOps = {
   .getParams = sfvmk_coalesceParamsGet,
   .setParams = sfvmk_coalesceParamsSet,
+};
+
+/****************************************************************************
+ *               vmk_UplinkSelfTestOps Handlers                             *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_selfTestResultLenGet(vmk_AddrCookie cookie,
+                                                   vmk_uint32  *pLen);
+static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
+                                          vmk_Bool online,
+                                          vmk_Bool *pPassed,
+                                          vmk_UplinkSelfTestResult *pResultBuf,
+                                          vmk_UplinkSelfTestString *pStringsBuf);
+
+const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
+   .selfTestResultLenGet = sfvmk_selfTestResultLenGet,
+   .selfTestRun          = sfvmk_selfTestRun,
 };
 
 /*! \brief  Uplink callback function to associate uplink device with driver and
@@ -1242,6 +1272,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "VMK_UPLINK_CAP_COALESCE_PARAMS register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Register capability for self test/offline diagnostics  */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_SELF_TEST,
+                                 (vmk_UplinkSelfTestOps *)
+                                 &sfvmk_selfTestOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_SELF_TEST register failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
@@ -3311,6 +3353,264 @@ sfvmk_coalesceParamsSet(vmk_AddrCookie cookie,
   sfvmk_configQueueDataCoalescParams(pAdapter, pParams);
 
   status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief Function to execute bist tests
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  bistMode    Bist mode of type efx_bist_type_t
+** \param[in]  pTestString Name of the test
+** \param[out] pResult     test result of type efx_bist_result_e
+** \param[out] pStringBuf  buffer to store self test status
+**
+** \return: VMK_OK - When test executed successfully else error code
+**
+*/
+static VMK_ReturnStatus
+sfvmk_executeBistTest(sfvmk_adapter_t *pAdapter,
+		      efx_bist_type_t bistMode,
+		      char *pTestString,
+		      efx_bist_result_t *pResult,
+		      char *pStringBuf)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  unsigned long values[EFX_BIST_NVALUES];
+  vmk_uint8 count = 0;
+  vmk_Bool bistStarted = VMK_FALSE;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pTestString);
+  VMK_ASSERT_NOT_NULL(pResult);
+  VMK_ASSERT_NOT_NULL(pStringBuf);
+
+  status = efx_bist_start(pAdapter->pNic, bistMode);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_bist_start failed status: %s",
+                        vmk_StatusToString(status));
+    *pResult = EFX_BIST_RESULT_FAILED;
+    status = VMK_FAILURE;
+    goto done;
+  }
+  bistStarted = VMK_TRUE;
+
+  do {
+    /* Delay for 1 ms */
+    status = sfvmk_worldSleep(1000);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_worldSleep failed status: %s",
+                          vmk_StatusToString(status));
+      *pResult = EFX_BIST_RESULT_FAILED;
+      goto done;
+    }
+
+    status = efx_bist_poll(pAdapter->pNic, bistMode,
+                           pResult, NULL, values,
+                           sizeof (values) / sizeof (values[0]));
+
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_bist_poll failed status: %s",
+                          vmk_StatusToString(status));
+      *pResult = EFX_BIST_RESULT_FAILED;
+      goto done;
+    }
+
+    if (*pResult != EFX_BIST_RESULT_RUNNING) {
+      /* test executed successfully so returning VMK_OK
+       * irrespective of the outcome of the test
+       * outcome of test will be reflected in *pResult
+       */
+      status = VMK_OK;
+      goto done;
+    }
+  } while (++count < 100);
+
+  status = VMK_TIMEOUT;
+
+done:
+  if (bistStarted)
+    efx_bist_stop(pAdapter->pNic, bistMode);
+
+  /* Update string buffer */
+  switch (*pResult) {
+    case EFX_BIST_RESULT_PASSED:
+      vmk_StringFormat(pStringBuf, SFVMK_SELF_TEST_RESULT_LEN,
+                       NULL, "%s : PASSED", pTestString);
+      break;
+    case EFX_BIST_RESULT_FAILED:
+      vmk_StringFormat(pStringBuf, SFVMK_SELF_TEST_RESULT_LEN,
+                       NULL, "%s : FAILED", pTestString);
+      break;
+    default:
+      vmk_StringFormat(pStringBuf, SFVMK_SELF_TEST_RESULT_LEN,
+                       NULL, "%s : %s", pTestString,
+                       (status == VMK_TIMEOUT) ? "TIMEOUT" : "UNKNOWN");
+    }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to get selfTest length.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] params    pointer to length of self test result
+**                       in vmk_UplinkSelfTestResult or vmk_UplinkSelfTestString
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus sfvmk_selfTestResultLenGet(vmk_AddrCookie cookie,
+                                                   vmk_uint32  *pLen)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (pLen == NULL) {
+    SFVMK_ERROR("NULL length ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  *pLen = SFVMK_SELF_TEST_COUNT;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to run self tests
+**
+** \param[in]  cookie     pointer to sfvmk_adapter_t
+** \param[in]  online     if TRUE, perform online tests only else offline test
+** \param[out] pPassed    self test result which would be TRUE
+**                        only if all tests are passed
+** \param[out] pResultBuf buffer to store self test result
+** \param[out] pStringBuf buffer to store self test string
+**
+** \return: VMK_OK        When any one test is executed successfully
+** \return: VMK_FAILURE   If test execution of all test cases fail
+**
+*/
+static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
+                                          vmk_Bool online,
+                                          vmk_Bool *pPassed,
+                                          vmk_UplinkSelfTestResult *pResultBuf,
+                                          vmk_UplinkSelfTestString *pStringsBuf)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  efx_bist_result_t result = EFX_BIST_RESULT_FAILED;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 testExecFail = 0;
+  vmk_uint32 testPass = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (online == VMK_TRUE) {
+    status = VMK_NOT_SUPPORTED;
+    goto done;
+  }
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if ((pPassed == NULL) || (pResultBuf == NULL) || (pStringsBuf == NULL)) {
+    SFVMK_ERROR("NULL params ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  /* PHY Test : EFX_BIST_TYPE_PHY_NORMAL */
+  status = sfvmk_executeBistTest(pAdapter,
+                                 EFX_BIST_TYPE_PHY_NORMAL,
+                                 "Phy Test", &result,
+                                 pStringsBuf[0]);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "Phy Self Test execution failed status: %s",
+                        vmk_StatusToString(status));
+    testExecFail |= SFVMK_SELFTEST_PHY;
+  }
+
+  if (result == EFX_BIST_RESULT_PASSED)
+    testPass |= SFVMK_SELFTEST_PHY;
+
+  /* Enter bist offline mode. This is a fw mode which puts the NIC
+   * into a state where memory BIST tests can be run
+   * A reboot is required to exit this mode. */
+  status = efx_bist_enable_offline(pAdapter->pNic);
+  if ((status != VMK_OK)) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "Bist Offline enable failed with err %s",
+                        vmk_StatusToString(status));
+
+    /* Skip memory & reg tests as they can be executed in offline mode only */
+    vmk_StringCopy(pStringsBuf[1], "Register Test : FAILED",
+                   SFVMK_SELF_TEST_RESULT_LEN);
+    vmk_StringCopy(pStringsBuf[2], "Memory Test : FAILED",
+                   SFVMK_SELF_TEST_RESULT_LEN);
+
+    testExecFail |= SFVMK_SELFTEST_REG;
+    testExecFail |= SFVMK_SELFTEST_MEM;
+  } else {
+    /* Reg Test : EFX_BIST_TYPE_REG */
+    status = sfvmk_executeBistTest(pAdapter,
+                                   EFX_BIST_TYPE_REG,
+                                   "Register Test", &result,
+                                   pStringsBuf[1]);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Register Test execution failed status: %s",
+                          vmk_StatusToString(status));
+      testExecFail |= SFVMK_SELFTEST_REG;
+    }
+    if (result == EFX_BIST_RESULT_PASSED)
+      testPass |= SFVMK_SELFTEST_REG;
+
+    /* Mem Test : EFX_BIST_TYPE_MC_MEM */
+    status = sfvmk_executeBistTest(pAdapter,
+                                   EFX_BIST_TYPE_MC_MEM,
+                                   "Memory Test", &result,
+                                   pStringsBuf[2]);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Memory Test execution failed status: %s",
+                          vmk_StatusToString(status));
+      testExecFail |= SFVMK_SELFTEST_MEM;
+    }
+    if (result == EFX_BIST_RESULT_PASSED)
+      testPass |= SFVMK_SELFTEST_MEM;
+
+    /* Apply MC reset to exit offline mode */
+    efx_mcdi_reboot(pAdapter->pNic);
+    status = VMK_OK;
+  }
+
+  /* Callback fails if none of the test could be executed
+   * Result is pass if all tests are passed */
+  status = (testExecFail == SFVMK_SELFTEST_ALL) ? VMK_FAILURE : VMK_OK;
+  *pPassed = (testPass == SFVMK_SELFTEST_ALL) ? VMK_TRUE : VMK_FALSE;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

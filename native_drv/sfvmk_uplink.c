@@ -180,6 +180,20 @@ const static vmk_UplinkRingParamsOps sfvmk_ringParamsOps = {
   .ringParamsSet = sfvmk_ringParamsSet,
 };
 
+/****************************************************************************
+ *               vmk_UplinkPrivStatsOps Handlers                            *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_privStatsLengthGet(vmk_AddrCookie cookie,
+                                                  vmk_ByteCount *pLength);
+static VMK_ReturnStatus sfvmk_privStatsGet(vmk_AddrCookie cookie,
+                                            char *pStatBuf,
+                                            vmk_ByteCount length);
+
+const static vmk_UplinkPrivStatsOps sfvmkPrivStatsOps = {
+   .privStatsLengthGet     = sfvmk_privStatsLengthGet,
+   .privStatsGet           = sfvmk_privStatsGet,
+};
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -579,6 +593,160 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
 
   status = VMK_OK;
 
+failed_stats_update:
+  vmk_MutexUnlock(pAdapter->lock);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+#define SFVMK_PRIV_STATS_ENTRY_LEN  80
+#define SFVMK_PRIV_STATS_BUFFER_SZ  (EFX_MAC_NSTATS * SFVMK_PRIV_STATS_ENTRY_LEN)
+
+/*! \brief Fill the buffer with private stats
+**         lock is already taken.
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[out] pStatsBuf  pointer to stats buffer to be filled
+**
+** \return: VMK_OK <success>
+**     Below error values are returned in case of failure,
+**           VMK_EOVERFLOW   If stats buffer overflowed
+**           VMK_FAILURE     Any other error
+*/
+static VMK_ReturnStatus
+sfvmk_fillPrivStats(sfvmk_adapter_t *pAdapter, char *pStatsBuf)
+{
+  uint32_t id;
+  vmk_ByteCount offset = 0;
+  const char *pEntryName;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  status = vmk_StringFormat(pStatsBuf, SFVMK_PRIV_STATS_ENTRY_LEN,
+                            &offset, "\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pStatsBuf += offset;
+  for (id = 0; id < EFX_MAC_NSTATS; id++) {
+    pEntryName = efx_mac_stat_name(pAdapter->pNic, id);
+    status = vmk_StringFormat(pStatsBuf, SFVMK_PRIV_STATS_ENTRY_LEN,
+                              &offset, "%s: %lu\n", pEntryName,
+                              pAdapter->adapterStats[id]);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+    if (offset >= SFVMK_PRIV_STATS_BUFFER_SZ) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Private stats buffer overflowed");
+      status = VMK_EOVERFLOW;
+      goto done;
+    }
+
+    pStatsBuf += offset;
+  }
+
+  /* TODO: Fill the driver maintained statistics
+   * SFVMK_PRIV_STATS_BUFFER_SZ would need to be
+   * updated accordingly */
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief Handler used by vmkernel to get uplink private stats length
+**
+** \param[in]  cookie   pointer to sfvmk_adapter_t
+** \param[out] pLength  length of the private stats in bytes
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *pLength)
+{
+
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pLength == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL pLength ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  *pLength = SFVMK_PRIV_STATS_BUFFER_SZ;
+   status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief uplink private statistics callback handler
+**
+** \param[in]  cookie   pointer to sfvmk_adapter_t
+** \param[out] statBuf  buffer to put device private stats
+** \param[in]  length   length of stats buf in bytes
+**
+** \return: VMK_OK <success> error code <failure>
+*/
+static VMK_ReturnStatus
+sfvmk_privStatsGet(vmk_AddrCookie cookie,
+                    char *pStatsBuf, vmk_ByteCount length)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pStatsBuf == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Stats buffer is NULL");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+  status = sfvmk_macStatsUpdate(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Stats sync failed with error %s",
+                        vmk_StatusToString(status));
+    goto failed_stats_sync;
+  }
+
+  status = sfvmk_fillPrivStats(pAdapter, pStatsBuf);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Priv stats buffer fill failed with error %s",
+                        vmk_StatusToString(status));
+    goto failed_stats_update;
+  }
+
+  status = VMK_OK;
+
+failed_stats_sync:
 failed_stats_update:
   vmk_MutexUnlock(pAdapter->lock);
 
@@ -1014,6 +1182,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "VMK_UPLINK_CAP_LINK_STATUS_SET register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Register capability for getting private stats */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_PRIV_STATS,
+                                 (vmk_UplinkPrivStatsOps *)
+                                 &sfvmkPrivStatsOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_PRIV_STATS register failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }

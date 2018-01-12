@@ -162,6 +162,7 @@ typedef struct sfvmk_port_s {
   sfvmk_portState_t   state;
   efx_link_mode_t     linkMode;
   vmk_uint32          fcRequested;
+  vmk_uint32          advertisedCapabilities;
 } sfvmk_port_t;
 
 typedef enum sfvmk_txqType_e {
@@ -466,6 +467,7 @@ VMK_ReturnStatus sfvmk_portStart(sfvmk_adapter_t *pAdapter);
 void sfvmk_portStop(sfvmk_adapter_t *pAdapter);
 void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

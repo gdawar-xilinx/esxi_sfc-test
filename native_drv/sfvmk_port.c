@@ -34,7 +34,10 @@ const vmk_uint32 sfvmk_linkBaudrate[EFX_LINK_NMODES] = {
   [EFX_LINK_1000HDX] = VMK_LINK_SPEED_1000_MBPS,
   [EFX_LINK_1000FDX] = VMK_LINK_SPEED_1000_MBPS,
   [EFX_LINK_10000FDX] = VMK_LINK_SPEED_10000_MBPS,
-  [EFX_LINK_40000FDX] = VMK_LINK_SPEED_40000_MBPS
+  [EFX_LINK_25000FDX] = VMK_LINK_SPEED_25000_MBPS,
+  [EFX_LINK_40000FDX] = VMK_LINK_SPEED_40000_MBPS,
+  [EFX_LINK_50000FDX] = VMK_LINK_SPEED_50000_MBPS,
+  [EFX_LINK_100000FDX] = VMK_LINK_SPEED_100000_MBPS
 };
 
 const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
@@ -45,8 +48,118 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
   [EFX_LINK_1000HDX] = VMK_LINK_DUPLEX_HALF,
   [EFX_LINK_1000FDX] = VMK_LINK_DUPLEX_FULL,
   [EFX_LINK_10000FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_25000FDX] = VMK_LINK_DUPLEX_FULL,
   [EFX_LINK_40000FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_50000FDX] = VMK_LINK_DUPLEX_FULL,
+  [EFX_LINK_100000FDX] = VMK_LINK_DUPLEX_FULL
 };
+
+#define SFVMK_PHY_CAP_ALL_SPEEDS_MASK     \
+  ((1 << EFX_PHY_CAP_AN) |              \
+   (1 << EFX_PHY_CAP_100000FDX) |       \
+   (1 << EFX_PHY_CAP_50000FDX) |        \
+   (1 << EFX_PHY_CAP_40000FDX) |        \
+   (1 << EFX_PHY_CAP_25000FDX) |        \
+   (1 << EFX_PHY_CAP_10000FDX) |        \
+   (1 << EFX_PHY_CAP_1000FDX) |         \
+   (1 << EFX_PHY_CAP_1000HDX) |         \
+   (1 << EFX_PHY_CAP_100FDX) |          \
+   (1 << EFX_PHY_CAP_100HDX) |          \
+   (1 << EFX_PHY_CAP_10FDX) |           \
+   (1 << EFX_PHY_CAP_10HDX))
+
+/*! \brief  update the PHY link speed
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  speed    link speed
+**
+** \return: VMK_OK <success> error code <failure>
+**          VMK_BAD_PARAM:     Wrong speed or duplex value
+**          VMK_NOT_SUPPORTED: Requested capability not supported
+**          VMK_FAILURE:       Other failure
+*/
+VMK_ReturnStatus
+sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
+{
+  sfvmk_port_t *pPort;
+  vmk_uint32 supportedCapabilities;
+  vmk_uint32 advertisedCapabilities;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pPort = &pAdapter->port;
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM,
+                      &supportedCapabilities);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &advertisedCapabilities);
+
+  advertisedCapabilities &= ~SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
+
+  switch (speed) {
+    case VMK_LINK_SPEED_100000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_100000FDX;
+      break;
+
+    case VMK_LINK_SPEED_50000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_50000FDX;
+      break;
+
+    case VMK_LINK_SPEED_40000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_40000FDX;
+      break;
+
+    case VMK_LINK_SPEED_25000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_25000FDX;
+      break;
+
+    case VMK_LINK_SPEED_10000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_10000FDX;
+      break;
+
+    case VMK_LINK_SPEED_1000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_1000FDX;
+      break;
+
+    case VMK_LINK_SPEED_AUTO:
+      advertisedCapabilities |= supportedCapabilities &
+                                SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
+      break;
+
+    default:
+      status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  /* Fail if no supported speeds are advertised */
+  if (!(advertisedCapabilities & SFVMK_PHY_CAP_ALL_SPEEDS_MASK &
+	    supportedCapabilities)) {
+    status = VMK_NOT_SUPPORTED;
+    goto end;
+  }
+
+  if (pPort->advertisedCapabilities == advertisedCapabilities)
+    goto end;
+
+  vmk_LogMessage("0xdeadbeaf Set the Capabilities");
+  status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to set PHY cap with error %s",
+                        vmk_StatusToString(status));
+    goto end;
+  }
+
+  pPort->advertisedCapabilities = advertisedCapabilities;
+  status = VMK_OK;
+
+end:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+  return status;
+}
 
 /*! \brief  Helper world queue function for link update
 **

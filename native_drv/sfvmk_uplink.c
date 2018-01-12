@@ -38,6 +38,8 @@ static void sfvmk_addUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal,
 static VMK_ReturnStatus sfvmk_startIO(sfvmk_adapter_t *pAdapter);
 static VMK_ReturnStatus sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter);
 static void sfvmk_uplinkResetHelper(vmk_AddrCookie data);
+static VMK_ReturnStatus sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
+                                                  vmk_LinkStatus *pLinkStatus);
 
 /****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
@@ -788,6 +790,85 @@ done:
   return status;
 }
 
+/*! \brief uplink callback function to set the link status
+**
+** \param[in]  cookie       pointer to sfvmk_adapter_t
+** \param[out] pLinkStatus  pointer to link status
+**
+** \return: VMK_OK <success> error code <failure>
+**          VMK_BAD_PARAM:     NULL pointer to sfvmk_adapter_t
+**          VMK_FAILURE:       Other failure
+**
+*/
+static VMK_ReturnStatus
+sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
+                          vmk_LinkStatus *pLinkStatus)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+
+  /* Handle Link down request */
+  if (pLinkStatus->state == VMK_LINK_STATE_DOWN) {
+
+    /* If Link State is already down, no action required */
+    if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                          "Take no action, Link is already down");
+      status = VMK_OK;
+      goto quiesceio_done;
+    }
+
+    /* Call Quiesce IO to bring the link down */
+    status = sfvmk_quiesceIO(pAdapter);
+    if (status != VMK_OK)
+      SFVMK_ADAPTER_ERROR(pAdapter, "Link down failed with error %s",
+                          vmk_StatusToString(status));
+
+    goto quiesceio_done;
+  }
+
+  /* Handle Link up request */
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Bringing link up");
+    status = sfvmk_startIO(pAdapter);
+    if (status != VMK_OK)
+      SFVMK_ADAPTER_ERROR(pAdapter, "Link up failed with error %s",
+                          vmk_StatusToString(status));
+    goto startio_done;
+  }
+
+  if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
+    /* Check if the request is for speed change.
+     *
+     * Note: This driver only support Medford and Medford+ boards. Half
+     * duplex mode and speed less than 1000 Mbps is not supported.
+     * Only 1000Mbps Full duplex and onwards is supported by driver */
+    status = sfvmk_phyLinkSpeedSet(pAdapter, pLinkStatus->speed);
+    if (status != VMK_OK)
+      SFVMK_ADAPTER_ERROR(pAdapter, "Link speed set failed with error %s",
+                          vmk_StatusToString(status));
+  }
+
+quiesceio_done:
+startio_done:
+  vmk_MutexUnlock(pAdapter->lock);
+
+end:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
 /*! \brief function to register all driver cap with uplink device.
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
@@ -865,6 +946,17 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "VMK_UPLINK_CAP_MESSAGE_LEVEL register failed status: %s",
                         vmk_StatusToString(status));
+  }
+
+  /* Register capability for changing link status and speed */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_LINK_STATUS_SET,
+                                 &sfvmk_uplinkLinkStatusSet);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_LINK_STATUS_SET register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
   }
 
   pNicCfg = efx_nic_cfg_get(pAdapter->pNic);

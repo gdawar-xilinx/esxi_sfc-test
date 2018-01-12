@@ -1873,20 +1873,29 @@ static inline vmk_Bool sfvmk_isDefaultUplinkTxq(sfvmk_uplink_t *pUplink, vmk_uin
 
 /*! \brief  The poll thread calls this callback function for polling packets.
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  cookie    pointer to sfvmk_evq_t
 **
 ** \return: VMK_TRUE      <Completion is pending>
-**          VMK_FALSE      <No pending completion>
+**          VMK_FALSE     <No pending completion>
 */
 static vmk_Bool
-sfvmk_netPollCB(void *pEvq, vmk_uint32 budget)
+sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
 {
+  vmk_Bool pendCompletion = VMK_FALSE;
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)cookie.ptr;
+
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_UPLINK);
 
-  sfvmk_evqPoll(pEvq);
+  VMK_ASSERT_NOT_NULL(pEvq);
+  pEvq->rxBudget = budget;
+
+  if (sfvmk_evqPoll(pEvq) == VMK_OK) {
+    if (pEvq->rxDone >= pEvq->rxBudget)
+      pendCompletion = VMK_TRUE;
+  }
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_UPLINK);
-  return VMK_FALSE;
+  return pendCompletion;
 }
 
 /*! \brief  Create uplink RXQ

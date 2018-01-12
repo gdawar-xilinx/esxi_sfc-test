@@ -154,7 +154,7 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
     sfvmk_evqComplete(pEvq);
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
-  return (pEvq->rxDone >= SFVMK_EV_BATCH);
+  return (pEvq->rxDone >= pEvq->rxBudget);
 
 fail:
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
@@ -557,9 +557,9 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
     goto done;
   }
 
+  pEvq->rxDone = 0;
   /* Poll the queue */
   efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
-  pEvq->rxDone = 0;
 
   /* Perform any pending completion processing */
   sfvmk_evqComplete(pEvq);

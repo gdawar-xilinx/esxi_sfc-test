@@ -143,6 +143,8 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              txDone;
   vmk_uint32              readPtr;
   vmk_uint32              rxDone;
+  /* Maximum number of packets to be processed in each netPoll invocation */
+  vmk_uint32              rxBudget;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_flushState_e {

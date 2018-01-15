@@ -65,7 +65,7 @@ ifneq ($(VMW_KC_NAME),)
 endif
 
 # Driver requires common code files, import it from v5 repo
-V5_TAG          = v4_11_0_1021
+V5_TAG          = default
 V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
 FILE            = export.files-common
 IMPORTED_FILES  = $(shell cat ${FILE})

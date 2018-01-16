@@ -1387,6 +1387,7 @@ sfvmk_tsoStartNewPacket(sfvmk_txq_t *pTxq,
     desc = &pTxq->pPendDesc[pTxq->nPendDesc];
     efx_tx_qdesc_tso2_create(pTxq->pCommonTxq,
            pTso->packetId,
+           0,
            pTso->seqnum,
            pTso->segSize,
            desc,

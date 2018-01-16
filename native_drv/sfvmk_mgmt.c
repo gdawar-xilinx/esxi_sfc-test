@@ -752,3 +752,21 @@ end:
   return VMK_OK;
 }
 
+
+/*! \brief  A Mgmt callback to perform Image Update
+**
+** \param[in]      pCookies    pointer to cookie
+** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface   pointer to mgmt param
+** \param[in/out]  pImgUpdate  pointer to sfvmk_imgUpdate_t structure
+**
+** \return VMK_OK
+**
+*/
+int sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_imgUpdate_t *pImgUpdate)
+{
+  return VMK_OK;
+}

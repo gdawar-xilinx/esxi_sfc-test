@@ -70,6 +70,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_INTR_MODERATION,
   SFVMK_CB_PCI_INFO_GET,
   SFVMK_CB_VPD_REQUEST,
+  SFVMK_CB_IMG_UPDATE,
   SFVMK_CB_MAX
 }sfvmk_mgmtCbTypes_t;
 
@@ -322,6 +323,7 @@ typedef struct sfvmk_versionInfo_s {
 typedef enum sfvmk_mgmtDevOps_e {
   SFVMK_MGMT_DEV_OPS_GET = 1,
   SFVMK_MGMT_DEV_OPS_SET,
+  SFVMK_MGMT_DEV_OPS_UPDATE,
   SFVMK_MGMT_DEV_OPS_INVALID
 }sfvmk_mgmtDevOps_t;
 
@@ -484,6 +486,20 @@ typedef struct sfvmk_vpdInfo_s {
   vmk_uint8   vpdPayload[SFVMK_VPD_MAX_PAYLOAD]; /* In or out */
 } __attribute__((__packed__)) sfvmk_vpdInfo_t;
 
+
+/*! \brief struct sfvmk_imgUpdate_s to update
+ **       firmware image
+ **
+ ** pFileBuffer[in]    Pointer to Buffer Containing Update File's contents
+ **
+ ** size[in]           size of the update file
+ **
+ */
+typedef struct sfvmk_imgUpdate_s{
+  vmk_uint64          pFileBuffer;
+  vmk_uint32          size;
+} __attribute__((__packed__)) sfvmk_imgUpdate_t;
+
 #ifdef VMKERNEL
 /**
  * These are the definitions of prototypes as viewed from
@@ -583,6 +599,11 @@ int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_vpdInfo_t *pVpdInfo);
+
+int sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_imgUpdate_t *pImgUpdate);
 #else
 /*
  * This section is where callback definitions, as visible to
@@ -600,6 +621,7 @@ int sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtIntrModeration NULL
 #define sfvmk_mgmtPCIInfoCallback NULL
 #define sfvmk_mgmtVPDInfoCallback NULL
+#define sfvmk_mgmtImgUpdateCallback NULL
 #endif /* VMKERNEL */
 
 #endif

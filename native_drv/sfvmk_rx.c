@@ -159,6 +159,7 @@ sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  pAdapter->isRxCsumEnabled = VMK_TRUE;
   pAdapter->numRxqsAllocated = MIN(pAdapter->numEvqsAllocated,
                                    pAdapter->numRxqsAllotted);
 
@@ -388,6 +389,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   vmk_SgElem elem;
   VMK_ReturnStatus status;
   vmk_VA pFrameVa;
+  vmk_Bool isRxCsumEnabled = VMK_FALSE;
+  vmk_uint32 sharedReadLockVer;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
 
@@ -471,14 +474,19 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       goto discard_pkt;
     }
 
-    /* Clear the CKSUM flags as CKSUM caps is not yet enabled
-     * TODO : A proper check based on the capability  will
-     * be added before clearing the flags */
+    do {
+      sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pAdapter->isRxCsumLock);
+      isRxCsumEnabled = pAdapter->isRxCsumEnabled;
+    } while (!vmk_VersionedAtomicEndTryRead(&pAdapter->isRxCsumLock, sharedReadLockVer));
+
+    /* Clear the CKSUM flags if Rx CSUM validation is disabled */
     switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
       case EFX_PKT_IPV4:
+        if(!isRxCsumEnabled)
           pRxDesc->flags &= ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
         break;
       case EFX_PKT_IPV6:
+        if(!isRxCsumEnabled)
           pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
         break;
       case 0:

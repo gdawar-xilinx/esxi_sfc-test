@@ -803,20 +803,32 @@ done:
 ** \param[in]  cookie      vmk_AddrCookie
 ** \param[in]  uplinkCap   uplink capability to be enabled
 **
-* @return: VMK_OK <success> error code <failure>
+* @return: VMK_OK always
 **
 */
 static VMK_ReturnStatus
 sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      ".uplinkCapEnable Called for Cap: %u", uplinkCap);
+  /*
+   * There is just one esxcli command for changing NIC CSO setting which
+   * applies to both IPv4 and IPv6:
+   * esxcli network nic cso set -e 1 -n <vmnicX> */
+  if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) ||
+     (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
+    vmk_VersionedAtomicBeginWrite(&pAdapter->isRxCsumLock);
+    pAdapter->isRxCsumEnabled = VMK_TRUE;
+    vmk_VersionedAtomicEndWrite(&pAdapter->isRxCsumLock);
+  }
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  return status;
+  return VMK_OK;
 }
 
 /*! \brief uplink callback function to disable cap
@@ -824,20 +836,32 @@ sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 ** \param[in]  cookie     vmk_AddrCookie
 ** \param[in]  uplinkCap  uplink cap to be disabled
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK always
 **
 */
 static VMK_ReturnStatus
 sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      ".uplinkCapDisable Called for Cap: %u", uplinkCap);
+
+  /*
+   * There is just one esxcli command for changing NIC CSO setting which
+   * applies to both IPv4 and IPv6:
+   * esxcli network nic cso set -e 0 -n <vmnicX> */
+  if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) ||
+     (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
+    vmk_VersionedAtomicBeginWrite(&pAdapter->isRxCsumLock);
+    pAdapter->isRxCsumEnabled = VMK_FALSE;
+    vmk_VersionedAtomicEndWrite(&pAdapter->isRxCsumLock);
+  }
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  return status;
+  return VMK_OK;
 }
 
 /*! \brief uplink callback function to reset the adapter.
@@ -1241,6 +1265,15 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /* Register capability for modifying packet headers on Tx */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_MOD_TX_HDRS, NULL);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_MOD_TX_HDRS failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
   pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
   if (pNicCfg == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NULL NIC configuration ptr");
@@ -1286,6 +1319,49 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "VMK_UPLINK_CAP_SELF_TEST register failed status: %s",
                         vmk_StatusToString(status));
     goto done;
+  }
+
+  /* Register capability for IPv4 TCP and UDP checksum offload */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_IPV4_CSO, NULL);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV4_CSO failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Register capability for IPv6 TCP and UDP checksum offload */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_IPV6_CSO, NULL);
+  if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV6_CSO failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Register TSO capability if supported by HW */
+  if (pAdapter->isTsoFwAssisted) {
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_IPV4_TSO, NULL);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV4_TSO failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_IPV6_TSO, NULL);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV6_TSO failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "IPV4_TSO and IPV6_TSO registered");
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "TSO capability not registered: not supported by hw");
   }
 
 done:

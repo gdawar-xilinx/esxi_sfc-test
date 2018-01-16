@@ -187,18 +187,36 @@ typedef enum sfvmk_txqState_e {
 
 /* Buffer mapping information for descriptors in flight */
 typedef struct sfvmk_txMapping_s {
-  /*TODO: TSO related fields */
+  vmk_PktHandle *pOrigPkt;
   vmk_PktHandle *pXmitPkt;
   vmk_SgElem    sgElem;
 } sfvmk_txMapping_t;
 
 typedef enum {
-   /*TODO: TSO offload type */
-   SFVMK_TX_VLAN   = 1 << 0,
+   SFVMK_TX_TSO  = 1 << 0,
+   SFVMK_TX_VLAN = 1 << 1,
 } sfvmk_offloadType_t;
+
+typedef enum {
+   SFVMK_TSO_DEFRAG_HEADER = 1 << 0,
+   SFVMK_TSO_DEFRAG_SGES   = 1 << 1,
+} sfvmk_fixType_t;
 
 typedef struct sfvmk_xmitInfo_s {
    sfvmk_offloadType_t offloadFlag;
+   sfvmk_fixType_t     fixFlag;
+   vmk_uint32          seqNumNbo;
+   vmk_uint32          headerLen;
+   vmk_uint32          firstSgLen;
+   vmk_uint32          mss;
+   vmk_uint16          packetId;
+   vmk_uint32          dmaDescsEst;
+
+   /* pXmitPkt is the one we need to transmit. pOrigPkt is the one forwarded by
+    * kernel .uplinkTx routine. They two maybe the same if the origPkt didn't
+    * violate any hardware constraints.
+    */
+   vmk_PktHandle       *pOrigPkt;
    vmk_PktHandle       *pXmitPkt;
 } sfvmk_xmitInfo_t;
 
@@ -229,6 +247,7 @@ typedef struct sfvmk_txq_s {
 
   /* The last VLAN TCI seen on the queue if FW-assisted tagging is used */
   vmk_uint16              hwVlanTci;
+  vmk_Bool                isCso;
 
   /* The following fields change more often and are read regularly
    * on the transmit and transmit completion path */
@@ -396,6 +415,12 @@ typedef struct sfvmk_adapter_s {
 
   /* MAC stats copy */
   efsys_stat_t               adapterStats[EFX_MAC_NSTATS];
+
+  /* isRxCsumLock synchronizes access to isRxCsumEnabled in
+   * netpoll and uplink contexts */
+  vmk_VersionedAtomic        isRxCsumLock;
+  vmk_Bool                   isRxCsumEnabled;
+  vmk_Bool                   isTsoFwAssisted;
 } sfvmk_adapter_t;
 
 extern const sfvmk_pktOps_t sfvmk_packetOps[];

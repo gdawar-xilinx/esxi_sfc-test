@@ -848,6 +848,8 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_helper;
   }
 
+  vmk_VersionedAtomicInit(&pAdapter->isRxCsumLock);
+
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 

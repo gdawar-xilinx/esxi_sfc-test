@@ -196,7 +196,9 @@ done:
 void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
 {
   vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_UplinkSharedQueueInfo *pQueueInfo = NULL;
   efx_link_mode_t linkMode;
+  vmk_uint32 index = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
@@ -248,6 +250,12 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
    * Right now it is safe to call this always as by default admin link status is up */
   vmk_UplinkUpdateLinkState(pAdapter->uplink.handle, &pAdapter->uplink.sharedData.link);
 
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+
+  for (index = 0; index < pQueueInfo->maxTxQueues; index++)
+    sfvmk_updateQueueStatus(pAdapter, pSharedData->link.state?
+                            VMK_UPLINK_QUEUE_STATE_STARTED:
+                            VMK_UPLINK_QUEUE_STATE_STOPPED, index);
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
 }

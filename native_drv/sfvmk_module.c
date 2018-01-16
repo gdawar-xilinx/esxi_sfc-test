@@ -37,7 +37,8 @@ sfvmk_ModInfo_t sfvmk_ModInfo = {
    .logThrottledID   = VMK_INVALID_LOG_HANDLE,
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
    .mgmtHandle       = NULL,
-   .vmkdevHashTable = VMK_INVALID_HASH_HANDLE,
+   .vmkdevHashTable  = VMK_INVALID_HASH_HANDLE,
+   .lock             = NULL
 };
 
 static void
@@ -77,6 +78,10 @@ sfvmk_ModInfoCleanup(void)
   if (sfvmk_ModInfo.heapID != VMK_INVALID_HEAP_ID) {
     vmk_HeapDestroy(sfvmk_ModInfo.heapID);
     sfvmk_ModInfo.heapID = VMK_INVALID_HEAP_ID;
+  }
+
+  if (sfvmk_ModInfo.lock != NULL) {
+    vmk_SemaDestroy(&sfvmk_ModInfo.lock);
   }
 }
 
@@ -182,6 +187,15 @@ init_module(void)
   status = vmk_MemPoolCreate(&memPoolProps, &sfvmk_ModInfo.memPoolID);
   if (status != VMK_OK) {
     SFVMK_ERROR("Failed to create mempool (%s)", vmk_StatusToString(status));
+    goto err;
+  }
+
+  status = vmk_BinarySemaCreate(&sfvmk_ModInfo.lock,
+                                sfvmk_ModInfo.heapID,
+                                (const char *)"Module Lock");
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Initialization of Module level lock failed (%s)",
+                 vmk_StatusToString(status));
     goto err;
   }
 

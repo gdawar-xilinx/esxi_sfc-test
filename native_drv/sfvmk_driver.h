@@ -36,6 +36,7 @@
 #include "sfvmk_mcdi.h"
 #include "sfvmk_uplink.h"
 #include "sfvmk_intr.h"
+#include "sfvmk_mgmtInterface.h"
 
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
@@ -170,6 +171,29 @@ typedef struct sfvmk_devHashTable_s {
    vmk_uint8 *pUplinkName;
    sfvmk_adapter_t *pAdapter;
 }sfvmk_devHashTable_t;
+
+/* Enum/Functions for performing Image update*/
+/* Firmware types same as defined in v5/ci/mgmt/firmware_ids.h */
+typedef enum sfvmk_imageReflash_e {
+  REFLASH_TARGET_PHY = 0,
+  REFLASH_TARGET_PHY_LOADER = 1,
+  REFLASH_TARGET_BOOTROM = 2,
+  REFLASH_TARGET_MCFW = 3,
+  REFLASH_TARGET_MCFW_BACKUP = 4,
+  REFLASH_TARGET_DISABLED_CALLISTO = 5,
+  REFLASH_TARGET_FPGA = 6,
+  REFLASH_TARGET_FPGA_BACKUP = 7,
+  REFLASH_TARGET_FCFW = 8,
+  REFLASH_TARGET_FCFW_BACKUP = 9,
+  REFLASH_TARGET_CPLD = 10,
+  REFLASH_TARGET_MUMFW = 11,
+  REFLASH_TARGET_UEFIROM = 12,
+} sfvmk_imageReflash_t;
+
+VMK_ReturnStatus
+sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
+                                     sfvmk_mgmtDevInfo_t *pDevIface,
+                                     sfvmk_adapter_t  *pAdapter);
 
 extern VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *);
 #endif /* __SFVMK_DRIVER_H__ */

@@ -61,6 +61,7 @@ typedef struct {
   vmk_ListLinks      adapterList;
   vmk_MgmtHandle     mgmtHandle;
   vmk_HashTable      vmkdevHashTable;
+  vmk_Semaphore      lock;
 } sfvmk_ModInfo_t;
 
 extern sfvmk_ModInfo_t sfvmk_ModInfo;

@@ -23,6 +23,9 @@
 #define EFSYS_HAS_UINT64 1
 #define EFSYS_USE_UINT64 1
 
+/* ESX Image Header*/
+#define EFSYS_OPT_IMAGE_LAYOUT 1
+
 /* Helper Macros */
 #ifndef IS_P2ALIGNED
 #define IS_P2ALIGNED(v, a)      ((((uintptr_t)(v)) & ((uintptr_t)(a) - 1)) == 0)

@@ -192,6 +192,15 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
 
+  /* Process only default transmit queue when system is in panic state */
+  if (VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE) &&
+     (pEvq != pAdapter->ppEvq[0])) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                        "System in panic state, returning");
+    status = VMK_FALSE;
+    goto done;
+  }
+
   pTxq = pAdapter->ppTxq[pEvq->index];
   VMK_ASSERT_NOT_NULL(pTxq);
 
@@ -981,6 +990,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     goto failed_create_lock;
   }
 
+  pEvq->panicPktList = NULL;
   pAdapter->ppEvq[qIndex] = pEvq;
   pEvq->state = SFVMK_EVQ_STATE_INITIALIZED;
 

@@ -56,6 +56,22 @@ static VMK_ReturnStatus sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
                                                   vmk_LinkStatus *pLinkStatus);
 
 /****************************************************************************
+ *                vmk_UplinkNetDumpOps Handler                              *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_panicTx(vmk_AddrCookie cookie,
+                                      vmk_PktList pktList);
+static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
+                                        vmk_PktList pktList);
+static VMK_ReturnStatus sfvmk_panicInfoGet(vmk_AddrCookie cookie,
+                                           vmk_UplinkPanicInfo *panicInfo);
+
+static vmk_UplinkNetDumpOps sfvmkNetDumpOps = {
+  .panicTx = sfvmk_panicTx,
+  .panicPoll = sfvmk_panicPoll,
+  .panicInfoGet = sfvmk_panicInfoGet,
+};
+
+/****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
@@ -471,6 +487,116 @@ release_all_pkts:
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
+}
+
+/*! \brief uplink callback function to transmit pkts in panic state
+**
+** \param[in]  cookie     pointer to sfvmk_adapter_t
+** \param[in]  pktList    list of packets to be transmitted
+**
+** \return: VMK_OK on success, error code otherwise.
+**
+*/
+static VMK_ReturnStatus
+sfvmk_panicTx(vmk_AddrCookie cookie, vmk_PktList pktList)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_UplinkSharedQueueInfo *pQueueInfo = NULL;
+  vmk_PktHandle *pPkt = NULL;
+  VMK_PKTLIST_ITER_STACK_DEF(iter);
+  sfvmk_pktCompCtx_t compCtx = {
+    .type = SFVMK_PKT_COMPLETION_PANIC,
+  };
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
+      vmk_PktListIterRemovePkt(iter, &pPkt);
+      sfvmk_pktRelease(pAdapter, &compCtx, pPkt);
+    }
+    goto done;
+  }
+
+  pSharedData = &pAdapter->uplink.sharedData;
+  pQueueInfo = pSharedData->queueInfo;
+  pPkt = vmk_PktListGetFirstPkt(pktList);
+
+  /* Set the default tx queue for pktList */
+  vmk_PktQueueIDSet(pPkt, pQueueInfo->defaultTxQueueID);
+  status = sfvmk_uplinkTx(cookie, pktList);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief uplink callback function to poll for rx pkts in panic state
+**
+** \param[in]   cookie      pointer to sfvmk_adapter_t
+** \param[out]  pktList     list of packets received
+**
+** \return: VMK_OK always
+**
+*/
+static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
+                                        vmk_PktList pktList)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 qIndex;
+  vmk_PktHandle *pPkt = NULL;
+  VMK_PKTLIST_ITER_STACK_DEF(iter);
+  sfvmk_pktCompCtx_t compCtx = {
+    .type = SFVMK_PKT_COMPLETION_PANIC,
+  };
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
+      vmk_PktListIterRemovePkt(iter, &pPkt);
+      sfvmk_pktRelease(pAdapter, &compCtx, pPkt);
+    }
+    goto done;
+  }
+
+  for (qIndex = 0; qIndex < pAdapter->numEvqsAllocated; qIndex++) {
+    sfvmk_evq_t *pEvq = pAdapter->ppEvq[qIndex];
+
+    vmk_SpinlockLock(pEvq->lock);
+    pEvq->panicPktList = pktList;
+    vmk_SpinlockUnlock(pEvq->lock);
+
+    sfvmk_evqPoll(pEvq);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return VMK_OK;
+}
+
+/*! \brief uplink callback function to get panic-time polling properties
+**
+** \param[in]   cookie       pointer to sfvmk_adapter_t
+** \param[out]  panicInfo    panic-time polling properties of the device
+**
+** \return: VMK_OK always
+**
+*/
+static VMK_ReturnStatus sfvmk_panicInfoGet(vmk_AddrCookie cookie,
+                                           vmk_UplinkPanicInfo *panicInfo)
+{
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_UPLINK);
+
+  /* Fill in data for sfvmk_panicPoll function */
+  panicInfo->clientData = cookie;
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_UPLINK);
+  return VMK_OK;
 }
 
 /*! \brief Uplink callback function to set MTU
@@ -1362,6 +1488,15 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   } else {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                         "TSO capability not registered: not supported by hw");
+  }
+
+  /* Register network dump capability */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_NETWORK_DUMP, &sfvmkNetDumpOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_NETWORK_DUMP failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
   }
 
 done:

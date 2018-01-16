@@ -559,7 +559,7 @@ sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter)
 
 /* \brief  Handle packet completion. The function works in netPoll context.
 **
-** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
 ** \param[in]  pPkt     pointer to pkt
 **
 ** \return: None
@@ -572,10 +572,26 @@ sfvmk_pktReleaseNetPoll(sfvmk_pktCompCtx_t *pCompCtx,
    vmk_NetPollQueueCompPkt(pCompCtx->netPoll, pPkt);
 }
 
+/* \brief  Handle packet completion. The function works in panic context.
+**
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
+** \param[in]  pPkt     pointer to pkt
+**
+** \return: None
+*/
+static void
+sfvmk_pktReleasePanic(sfvmk_pktCompCtx_t *pCompCtx,
+                      vmk_PktHandle *pPkt)
+{
+   VMK_ASSERT_EQ(pCompCtx->type, SFVMK_PKT_COMPLETION_PANIC);
+   vmk_PktReleasePanic(pPkt);
+}
+
+
 /* \brief  Handle packet release request. The function works
 **         in Others (other than netPoll and panic) context.
 **
-** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
 ** \param[in]  pPkt     pointer to pkt
 **
 ** \return: None
@@ -590,7 +606,8 @@ sfvmk_pktReleaseOthers(sfvmk_pktCompCtx_t *pCompCtx,
 
 const sfvmk_pktOps_t sfvmk_packetOps[SFVMK_PKT_COMPLETION_MAX] = {
   [SFVMK_PKT_COMPLETION_NETPOLL] = { sfvmk_pktReleaseNetPoll },
-  [SFVMK_PKT_COMPLETION_OTHERS] = { sfvmk_pktReleaseOthers },
+  [SFVMK_PKT_COMPLETION_PANIC]   = { sfvmk_pktReleasePanic },
+  [SFVMK_PKT_COMPLETION_OTHERS]  = { sfvmk_pktReleaseOthers },
 };
 
 /*! \brief  Routine to set bus mastering mode

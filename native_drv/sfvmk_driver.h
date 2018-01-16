@@ -149,6 +149,8 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              rxDone;
   /* Maximum number of packets to be processed in each netPoll invocation */
   vmk_uint32              rxBudget;
+  /* Used for storing pktList passed in sfvmk_panicPoll */
+  vmk_PktList             panicPktList;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_flushState_e {
@@ -325,6 +327,7 @@ typedef enum sfvmk_adapterState_e {
 
 typedef enum sfvmk_pktCompCtxType_e {
   SFVMK_PKT_COMPLETION_NETPOLL,
+  SFVMK_PKT_COMPLETION_PANIC,
   SFVMK_PKT_COMPLETION_OTHERS,
   SFVMK_PKT_COMPLETION_MAX,
 } sfvmk_pktCompCtxType_t;
@@ -429,6 +432,10 @@ static inline void sfvmk_pktRelease(sfvmk_adapter_t *pAdapter,
                                     sfvmk_pktCompCtx_t *pCompCtx,
                                     vmk_PktHandle *pPkt)
 {
+  if(VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC)) == VMK_TRUE) {
+    pCompCtx->type = SFVMK_PKT_COMPLETION_PANIC;
+  }
+
   if (pCompCtx->type < SFVMK_PKT_COMPLETION_MAX)
     sfvmk_packetOps[pCompCtx->type].pktRelease(pCompCtx, pPkt);
 }

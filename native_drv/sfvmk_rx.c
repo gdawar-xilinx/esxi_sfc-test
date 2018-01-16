@@ -360,8 +360,14 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   if (pRxDesc->flags & EFX_CKSUM_TCPUDP)
     vmk_PktSetCsumVfd(pPkt);
 
-  /* Deliver the pkt to uplink layer */
-  vmk_NetPollRxPktQueue(pAdapter->ppEvq[qIndex]->netPoll, pPkt);
+  if (VMK_UNLIKELY(pAdapter->ppEvq[qIndex]->panicPktList != NULL)) {
+    VMK_ASSERT(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE);
+    vmk_PktListAppendPkt(pAdapter->ppEvq[qIndex]->panicPktList, pPkt);
+  }
+  else {
+    /* Deliver the pkt to uplink layer */
+    vmk_NetPollRxPktQueue(pAdapter->ppEvq[qIndex]->netPoll, pPkt);
+  }
 
   pRxDesc->flags = EFX_DISCARD;
   pRxDesc->pPkt = NULL;

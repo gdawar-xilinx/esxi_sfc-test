@@ -1917,7 +1917,8 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
-    status = VMK_FAILURE;
+    /* VM kernel does not expect error code here */
+    status = VMK_OK;
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
     goto done;
   }

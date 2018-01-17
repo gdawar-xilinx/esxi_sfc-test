@@ -2074,7 +2074,8 @@ done:
 **
 ** \return: Number of uplink TXQs
 */
-static inline vmk_uint32 sfvmk_getNumUplinkTxq(sfvmk_adapter_t *pAdapter)
+static inline vmk_uint32
+sfvmk_getNumUplinkTxq(sfvmk_adapter_t *pAdapter)
 {
   return pAdapter->uplink.queueInfo.maxTxQueues;
 }
@@ -2085,7 +2086,8 @@ static inline vmk_uint32 sfvmk_getNumUplinkTxq(sfvmk_adapter_t *pAdapter)
 **
 ** \return: Number of uplink RXQs
 */
-static inline vmk_uint32 sfvmk_getNumUplinkRxq(sfvmk_adapter_t *pAdapter)
+static inline vmk_uint32
+sfvmk_getNumUplinkRxq(sfvmk_adapter_t *pAdapter)
 {
   return pAdapter->uplink.queueInfo.maxRxQueues;
 }
@@ -2096,7 +2098,8 @@ static inline vmk_uint32 sfvmk_getNumUplinkRxq(sfvmk_adapter_t *pAdapter)
 **
 ** \return: Number of shared uplink queues
 */
-static inline vmk_uint32 sfvmk_getNumUplinkQueues(sfvmk_adapter_t *pAdapter)
+static inline vmk_uint32
+sfvmk_getNumUplinkQueues(sfvmk_adapter_t *pAdapter)
 {
   return (sfvmk_getNumUplinkRxq(pAdapter) + sfvmk_getNumUplinkTxq(pAdapter));
 }
@@ -2109,7 +2112,8 @@ static inline vmk_uint32 sfvmk_getNumUplinkQueues(sfvmk_adapter_t *pAdapter)
 ** \return: VMK_TRUE    If it is free
 ** \return: VMK_FALSE   Otherwise
 */
-static inline vmk_Bool sfvmk_isQueueFree(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
+static inline vmk_Bool
+sfvmk_isQueueFree(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
 {
   return ((pUplink->queueInfo.queueData[qIndex].flags & VMK_UPLINK_QUEUE_FLAG_IN_USE) == 0);
 }
@@ -2120,7 +2124,8 @@ static inline vmk_Bool sfvmk_isQueueFree(sfvmk_uplink_t *pUplink, vmk_uint32 qIn
 **
 ** \return: index from where RXQs is starting in vmk_UplinkSharedQueueData array
 */
-static inline vmk_uint32 sfvmk_getUplinkRxqStartIndex(sfvmk_uplink_t *pUplink)
+static inline vmk_uint32
+sfvmk_getUplinkRxqStartIndex(sfvmk_uplink_t *pUplink)
 {
   return SFVMK_UPLINK_RXQ_START_INDEX;
 }
@@ -2128,11 +2133,13 @@ static inline vmk_uint32 sfvmk_getUplinkRxqStartIndex(sfvmk_uplink_t *pUplink)
 /*! \brief Check if given uplink RXQ is a default RXQ
 **
 ** \param[in]  pUplink  pointer to uplink structure
+** \param[in]  qIndex   RXQ index
 **
 ** \return: VMK_TRUE    If it is a default RXQ
 ** \return: VMK_FALSE   otherwise
 */
-static inline vmk_Bool sfvmk_isDefaultUplinkRxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
+static inline vmk_Bool
+sfvmk_isDefaultUplinkRxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
 {
   return (qIndex == SFVMK_DEFAULT_UPLINK_RXQ);
 }
@@ -2144,7 +2151,8 @@ static inline vmk_Bool sfvmk_isDefaultUplinkRxq(sfvmk_uplink_t *pUplink, vmk_uin
 ** \return: VMK_TRUE    If it is a default TXQ
 ** \return: VMK_FALSE   otherwise
 */
-static inline vmk_Bool sfvmk_isDefaultUplinkTxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
+static inline vmk_Bool
+sfvmk_isDefaultUplinkTxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
 {
   return (qIndex == pUplink->queueInfo.maxRxQueues);
 }

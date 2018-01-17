@@ -2157,6 +2157,55 @@ sfvmk_isDefaultUplinkTxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
   return (qIndex == pUplink->queueInfo.maxRxQueues);
 }
 
+/*! \brief Check if given uplinkQ is in start state.
+**
+** \param[in]  pUplink  pointer to uplink structure
+** \param[in]  qIndex   Q index
+**
+** \return: VMK_TRUE    If Q is in start state.
+** \return: VMK_FALSE   otherwise
+*/
+static inline vmk_Bool
+sfvmk_isUplinkQStarted(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
+{
+  return (pUplink->queueInfo.queueData[qIndex].state ==
+          VMK_UPLINK_QUEUE_STATE_STARTED);
+}
+
+/*! \brief Check if given uplink RXQ is a valid Q.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  qIndex   RXQ index
+**
+** \return: VMK_TRUE    If RXQ is a valid Q.
+** \return: VMK_FALSE   otherwise
+*/
+static inline vmk_Bool
+sfvmk_isValidRXQ(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  vmk_uint32 rxqStartIndex = sfvmk_getUplinkRxqStartIndex(&pAdapter->uplink);
+
+  return ((qIndex < rxqStartIndex + pAdapter->uplink.queueInfo.maxRxQueues) &&
+          (qIndex >= rxqStartIndex));
+}
+
+/*! \brief Check if given uplink TXQ is a valid Q.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  qIndex   TXQ index
+**
+** \return: VMK_TRUE    If TXQ is a valid Q.
+** \return: VMK_FALSE   otherwise
+*/
+static inline vmk_Bool
+sfvmk_isValidTXQ(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  vmk_uint32 txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+
+  return ((qIndex >= txqStartIndex) &&
+          (qIndex < txqStartIndex + sfvmk_getNumUplinkTxq(pAdapter)));
+}
+
 /*! \brief  The poll thread calls this callback function for polling packets.
 **
 ** \param[in]  cookie    pointer to sfvmk_evq_t
@@ -2397,7 +2446,8 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
       pQueueData->maxFilters = SFVMK_MAX_FILTER;
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
     } else {
-      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR;
+      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR |
+                                      VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
       pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }
 
@@ -2582,9 +2632,10 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
   pQueueInfo->supportedQueueTypes = VMK_UPLINK_QUEUE_TYPE_TX |
                                     VMK_UPLINK_QUEUE_TYPE_RX;
 
-  /* Populate shared filter class with MAC filter */
+  /* Populate shared filter class with MAC and VLANMAC filter */
   pQueueInfo->supportedRxQueueFilterClasses =
-                              VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY;
+                              VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY |
+                              VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC;
 
   /* Update max TX and RX queue*/
   pQueueInfo->maxTxQueues =  pAdapter->numTxqsAllocated;
@@ -2817,20 +2868,52 @@ done:
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qType    Queue Type (Rx/Tx).
 ** \param[out] pQID     pointer to newly created uplink queue.
-** \param[out] pNetpoll Potential paired tx queue hardware index.
+** \param[out] pNetpoll pointer to net poll on top of the allocated queue if any.
 **
-** \return: VMK_OK <success> error code <failure>
-**
+** \return: VMK_OK on success or error code otherwise.
 */
 static VMK_ReturnStatus
 sfvmk_allocQueue(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
-                 vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetpoll)
+                 vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetPoll)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if ((pQID == NULL) || (pAdapter == NULL)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid param(s)");
+    goto done;
+  }
+
+  switch(qType) {
+    case VMK_UPLINK_QUEUE_TYPE_RX:
+      if (pNetPoll == NULL) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Null net poll ptr");
+        goto done;
+      }
+      status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkRxq failed status: %s",
+                            vmk_StatusToString(status));
+      }
+      break;
+    case VMK_UPLINK_QUEUE_TYPE_TX:
+      status = sfvmk_createUplinkTxq(pAdapter, pQID);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkTxq failed status: %s",
+                            vmk_StatusToString(status));
+      }
+      break;
+    default:
+     status = VMK_BAD_PARAM;
+     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue type");
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "Allocated uplinkQ(%u)", vmk_UplinkQueueIDVal(*pQID));
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -2843,21 +2926,56 @@ sfvmk_allocQueue(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
 ** \param[in]  numAttr  Number of attributes.
 ** \param[in]  pAttr    Queue attributes.
 ** \param[out] pQID     pointer to newly created uplink queue.
-** \param[out] pNetpoll Potential paired tx queue hardware index.
+** \param[out] pNetpoll pointer to net poll on top of the allocated queue if any.
 **
-** \return: VMK_OK <success> error code <failure>
-**
+** \return: VMK_OK on success or error code otherwise.
 */
 static VMK_ReturnStatus
 sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
                          vmk_uint16 numAttr, vmk_UplinkQueueAttr *pAttr,
-                         vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetpoll)
+                         vmk_UplinkQueueID *pQID, vmk_NetPoll *pNetPoll)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+
+  if ((pQID == NULL) || (pAdapter == NULL)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid param(s)");
+    goto done;
+  }
+
+  if (pAttr) {
+    switch (pAttr->type) {
+      case VMK_UPLINK_QUEUE_ATTR_FEAT:
+        /* TODO: Dynamic RSS handling */
+        if (pNetPoll == NULL) {
+          SFVMK_ADAPTER_ERROR(pAdapter, "Null net poll ptr");
+          goto done;
+        }
+        if (!pAttr->args.features) {
+          status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll);
+          if (status != VMK_OK) {
+            SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkRxq failed status: %s",
+                                vmk_StatusToString(status));
+          }
+        }
+        break;
+      default:
+        status = VMK_BAD_PARAM;
+        SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue attribute");
+    }
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Allocated uplinkQ(%u) with attr", vmk_UplinkQueueIDVal(*pQID));
+  } else {
+    status = sfvmk_allocQueue(cookie, qType, pQID, pNetPoll);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_allocQueue failed status: %s",
+                          vmk_StatusToString(status));
+    }
+  }
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -2868,52 +2986,313 @@ sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qid      ID of already created queue.
 **
-** \return: VMK_OK <success> error code <failure>
-**
+** \return: VMK_OK on success or error code otherwise
 */
 static VMK_ReturnStatus
 sfvmk_freeQueue(vmk_AddrCookie cookie,
                 vmk_UplinkQueueID qid)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_UplinkQueueType qType = vmk_UplinkQueueIDType(qid);
+  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
+  vmk_Bool validQ = VMK_FALSE;
+  sfvmk_uplink_t *pUplink;
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    goto done;
+  }
+
+  pUplink = &pAdapter->uplink;
+
+  if ( qType == VMK_UPLINK_QUEUE_TYPE_RX)
+    validQ = sfvmk_isValidRXQ(pAdapter, qIndex);
+  else if (qType == VMK_UPLINK_QUEUE_TYPE_TX)
+    validQ = sfvmk_isValidTXQ(pAdapter, qIndex);
+
+  if (validQ) {
+    sfvmk_sharedAreaBeginWrite(pUplink);
+    pUplink->queueInfo.queueData[qIndex].flags &= ~(VMK_UPLINK_QUEUE_FLAG_IN_USE |
+                                                    VMK_UPLINK_QUEUE_FLAG_DEFAULT);
+    sfvmk_sharedAreaEndWrite(pUplink);
+    status = VMK_OK;
+  } else {
+    status = VMK_BAD_PARAM;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue(%u)", qIndex);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
   return status;
 }
 
-/*! \brief  callback to quiesce queue
+/*! \brief  quiesce uplink RXQ
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
+** \param[in]  qIndex     RXQ index.
+**
+** \return: VMK_OK on success or error code otherwise.
+*/
+static VMK_ReturnStatus
+sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_uplink_t *pUplink;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pUplink = &pAdapter->uplink;
+
+  if (!sfvmk_isValidRXQ(pAdapter, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid RXQ(%u)", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (!sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ(%u) is not yet started", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (sfvmk_isQueueFree(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ(%u) is not in use", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  sfvmk_sharedAreaBeginWrite(pUplink);
+  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;
+  pUplink->queueInfo.activeRxQueues--;
+  sfvmk_sharedAreaEndWrite(pUplink);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  return status;
+}
+
+/*! \brief  quiesce uplink TXQ
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
+** \param[in]  qid        ID of already created queue.
+**
+** \return: VMK_OK on success or error code otherwise.
+*/
+static VMK_ReturnStatus
+sfvmk_quiesceUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
+  sfvmk_uplink_t *pUplink;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pUplink = &pAdapter->uplink;
+
+  if (!sfvmk_isValidTXQ(pAdapter, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ(%u)", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (!sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not yet started", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (sfvmk_isQueueFree(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not in use", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  sfvmk_sharedAreaBeginWrite(pUplink);
+  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;
+  pUplink->queueInfo.activeTxQueues--;
+  sfvmk_sharedAreaEndWrite(pUplink);
+
+  if (!sfvmk_isDefaultUplinkTxq(pUplink, qIndex))
+    vmk_UplinkQueueStop(pUplink->handle, qid);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  return status;
+}
+
+/*! \brief  callback to quiesce uplink queue
 **
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qid      ID of already created queue.
 **
 ** \return: VMK_OK <success> error code <failure>
-**
 */
 static VMK_ReturnStatus
 sfvmk_quiesceQueue(vmk_AddrCookie cookie,
                    vmk_UplinkQueueID qid)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_UplinkQueueType qType = vmk_UplinkQueueIDType(qid);
+  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    goto done;
+  }
+
+  switch (qType) {
+    case VMK_UPLINK_QUEUE_TYPE_RX:
+      status = sfvmk_quiesceUplinkRxq(pAdapter, qIndex);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceUplinkRxq(%u) failed status: %s",
+                            qIndex, vmk_StatusToString(status));
+      }
+      break;
+    case VMK_UPLINK_QUEUE_TYPE_TX:
+      status = sfvmk_quiesceUplinkTxq(pAdapter, qid);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceUplinkTxq(%u) failed status: %s",
+                            qIndex, vmk_StatusToString(status));
+      }
+      break;
+    default:
+      status = VMK_BAD_PARAM;
+      SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue type");
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
   return status;
 }
 
-/*! \brief  callback to start queue
+/*! \brief  start uplink RXQ
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
+** \param[in]  qIndex     RXQ index.
+**
+** \return: VMK_OK on success or error code otherwise.
+*/
+static VMK_ReturnStatus
+sfvmk_startUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_uplink_t *pUplink;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pUplink = &pAdapter->uplink;
+
+  if (!sfvmk_isValidRXQ(pAdapter, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid RXQ(%u)", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ(%u) already started", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (sfvmk_isQueueFree(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ(%u) is not in use", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  sfvmk_sharedAreaBeginWrite(pUplink);
+  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STARTED;
+  pUplink->queueInfo.activeRxQueues++;
+  sfvmk_sharedAreaEndWrite(pUplink);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  return status;
+}
+
+/*! \brief  start uplink TXQ
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
+** \param[in]  qid        ID of already created queue.
+**
+** \return: VMK_OK on success or error code otherwise.
+*/
+static VMK_ReturnStatus
+sfvmk_startUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
+  sfvmk_uplink_t *pUplink;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pUplink = &pAdapter->uplink;
+
+  if (!sfvmk_isValidTXQ(pAdapter, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ(%u)", qIndex);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) already started", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (sfvmk_isQueueFree(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not in use", qIndex);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  sfvmk_sharedAreaBeginWrite(pUplink);
+  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STARTED;
+  pUplink->queueInfo.activeTxQueues++;
+  sfvmk_sharedAreaEndWrite(pUplink);
+
+  if (!sfvmk_isDefaultUplinkTxq(pUplink, qIndex))
+    vmk_UplinkQueueStart(pUplink->handle, qid);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  return status;
+}
+
+/*! \brief  callback to start uplink queue
 **
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qid      ID of already created queue.
 **
-** \return: VMK_OK <success> error code <failure>
-**
+** \return: VMK_OK on success or error code otherwise.
 */
 static VMK_ReturnStatus
 sfvmk_startQueue(vmk_AddrCookie cookie,
@@ -2921,10 +3300,38 @@ sfvmk_startQueue(vmk_AddrCookie cookie,
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  vmk_UplinkQueueType qType = vmk_UplinkQueueIDType(qid);
+  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
+    goto done;
+  }
+
+  switch (qType) {
+    case VMK_UPLINK_QUEUE_TYPE_RX:
+      status = sfvmk_startUplinkRxq(pAdapter, qIndex);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_startUplinkRxq(%u) failed status: %s",
+                            qIndex, vmk_StatusToString(status));
+      }
+      break;
+    case VMK_UPLINK_QUEUE_TYPE_TX:
+      status = sfvmk_startUplinkTxq(pAdapter, qid);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_startUplinkTxq(%u) failed status: %s",
+                            qIndex, vmk_StatusToString(status));
+      }
+      break;
+    default:
+      status = VMK_BAD_PARAM;
+      SFVMK_ADAPTER_ERROR(pAdapter, "Invalid queue type");
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
   return status;
 }

@@ -26,13 +26,20 @@
 
 #include "sfvmk_driver.h"
 
+/* Max number of NetQ supported */
+#define SFVMK_MAX_NETQ_COUNT 8
+
 /* Initialize module params with default values */
 sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
+  .netQCount = SFVMK_MAX_NETQ_COUNT,
 };
 
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
+VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
+                   "NetQ Count(includes defQ) Max limited by PCPU and HWQ support"
+                   "(0 --> default netQCount)");
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -415,11 +422,14 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
    * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
    * MCDI events
    * Error events from firmware/hardware
-   * TODO: calculation of EVQs when NETQ and RSS features are added */
+   * TODO: calculation of EVQs when RSS feature is added */
+
+  if (modParams.netQCount == 0)
+    modParams.netQCount = SFVMK_MAX_NETQ_COUNT;
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
-  limits.edl_max_evq_count = MIN(limits.edl_max_rxq_count,
-                                 limits.edl_max_txq_count);
+  limits.edl_max_evq_count = MIN(modParams.netQCount, MIN(limits.edl_max_rxq_count,
+                                 limits.edl_max_txq_count));
   pAdapter->numEvqsDesired = limits.edl_max_evq_count;
 
   limits.edl_min_rxq_count = limits.edl_min_evq_count;

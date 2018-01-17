@@ -55,6 +55,7 @@ extern sfvmk_modInfo_t sfvmk_modInfo;
 /* Structure for module params */
 typedef struct sfvmk_modParams_s {
   vmk_uint32 debugMask;
+  vmk_uint32 netQCount;
 } sfvmk_modParams_t;
 
 extern struct sfvmk_modParams_s modParams;

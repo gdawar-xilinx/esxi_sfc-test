@@ -2076,7 +2076,7 @@ done:
 */
 static inline vmk_uint32 sfvmk_getNumUplinkTxq(sfvmk_adapter_t *pAdapter)
 {
-  return pAdapter->numTxqsAllocated;
+  return pAdapter->uplink.queueInfo.maxTxQueues;
 }
 
 /*! \brief Get number of uplink RXQs
@@ -2087,7 +2087,7 @@ static inline vmk_uint32 sfvmk_getNumUplinkTxq(sfvmk_adapter_t *pAdapter)
 */
 static inline vmk_uint32 sfvmk_getNumUplinkRxq(sfvmk_adapter_t *pAdapter)
 {
-  return pAdapter->numRxqsAllocated;
+  return pAdapter->uplink.queueInfo.maxRxQueues;
 }
 
 /*! \brief Get number of shared uplink queues
@@ -2579,8 +2579,8 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY;
 
   /* Update max TX and RX queue*/
-  pQueueInfo->maxTxQueues =  sfvmk_getNumUplinkTxq(pAdapter);
-  pQueueInfo->maxRxQueues =  sfvmk_getNumUplinkRxq(pAdapter);
+  pQueueInfo->maxTxQueues =  pAdapter->numTxqsAllocated;
+  pQueueInfo->maxRxQueues =  pAdapter->numRxqsAllocated;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "maxTxQs: %d maxRxQs: %d ", pQueueInfo->maxTxQueues,

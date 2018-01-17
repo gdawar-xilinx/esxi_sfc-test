@@ -38,8 +38,8 @@ sfvmk_modParams_t modParams = {
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
 VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
-                   "NetQ Count(includes defQ) Max limited by PCPU and HWQ support"
-                   "(0 --> default netQCount)");
+                   "NetQ count(includes defQ) Max limited by PCPU and HWQ support."
+                   "(0 sets to default value(8))");
 
 #define SFVMK_MIN_EVQ_COUNT 1
 

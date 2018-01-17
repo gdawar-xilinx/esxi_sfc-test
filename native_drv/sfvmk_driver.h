@@ -55,8 +55,11 @@
 #define SFVMK_MAX_FILTER              2048
 #define SFVMK_MAX_ADAPTER             16
 
-/* 12 EVQs, 8 for NetQ and 4 for RSS */
-#define SFVMK_MAX_EVQ                 12
+/* Max number of NetQ supported */
+#define SFVMK_MAX_NETQ_COUNT          16
+
+/* 20 EVQs, 16 for NetQ and 4 for RSS */
+#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 4
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
 #define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ

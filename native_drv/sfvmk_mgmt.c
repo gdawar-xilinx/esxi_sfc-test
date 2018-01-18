@@ -290,3 +290,85 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to get and set VPD information
+**
+** \param[in]      pCookies    pointer to cookie
+** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface   pointer to mgmt param
+** \param[in/out]  pVpdInfo    pointer to sfvmk_vpdInfo_s structure
+**
+** \return VMK_OK
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND:      In case of dev not found
+**     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
+**                         input param
+**     VMK_FAILURE:        Any other error
+**
+*/
+VMK_ReturnStatus
+sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
+                          vmk_MgmtEnvelope *pEnvelope,
+                          sfvmk_mgmtDevInfo_t *pDevIface,
+                          sfvmk_vpdInfo_t *pVpdInfo)
+{
+  sfvmk_adapter_t *pAdapter = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pVpdInfo) {
+    SFVMK_ERROR("pVpdInfo: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  switch (pVpdInfo->vpdOp) {
+    case SFVMK_MGMT_DEV_OPS_GET:
+      if ((status = sfvmk_vpdGetInfo(pAdapter, &pVpdInfo->vpdPayload[0],
+                                     SFVMK_VPD_MAX_PAYLOAD, pVpdInfo->vpdTag,
+                                     pVpdInfo->vpdKeyword, &pVpdInfo->vpdLen)) != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Get VPD data failed with error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+
+    case SFVMK_MGMT_DEV_OPS_SET:
+      if ((status = sfvmk_vpdSetInfo(pAdapter, &pVpdInfo->vpdPayload[0],
+                                     pVpdInfo->vpdTag, pVpdInfo->vpdKeyword,
+                                     pVpdInfo->vpdLen)) != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Set VPD data failed with error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

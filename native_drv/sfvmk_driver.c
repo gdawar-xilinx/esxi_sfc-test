@@ -776,6 +776,14 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_nic_probe;
   }
 
+  /* Initialize VPD. */
+  status = efx_vpd_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_vpd_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_vpd_init;
+  }
+
   /* Reset NIC. */
   status = efx_nic_reset(pAdapter->pNic);
   if (status != VMK_OK) {
@@ -911,6 +919,9 @@ failed_get_vi_pool:
 failed_nic_init:
 failed_set_resource_limit:
 failed_nic_reset:
+  efx_vpd_fini(pAdapter->pNic);
+
+failed_vpd_init:
   efx_nic_unprobe(pAdapter->pNic);
 
 failed_nic_probe:
@@ -1104,6 +1115,7 @@ sfvmk_detachDevice(vmk_Device dev)
 
   /* Tear down common code subsystems. */
   if (pAdapter->pNic != NULL) {
+    efx_vpd_fini(pAdapter->pNic);
     efx_nic_reset(pAdapter->pNic);
     efx_nic_unprobe(pAdapter->pNic);
   }

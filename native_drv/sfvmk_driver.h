@@ -555,6 +555,14 @@ VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal);
 
+/* Functions for VPD read/write request handling */
+VMK_ReturnStatus sfvmk_vpdGetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,
+                                  vmk_uint32 maxPayloadSize, vmk_uint8 vpdTag,
+                                  vmk_uint16 vpdKeyword, vmk_uint8 *pVpdLen);
+VMK_ReturnStatus sfvmk_vpdSetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,
+                                  vmk_uint8 vpdTag, vmk_uint16 vpdKeyword,
+                                  vmk_uint8 vpdLen);
+
 /* Locking mechanism to serialize multiple writers's access to protected sharedData area */
 static inline void sfvmk_sharedAreaBeginWrite(sfvmk_uplink_t *pUplink)
 {

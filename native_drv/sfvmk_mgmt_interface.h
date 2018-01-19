@@ -42,11 +42,12 @@
  ** Note: These identifiers cannot be changed or renumbered,
  ** so new callback IDs must go at the end (before SFVMK_CB_MAX).
  **
- ** SFVMK_CB_MCDI_REQUEST:     For invoking MCDI callback
- ** SFVMK_CB_MC_LOGGING:       For controlling MC Logging dynamically
- ** SFVMK_CB_PCI_INFO_GET:     Get PCI BDF and device information
- ** SFVMK_CB_VPD_REQUEST:      Get or Set VPD information
- ** SFVMK_CB_LINK_STATUS_GET:  Get the link state
+ ** SFVMK_CB_MCDI_REQUEST:       For invoking MCDI callback
+ ** SFVMK_CB_MC_LOGGING:         For controlling MC Logging dynamically
+ ** SFVMK_CB_PCI_INFO_GET:       Get PCI BDF and device information
+ ** SFVMK_CB_VPD_REQUEST:        Get or Set VPD information
+ ** SFVMK_CB_LINK_STATUS_GET:    Get the link state
+ ** SFVMK_CB_LINK_SPEED_REQUEST: Get/Set the link speed and autoneg
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -55,6 +56,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_PCI_INFO_GET,
   SFVMK_CB_VPD_REQUEST,
   SFVMK_CB_LINK_STATUS_GET,
+  SFVMK_CB_LINK_SPEED_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -204,6 +206,38 @@ typedef struct sfvmk_vpdInfo_s {
   vmk_uint8           vpdPayload[SFVMK_VPD_MAX_PAYLOAD];
 } __attribute__((__packed__)) sfvmk_vpdInfo_t;
 
+/* Define various link speed numbers supported by SFVMK driver */
+#define SFVMK_LINK_SPEED_1000_MBPS  1000
+#define SFVMK_LINK_SPEED_10000_MBPS 10000
+#define SFVMK_LINK_SPEED_25000_MBPS 25000
+#define SFVMK_LINK_SPEED_40000_MBPS 40000
+#define SFVMK_LINK_SPEED_50000_MBPS 50000
+#define SFVMK_LINK_SPEED_100000_MBPS 100000
+
+/*! \brief struct sfvmk_linkSpeed_s for get or
+ **        set link speed and autoneg
+ **
+ **  type[in]        Type of operation (Get/Set)
+ **
+ **  speed[in/out]   Current link speed
+ **
+ **  autoNeg[in/out] Get/Set autoNeg
+ **
+ **  Please Note: in case of set
+ **    1. if autoneg is true then speed is ignored.
+ **
+ **    2. if autoneg is false, then speed MUST be filled.
+ **
+ **    In case of get, if autoneg is true, speed value
+ **    indicates the link speed at that instant.
+ **
+ */
+typedef struct sfvmk_linkSpeed_s {
+  sfvmk_mgmtDevOps_t   type;
+  vmk_uint32           speed;
+  vmk_Bool             autoNeg;
+} __attribute__((__packed__)) sfvmk_linkSpeed_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -255,6 +289,11 @@ VMK_ReturnStatus sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
                                          vmk_MgmtEnvelope *pEnvelope,
                                          sfvmk_mgmtDevInfo_t *pDevIface,
                                          vmk_Bool *pLinkState);
+
+VMK_ReturnStatus sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
+                                            vmk_MgmtEnvelope *pEnvelope,
+                                            sfvmk_mgmtDevInfo_t *pDevIface,
+                                            sfvmk_linkSpeed_t *pLinkSpeed);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -266,6 +305,7 @@ VMK_ReturnStatus sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtPCIInfoCallback NULL
 #define sfvmk_mgmtVPDInfoCallback NULL
 #define sfvmk_mgmtLinkStatusGet NULL
+#define sfvmk_mgmtLinkSpeedRequest NULL
 #endif
 
 #endif

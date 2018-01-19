@@ -163,6 +163,46 @@ end:
   return status;
 }
 
+/*! \brief  Get PHY link speed and AutoNeg status
+**
+** \param[in]   pAdapter   pointer to sfvmk_adapter_t
+** \param[out]  pSpeed     link speed
+** \param[out]  pAutoNeg   AutoNeg On/Off
+**
+** \return: void
+**
+*/
+void
+sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter,
+                      vmk_LinkSpeed *pSpeed, vmk_Bool *pAutoNeg)
+{
+  efx_nic_t *pNic;
+  sfvmk_port_t *pPort;
+  vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_uint32 advertisedCapabilities;
+  vmk_uint32 sharedReadLockVer;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pSpeed);
+  VMK_ASSERT_NOT_NULL(pAutoNeg);
+
+  pNic = pAdapter->pNic;
+  pPort = &pAdapter->port;
+
+  pSharedData =  &pAdapter->uplink.sharedData;
+
+  sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pSharedData->lock);
+  *pSpeed = pSharedData->link.speed;
+  vmk_VersionedAtomicEndTryRead(&pSharedData->lock, sharedReadLockVer);
+
+  advertisedCapabilities = pPort->advertisedCapabilities;
+
+  *pAutoNeg = VMK_FALSE;
+
+  if (advertisedCapabilities & (1 << EFX_PHY_CAP_AN))
+    *pAutoNeg = VMK_TRUE;
+}
+
 /*! \brief  Helper world queue function for link update
 **
 ** \param[in]  vmk_AddrCookie  Pointer to sfvmk_adapter_t

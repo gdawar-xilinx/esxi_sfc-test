@@ -432,3 +432,85 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback for Get/Set Link speed and autoneg
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface    pointer to device interface structure
+ ** \param[in/out]  pLinkSpeed   pointer to speed and autoneg
+ **                              param structure
+ **
+ ** \return VMK_OK
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **     VMK_FAILURE:     Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
+                           vmk_MgmtEnvelope *pEnvelope,
+                           sfvmk_mgmtDevInfo_t *pDevIface,
+                           sfvmk_linkSpeed_t *pLinkSpeed)
+{
+  sfvmk_adapter_t      *pAdapter = NULL;
+  vmk_uint32            speed;
+  VMK_ReturnStatus      status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pLinkSpeed) {
+    SFVMK_ERROR("pLinkSpeed: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  switch (pLinkSpeed->type) {
+    case SFVMK_MGMT_DEV_OPS_SET:
+      speed = pLinkSpeed->autoNeg ? VMK_LINK_SPEED_AUTO : pLinkSpeed->speed;
+
+      /* Set PHY speed */
+      status = sfvmk_phyLinkSpeedSet(pAdapter, (vmk_LinkSpeed)speed);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Link speed change failed with error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+
+    case SFVMK_MGMT_DEV_OPS_GET:
+      sfvmk_phyLinkSpeedGet(pAdapter, (vmk_LinkSpeed *)&pLinkSpeed->speed,
+                            &pLinkSpeed->autoNeg);
+      break;
+
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

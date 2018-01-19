@@ -479,6 +479,10 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
    * called inside adapter lock */
   sfvmk_macLinkUpdate(pAdapter);
 
+  /* Update the current PHY settings */
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &pPort->advertisedCapabilities);
+
   goto done;
 
 failed_port_poll:
@@ -527,6 +531,8 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   }
 
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
+
+  pPort->advertisedCapabilities = 0;
 
   (void)efx_mac_stats_periodic(pNic, &pPort->macStatsDmaBuf, 0, B_FALSE);
 

@@ -516,6 +516,7 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed);
 VMK_ReturnStatus sfvmk_macStatsUpdate(sfvmk_adapter_t *pAdapter);
+void sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

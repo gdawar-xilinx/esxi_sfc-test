@@ -354,6 +354,29 @@ done:
   return status;
 }
 
+/*! \brief  Get current link state
+**
+** \param[in]   pAdapter    pointer to sfvmk_adapter_t
+** \param[out]  pLinkState  pointer to link state
+**
+** \return: void
+**
+*/
+void
+sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState)
+{
+  vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_uint32 sharedReadLockVer;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pSharedData =  &pAdapter->uplink.sharedData;
+
+  sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pSharedData->lock);
+  *pLinkState = pSharedData->link.state;
+  vmk_VersionedAtomicEndTryRead(&pSharedData->lock, sharedReadLockVer);
+}
+
 /*! \brief  Initialize port, filters, flow control and link status.
 **
 ** \param[in]  pAdapter     Pointer to sfvmk_adapter_t

@@ -46,6 +46,7 @@
  ** SFVMK_CB_MC_LOGGING:       For controlling MC Logging dynamically
  ** SFVMK_CB_PCI_INFO_GET:     Get PCI BDF and device information
  ** SFVMK_CB_VPD_REQUEST:      Get or Set VPD information
+ ** SFVMK_CB_LINK_STATUS_GET:  Get the link state
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -53,6 +54,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MC_LOGGING,
   SFVMK_CB_PCI_INFO_GET,
   SFVMK_CB_VPD_REQUEST,
+  SFVMK_CB_LINK_STATUS_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -248,6 +250,11 @@ VMK_ReturnStatus sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
                                            vmk_MgmtEnvelope *pEnvelope,
                                            sfvmk_mgmtDevInfo_t *pDevIface,
                                            sfvmk_vpdInfo_t *pVpdInfo);
+
+VMK_ReturnStatus sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
+                                         vmk_MgmtEnvelope *pEnvelope,
+                                         sfvmk_mgmtDevInfo_t *pDevIface,
+                                         vmk_Bool *pLinkState);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -258,6 +265,7 @@ VMK_ReturnStatus sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtMCLoggingCallback NULL
 #define sfvmk_mgmtPCIInfoCallback NULL
 #define sfvmk_mgmtVPDInfoCallback NULL
+#define sfvmk_mgmtLinkStatusGet NULL
 #endif
 
 #endif

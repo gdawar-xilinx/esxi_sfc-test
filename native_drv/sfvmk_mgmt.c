@@ -372,3 +372,63 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback for Get Link state
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface   pointer to mgmt param
+ ** \param[in/out]  pLinkOps   pointer to link ops structure
+ **
+ ** \return VMK_OK
+ **     Below error values are filled in the status field of
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        vmk_Bool *pLinkState)
+{
+  sfvmk_adapter_t *pAdapter = NULL;
+  vmk_LinkState   linkState = VMK_LINK_STATE_DOWN;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pLinkState) {
+    SFVMK_ERROR("pLinkState: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  *pLinkState =  VMK_FALSE;
+
+  sfvmk_linkStateGet(pAdapter, &linkState);
+  *pLinkState = (linkState == VMK_LINK_STATE_UP) ?
+                 VMK_TRUE : VMK_FALSE;
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

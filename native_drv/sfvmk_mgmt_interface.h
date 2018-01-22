@@ -48,6 +48,7 @@
  ** SFVMK_CB_VPD_REQUEST:        Get or Set VPD information
  ** SFVMK_CB_LINK_STATUS_GET:    Get the link state
  ** SFVMK_CB_LINK_SPEED_REQUEST: Get/Set the link speed and autoneg
+ ** SFVMK_CB_VERINFO_GET:        Get various version info
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -57,6 +58,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_VPD_REQUEST,
   SFVMK_CB_LINK_STATUS_GET,
   SFVMK_CB_LINK_SPEED_REQUEST,
+  SFVMK_CB_VERINFO_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -238,6 +240,26 @@ typedef struct sfvmk_linkSpeed_s {
   vmk_Bool             autoNeg;
 } __attribute__((__packed__)) sfvmk_linkSpeed_t;
 
+/* Types of different versions */
+#define SFVMK_GET_DRV_VERSION  0x00000001
+#define SFVMK_GET_FW_VERSION   0x00000002
+#define SFVMK_GET_ROM_VERSION  0x00000004
+#define SFVMK_GET_UEFI_VERSION 0x00000008
+
+/*! \brief struct sfvmk_versionInfo_s Retrieve various
+ **        Driver/FW version info
+ **
+ ** type[in]     Type of SW/Fw Entity whose version
+ **              information needs to be returned.
+ **
+ ** version[out] Version string
+ **
+ */
+typedef struct sfvmk_versionInfo_s {
+  vmk_uint32 type;
+  vmk_Name   version;
+} __attribute__((__packed__)) sfvmk_versionInfo_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -294,6 +316,11 @@ VMK_ReturnStatus sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
                                             vmk_MgmtEnvelope *pEnvelope,
                                             sfvmk_mgmtDevInfo_t *pDevIface,
                                             sfvmk_linkSpeed_t *pLinkSpeed);
+
+VMK_ReturnStatus sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
+                                           vmk_MgmtEnvelope *pEnvelope,
+                                           sfvmk_mgmtDevInfo_t *pDevIface,
+                                           sfvmk_versionInfo_t *pVerInfo);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -306,6 +333,7 @@ VMK_ReturnStatus sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtVPDInfoCallback NULL
 #define sfvmk_mgmtLinkStatusGet NULL
 #define sfvmk_mgmtLinkSpeedRequest NULL
+#define sfvmk_mgmtVerInfoCallback NULL
 #endif
 
 #endif

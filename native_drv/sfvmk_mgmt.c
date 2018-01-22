@@ -514,3 +514,115 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to get Version info
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface   pointer to device interface structure
+** \param[in/out]  pVerInfo    pointer to version info struct
+**
+** \return: VMK_OK  <success>
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_BAD_PARAM:   Unknown version option or
+**                      Null Pointer passed in parameter
+**     VMK_NOT_FOUND:   In case of dev not found
+**     VMK_NOT_READY:   If get NVRAM version failed
+**     VMK_FAILURE:     If get MC Fw version failed
+**                      or any other error
+**
+*/
+VMK_ReturnStatus
+sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
+                          vmk_MgmtEnvelope *pEnvelope,
+                          sfvmk_mgmtDevInfo_t *pDevIface,
+                          sfvmk_versionInfo_t *pVerInfo)
+{
+  sfvmk_adapter_t      *pAdapter = NULL;
+  efx_nic_t            *pNic = NULL;
+  vmk_UplinkDriverInfo *pDrvInfo = NULL;
+  efx_nvram_type_t     nvramType;
+  vmk_ByteCount        bytesCopied;
+  vmk_uint32           subtype;
+  vmk_uint16           nvramVer[4];
+  VMK_ReturnStatus     status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pVerInfo) {
+    SFVMK_ERROR("pLinkSpeed: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  pDrvInfo = &pAdapter->uplink.sharedData.driverInfo;
+
+  switch (pVerInfo->type) {
+    case SFVMK_GET_DRV_VERSION:
+      SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
+      vmk_Memcpy(&pVerInfo->version, &pDrvInfo->version, sizeof(vmk_Name));
+      SFVMK_SHARED_AREA_END_READ(pAdapter);
+      break;
+
+    case SFVMK_GET_FW_VERSION:
+      SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
+      vmk_Memcpy(&pVerInfo->version, &pDrvInfo->firmwareVersion, sizeof(vmk_Name));
+      SFVMK_SHARED_AREA_END_READ(pAdapter);
+      break;
+
+    case SFVMK_GET_ROM_VERSION:
+    case SFVMK_GET_UEFI_VERSION:
+      nvramType = (pVerInfo->type == SFVMK_GET_UEFI_VERSION) ?
+                   EFX_NVRAM_UEFIROM : EFX_NVRAM_BOOTROM;
+
+      pNic = pAdapter->pNic;
+
+      if ((status = efx_nvram_get_version(pNic, nvramType, &subtype,
+                                          &nvramVer[0])) != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Get NVRAM Firmware version failed with error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = VMK_NOT_READY;
+        goto end;
+      }
+
+      status = vmk_StringFormat(pVerInfo->version.string, sizeof(vmk_Name),
+                                &bytesCopied, "%u.%u.%u.%u",
+                                nvramVer[0], nvramVer[1],
+                                nvramVer[2], nvramVer[3]);
+
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "String format failed with error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = VMK_FAILURE;
+        goto end;
+      }
+
+      break;
+
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

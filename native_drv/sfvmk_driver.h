@@ -579,6 +579,19 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
   vmk_SpinlockUnlock(pUplink->shareDataLock);
 }
 
+/* Locking mechanism to serialize multiple readers to access sharedData area */
+#define SFVMK_SHARED_AREA_BEGIN_READ(adapter)                           \
+  do {                                                                  \
+    vmk_uint32 sharedReadLockVer;                                       \
+    do {                                                                \
+      sharedReadLockVer = vmk_VersionedAtomicBeginTryRead               \
+                              (&adapter->uplink.sharedData.lock);
+
+#define SFVMK_SHARED_AREA_END_READ(adapter)                             \
+    } while (!vmk_VersionedAtomicEndTryRead                             \
+                 (&adapter->uplink.sharedData.lock, sharedReadLockVer));\
+  } while (VMK_FALSE)
+
 /*! \brief Get the start index of uplink TXQs in vmk_UplinkSharedQueueData array
 **
 ** \param[in]  pUplink  pointer to uplink structure

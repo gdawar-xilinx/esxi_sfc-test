@@ -626,3 +626,98 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to Get/Set interrupt
+ **          moderation settings
+ **
+ ** \param[in]  pCookies    pointer to cookie
+ ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+ ** \param[in/out]  pDevIface  pointer to device interface structure
+ ** \param[in/out]  pIntrMod   pointer to interrrupt
+ **                            moderation structure
+ **
+ ** \return VMK_OK
+ **     Below error values are filled in the status field of
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command/param option or
+ **                      Null Pointer passed in parameter
+ **     VMK_FAILURE:     Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
+                         vmk_MgmtEnvelope *pEnvelope,
+                         sfvmk_mgmtDevInfo_t *pDevIface,
+                         sfvmk_intrCoalsParam_t *pIntrMod)
+{
+  sfvmk_adapter_t           *pAdapter = NULL;
+  vmk_UplinkCoalesceParams   params;
+  VMK_ReturnStatus           status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pIntrMod) {
+    SFVMK_ERROR("pIntrMod: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  switch (pIntrMod->type) {
+    case SFVMK_MGMT_DEV_OPS_SET:
+      if (!(pIntrMod->txUsecs)) {
+        pDevIface->status = VMK_BAD_PARAM;
+        goto end;
+      }
+
+      /* Change interrupt moderation settings for Rx/Tx queues */
+      status = sfvmk_configIntrModeration(pAdapter, pIntrMod->txUsecs);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Failed interrupt moderation settings error %s",
+                            vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      memset(&params, 0, sizeof(vmk_UplinkCoalesceParams));
+      params.txUsecs = params.rxUsecs = pIntrMod->txUsecs;
+
+      /* Copy the current interrupt coals params into shared queue data */
+      sfvmk_configQueueDataCoalescParams(pAdapter, &params);
+      break;
+
+    case SFVMK_MGMT_DEV_OPS_GET:
+      /* Firmware doesn't support moderation settings for
+       * different rx and tx event types. Only txUsecs parameter
+       * is being used for both rx & tx queue interrupt moderation
+       * conifguration */
+      vmk_MutexLock(pAdapter->lock);
+      pIntrMod->txUsecs = pIntrMod->rxUsecs = pAdapter->intrModeration;
+      vmk_MutexUnlock(pAdapter->lock);
+      break;
+
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

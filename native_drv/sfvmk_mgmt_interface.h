@@ -42,13 +42,14 @@
  ** Note: These identifiers cannot be changed or renumbered,
  ** so new callback IDs must go at the end (before SFVMK_CB_MAX).
  **
- ** SFVMK_CB_MCDI_REQUEST:       For invoking MCDI callback
- ** SFVMK_CB_MC_LOGGING:         For controlling MC Logging dynamically
- ** SFVMK_CB_PCI_INFO_GET:       Get PCI BDF and device information
- ** SFVMK_CB_VPD_REQUEST:        Get or Set VPD information
- ** SFVMK_CB_LINK_STATUS_GET:    Get the link state
- ** SFVMK_CB_LINK_SPEED_REQUEST: Get/Set the link speed and autoneg
- ** SFVMK_CB_VERINFO_GET:        Get various version info
+ ** SFVMK_CB_MCDI_REQUEST:             For invoking MCDI callback
+ ** SFVMK_CB_MC_LOGGING:               For controlling MC Logging dynamically
+ ** SFVMK_CB_PCI_INFO_GET:             Get PCI BDF and device information
+ ** SFVMK_CB_VPD_REQUEST:              Get or Set VPD information
+ ** SFVMK_CB_LINK_STATUS_GET:          Get the link state
+ ** SFVMK_CB_LINK_SPEED_REQUEST:       Get/Set the link speed and autoneg
+ ** SFVMK_CB_VERINFO_GET:              Get various version info
+ ** SFVMK_CB_INTR_MODERATION_REQUEST:  Change Interrupt Moderation settings
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -59,6 +60,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_LINK_STATUS_GET,
   SFVMK_CB_LINK_SPEED_REQUEST,
   SFVMK_CB_VERINFO_GET,
+  SFVMK_CB_INTR_MODERATION_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -260,6 +262,76 @@ typedef struct sfvmk_versionInfo_s {
   vmk_Name   version;
 } __attribute__((__packed__)) sfvmk_versionInfo_t;
 
+/*! \brief struct sfvmk_intrCoalsParam_s for
+ **         Interrupt coalesce parameters
+ **
+ ** Note: At present only txUsecs/rxUsecs is being used.
+ ** The firmware doesn't support moderation settings for
+ ** different (rx/tx) event types. Only txUsecs would be
+ ** considered.
+ **
+ ** type[in]  Command type (Get/Set)
+ **
+ ** rxUsecs[in/out] number of microseconds to wait
+ **          for Rx, before interrupting
+ **
+ ** rxMaxFrames[in/out] maximum number of (Rx) frames
+ **              to wait for, before interrupting
+ **
+ ** txUsecs[in/out] number of microseconds to wait
+ **          for completed Tx, before interrupting
+ **
+ ** txMaxFrames[in/out] maximum number of completed (Tx)
+ **              frames to wait for, before interrupting
+ **
+ ** useAdaptiveRx[in/out] Use adaptive Rx coalescing
+ **
+ ** useAdaptiveTx[in/out] Use adaptive Tx coalescing
+ **
+ ** rateSampleInterval[in/out] Rate sampling interval
+ **
+ ** pktRateLowWatermark[in/out] Low packet rate watermark
+ **
+ ** pktRateHighWatermark[in/out] High packet rate watermark
+ **
+ ** rxUsecsLow[in/out] Rx usecs low
+ **
+ ** rxFramesLow[in/out] Rx frames low
+ **
+ ** txUsecsLow[in/out] Tx usecs low
+ **
+ ** txFramesLow[in/out] Tx frames low
+ **
+ ** rxUsecsHigh[in/out] Rx usecs high
+ **
+ ** rxFramesHigh[in/out] Rx frames high
+ **
+ ** txUsecsHigh[in/out] Tx usecs high
+ **
+ ** txFramesHigh[in/out] Tx frames high
+ **
+ */
+typedef struct sfvmk_intrCoalsParam_s {
+  sfvmk_mgmtDevOps_t type;
+  vmk_uint32         rxUsecs;
+  vmk_uint32         rxMaxFrames;
+  vmk_uint32         txUsecs;
+  vmk_uint32         txMaxFrames;
+  vmk_Bool           useAdaptiveRx;
+  vmk_Bool           useAdaptiveTx;
+  vmk_uint32         rateSampleInterval;
+  vmk_uint32         pktRateLowWatermark;
+  vmk_uint32         pktRateHighWatermark;
+  vmk_uint32         rxUsecsLow;
+  vmk_uint32         rxFramesLow;
+  vmk_uint32         txUsecsLow;
+  vmk_uint32         txFramesLow;
+  vmk_uint32         rxUsecsHigh;
+  vmk_uint32         rxFramesHigh;
+  vmk_uint32         txUsecsHigh;
+  vmk_uint32         txFramesHigh;
+} __attribute__((__packed__)) sfvmk_intrCoalsParam_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -321,6 +393,11 @@ VMK_ReturnStatus sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
                                            vmk_MgmtEnvelope *pEnvelope,
                                            sfvmk_mgmtDevInfo_t *pDevIface,
                                            sfvmk_versionInfo_t *pVerInfo);
+
+VMK_ReturnStatus sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
+                                          vmk_MgmtEnvelope *pEnvelope,
+                                          sfvmk_mgmtDevInfo_t *pDevIface,
+                                          sfvmk_intrCoalsParam_t *pIntrMod);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -334,6 +411,7 @@ VMK_ReturnStatus sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtLinkStatusGet NULL
 #define sfvmk_mgmtLinkSpeedRequest NULL
 #define sfvmk_mgmtVerInfoCallback NULL
+#define sfvmk_mgmtIntrModeration NULL
 #endif
 
 #endif

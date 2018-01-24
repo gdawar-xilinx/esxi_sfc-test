@@ -480,6 +480,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   }
 
   vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
+  goto done;
 
 release_all_pkts:
   vmk_PktListReleaseAllPkts(pktList);

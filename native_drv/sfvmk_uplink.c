@@ -442,8 +442,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     SFVMK_ADAPTER_ERROR(pAdapter, "TXQ state[%d] not yet started",
                         pAdapter->ppTxq[qid]->state);
     vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
-    vmk_PktListReleaseAllPkts(pktList);
-    goto done;
+    goto release_all_pkts;
   }
 
   for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
@@ -476,6 +475,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_transmitPkt failed status %s",
                           vmk_StatusToString(status));
       sfvmk_pktRelease(pAdapter, &compCtx, pkt);
+      vmk_AtomicInc64(&pAdapter->txDrops);
     }
   }
 
@@ -483,7 +483,11 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   goto done;
 
 release_all_pkts:
-  vmk_PktListReleaseAllPkts(pktList);
+  for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
+    vmk_PktListIterRemovePkt(iter, &pkt);
+    sfvmk_pktRelease(pAdapter, &compCtx, pkt);
+    vmk_AtomicInc64(&pAdapter->txDrops);
+  }
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -733,9 +737,7 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
   pNicStats->txErrors = pAdapter->adapterStats[EFX_MAC_TX_ERRORS];
 
   pNicStats->rxDrops = pAdapter->adapterStats[EFX_MAC_RX_DROP_EVENTS];
-
-  /* TODO: The pNicStats->txDrops counter support will be added in
-   * transmit path. Bugzilla ID for this task is Bug76590 */
+  pNicStats->txDrops = vmk_AtomicRead64(&pAdapter->txDrops);
 
   pNicStats->rxMulticastPkts = pAdapter->adapterStats[EFX_MAC_RX_MULTICST_PKTS];
   pNicStats->rxBroadcastPkts = pAdapter->adapterStats[EFX_MAC_RX_BRDCST_PKTS];

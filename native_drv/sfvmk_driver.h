@@ -414,6 +414,9 @@ typedef struct sfvmk_adapter_s {
   sfvmk_pktOps_t             pktOps[SFVMK_PKT_COMPLETION_MAX];
   vmk_uint32                 txDmaDescMaxSize;
 
+  /* The number of tx packets dropped */
+  vmk_atomic64               txDrops;
+
   /* Filter Database hash table and key generator */
   vmk_HashTable              filterDBHashTable;
   vmk_uint32                 filterKey;

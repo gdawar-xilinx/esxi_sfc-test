@@ -1,0 +1,4 @@
+This is an userworld library to provide an user interface for MCDI commands.
+This application invoke management interface callback to post MCDI requests from
+user to kernel (SFVMK) driver.
+

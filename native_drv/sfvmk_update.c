@@ -85,6 +85,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
   vmk_uint8             *pBuffer = NULL;
   vmk_uint8             *pImgBuffer = NULL;
   vmk_uint8             *pUpdateBuffer = NULL;
+  vmk_uint8             *pSignedImgBuffer = NULL;
   vmk_Bool              nvramLocked = VMK_FALSE;
   size_t                nvramSize;
   vmk_uint32            updateSize = 0;
@@ -129,7 +130,21 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
 
   switch (imageInfo.eii_format) {
     case EFX_IMAGE_FORMAT_SIGNED:
-      /*TODO: Modify to Signed Image offset*/
+      pSignedImgBuffer = (vmk_uint8*)vmk_HeapAlloc(sfvmk_ModInfo.heapID, nvramSize);
+      if (pSignedImgBuffer == NULL) {
+        SFVMK_ERR(pAdapter, "Memory Allocation failed for size: %d", (int)nvramSize);
+        status = VMK_NO_MEMORY;
+        goto fail1;
+      }
+      if ((status = efx_build_signed_image_write_buffer(pSignedImgBuffer,
+                                                        nvramSize,
+                                                        &imageInfo,
+                                                        &pImgHeader)) != VMK_OK) {
+        SFVMK_ERR(pAdapter, "Build Signed Image Write buffer failed with error: %s", vmk_StatusToString(status));
+        goto fail1;
+      }
+      pUpdateBuffer = pSignedImgBuffer;
+      updateSize = nvramSize;
       break;
 
     case EFX_IMAGE_FORMAT_UNSIGNED:
@@ -234,6 +249,8 @@ fail2:
     efx_nvram_rw_finish(pNic, type, NULL);
 
 fail1:
+  if( pSignedImgBuffer != NULL)
+    vmk_HeapFree(sfvmk_ModInfo.heapID, pSignedImgBuffer);
   vmk_HeapFree(sfvmk_ModInfo.heapID, pImgBuffer);
 
 end:

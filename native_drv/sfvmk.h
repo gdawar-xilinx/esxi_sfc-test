@@ -33,7 +33,7 @@
 
 /* Size of heap to be allocated */
 /* TBD: Add a function to calculate the Heap Size */
-#define SFVMK_HEAP_EST  (2.5 * VMK_MEGABYTE)
+#define SFVMK_HEAP_EST  (10 * VMK_MEGABYTE)
 /* used to format pci device name */
 #define SFVMK_SBDF_FMT  "%04x:%02x:%02x.%x"
 

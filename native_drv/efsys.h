@@ -627,7 +627,5 @@ typedef uint64_t    efsys_stat_t;
 #define strncpy(src1, src2, n)  vmk_Strncpy(src1, src2, n)
 #define strnlen(src, n)         vmk_Strnlen(src, n)
 
-#define _NOTE(_note)
-
 #endif  /* _SYS_EFSYS_H */
 

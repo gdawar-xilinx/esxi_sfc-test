@@ -79,6 +79,7 @@ module_def = {
 			 "imported/hunt_nic.c",
 			 "imported/mcdi_mon.c",
 			 "imported/medford_nic.c",
+			 "imported/medford2_nic.c",
                        ],
    "includes"        : [
                          "./imported",

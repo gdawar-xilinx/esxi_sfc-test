@@ -265,7 +265,10 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
     case EFX_LINK_1000HDX:
     case EFX_LINK_1000FDX:
     case EFX_LINK_10000FDX:
+    case EFX_LINK_25000FDX:
     case EFX_LINK_40000FDX:
+    case EFX_LINK_50000FDX:
+    case EFX_LINK_100000FDX:
       pSharedData->link.state = VMK_LINK_STATE_UP;
       break;
     case EFX_LINK_DOWN:

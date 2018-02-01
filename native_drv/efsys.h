@@ -125,6 +125,7 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 #define EFSYS_OPT_SIENA 0
 #define EFSYS_OPT_HUNTINGTON 1
 #define EFSYS_OPT_MEDFORD 1
+#define EFSYS_OPT_MEDFORD2 1
 
 #ifdef DEBUG
 #define EFSYS_OPT_CHECK_REG 1

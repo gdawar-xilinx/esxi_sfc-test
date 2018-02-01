@@ -2046,8 +2046,23 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
         break;
 
+      case EFX_PHY_CAP_25000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
       case EFX_PHY_CAP_40000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_50000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_100000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
         break;
 

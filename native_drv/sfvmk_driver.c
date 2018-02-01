@@ -77,6 +77,11 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+                      "PCI VendorID %x DevID %x",
+                      pAdapter->pciDeviceID.vendorID,
+                      pAdapter->pciDeviceID.deviceID);
+
   /* Check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
                   pAdapter->pciDeviceID.deviceID,
@@ -89,6 +94,7 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
   /* Driver support only Medford Family */
   switch (pAdapter->efxFamily) {
   case EFX_FAMILY_MEDFORD:
+  case EFX_FAMILY_MEDFORD2:
     supported = VMK_TRUE;
     break;
   case EFX_FAMILY_SIENA:

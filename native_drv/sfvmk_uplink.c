@@ -1973,31 +1973,12 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
   vmk_uint32 supportedCaps;
   vmk_uint32 index = 0;
   vmk_UplinkSupportedMode *pSupportedModes = NULL;
-  vmk_LinkMediaType defaultMedia;
-  efx_phy_media_type_t mediumType;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   if (pAdapter == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter ptr");
     goto done;
-  }
-
-  efx_phy_media_type_get(pAdapter->pNic, &mediumType);
-
-  switch (mediumType) {
-    case EFX_PHY_MEDIA_KX4:
-      defaultMedia = VMK_LINK_MEDIA_BASE_KX4;
-      break;
-    case EFX_PHY_MEDIA_QSFP_PLUS:
-    case EFX_PHY_MEDIA_SFP_PLUS:
-      defaultMedia = VMK_LINK_MEDIA_UNKNOWN;
-      break;
-    default:
-      defaultMedia = VMK_LINK_MEDIA_UNKNOWN;
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                          "Unknown media = %d", mediumType);
-      break;
   }
 
   efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_DEFAULT, &supportedCaps);
@@ -2008,7 +1989,8 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
     if ((supportedCaps & (1U << cap)) == 0)
       continue;
 
-    pSupportedModes[index].media = defaultMedia;
+    /* Only SFP and QSFP modules are supported */
+    pSupportedModes[index].media = VMK_LINK_MEDIA_UNKNOWN;
 
     switch (cap) {
       case EFX_PHY_CAP_10HDX:

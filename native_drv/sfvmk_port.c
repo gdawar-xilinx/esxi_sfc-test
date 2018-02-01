@@ -180,7 +180,6 @@ sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter,
   sfvmk_port_t *pPort;
   vmk_UplinkSharedData *pSharedData = NULL;
   vmk_uint32 advertisedCapabilities;
-  vmk_uint32 sharedReadLockVer;
 
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pSpeed);
@@ -191,9 +190,9 @@ sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter,
 
   pSharedData =  &pAdapter->uplink.sharedData;
 
-  sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pSharedData->lock);
+  SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
   *pSpeed = pSharedData->link.speed;
-  vmk_VersionedAtomicEndTryRead(&pSharedData->lock, sharedReadLockVer);
+  SFVMK_SHARED_AREA_END_READ(pAdapter);
 
   advertisedCapabilities = pPort->advertisedCapabilities;
 

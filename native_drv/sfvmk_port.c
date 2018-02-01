@@ -409,15 +409,14 @@ void
 sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState)
 {
   vmk_UplinkSharedData *pSharedData = NULL;
-  vmk_uint32 sharedReadLockVer;
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   pSharedData =  &pAdapter->uplink.sharedData;
 
-  sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pSharedData->lock);
+  SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
   *pLinkState = pSharedData->link.state;
-  vmk_VersionedAtomicEndTryRead(&pSharedData->lock, sharedReadLockVer);
+  SFVMK_SHARED_AREA_END_READ(pAdapter);
 }
 
 /*! \brief  Initialize port, filters, flow control and link status.

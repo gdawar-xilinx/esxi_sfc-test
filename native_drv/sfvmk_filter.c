@@ -431,16 +431,14 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
     }
 
     sfvmk_removeUplinkFilter(pAdapter, pFdbEntry->qID);
-    sfvmk_freeFilterRule(pAdapter, pFdbEntry);
     status = vmk_HashKeyDelete(pAdapter->filterDBHashTable,
                                (vmk_HashKey)(vmk_uint64)pFdbEntry->key,
                                NULL);
-    if (status != VMK_OK) {
+    if (status != VMK_OK)
       SFVMK_ADAPTER_ERROR(pAdapter, "Delete key entry failed with error %s",
                           vmk_StatusToString(status));
-      continue;
-    }
 
+    sfvmk_freeFilterRule(pAdapter, pFdbEntry);
   }
 
 }

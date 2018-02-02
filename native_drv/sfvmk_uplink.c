@@ -676,20 +676,46 @@ done:
 **         startIO uplink callback.
 **
 ** \param[in]  cookie    vmk_AddrCookie
-** \param[in]  admnState linkstate.
+** \param[in]  state     uplink state.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK on success or error code otherwise
 **
 */
 static VMK_ReturnStatus
-sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
+sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState state)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_MutexLock(pAdapter->lock);
+
+  if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
+    status = sfvmk_setMacFilter(pAdapter, state);
+    if (status != VMK_OK) {
+      vmk_MutexUnlock(pAdapter->lock);
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setMacFilter(%d) failed status: %s",
+                          state, vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+  pAdapter->uplink.sharedData.state = state;
+  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+
+  vmk_MutexUnlock(pAdapter->lock);
+
   status = VMK_OK;
-  /* TODO: Add implementation */
+
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

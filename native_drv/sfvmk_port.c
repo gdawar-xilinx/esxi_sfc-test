@@ -418,6 +418,44 @@ sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState)
   SFVMK_SHARED_AREA_END_READ(pAdapter);
 }
 
+/*! \brief function to set the mac filter
+**
+** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  state     uplink state.
+**
+** \return: VMK_OK on success or error code otherwise
+**
+*/
+VMK_ReturnStatus
+sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_Bool allMulti = VMK_FALSE;
+  vmk_Bool broadcast = VMK_FALSE;
+  vmk_Bool promisc = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (state & VMK_UPLINK_STATE_MULTICAST_OK)
+    allMulti = VMK_TRUE;
+
+  if (state & VMK_UPLINK_STATE_BROADCAST_OK)
+    broadcast = VMK_TRUE;
+
+  if (state & VMK_UPLINK_STATE_PROMISC)
+    promisc = VMK_TRUE;
+
+  status = efx_mac_filter_set(pAdapter->pNic, promisc, VMK_FALSE, allMulti, broadcast);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_set failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
 /*! \brief  Initialize port, filters, flow control and link status.
 **
 ** \param[in]  pAdapter     Pointer to sfvmk_adapter_t
@@ -431,6 +469,7 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   efx_nic_t *pNic = NULL;
   size_t pdu;
   VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_UplinkState state;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
@@ -481,10 +520,13 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
     goto failed_mac_fcntl;
   }
 
-  /* By default promiscuous, all multicast and  broadcast filters are enabled */
-  status = efx_mac_filter_set(pNic, B_TRUE, 0, B_TRUE, B_TRUE);
+  SFVMK_SHARED_AREA_BEGIN_READ(pAdapter);
+  state = pAdapter->uplink.sharedData.state;
+  SFVMK_SHARED_AREA_END_READ(pAdapter);
+
+  status = sfvmk_setMacFilter(pAdapter, state);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_set failed status: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setMacFilter failed status: %s",
                         vmk_StatusToString(status));
     goto failed_mac_filter_set;
   }

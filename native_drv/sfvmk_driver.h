@@ -641,4 +641,7 @@ sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
 void
 sfvmk_configQueueDataCoalescParams(sfvmk_adapter_t *pAdapter,
                                    vmk_UplinkCoalesceParams *pParams);
+
+VMK_ReturnStatus
+sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state);
 #endif /* __SFVMK_DRIVER_H__ */

@@ -358,7 +358,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   if (qIndex == 0) {
     pEvq->numDesc = pAdapter->numRxqBuffDesc +
-                    (SFVMK_TXQ_NTYPES * pAdapter->numTxqBuffDesc) +
+                    pAdapter->numTxqBuffDesc +
                     SFVMK_EVQ_EXTRA_EVENT_SPACE;
   } else {
     pEvq->numDesc = pAdapter->numRxqBuffDesc + pAdapter->numTxqBuffDesc;

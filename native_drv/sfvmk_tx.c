@@ -11,15 +11,13 @@
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 ** \param[in]  TX queue index
-** \param[in]  TX queue type
 ** \param[in]  associated event queue index
 **
 ** \return: VMK_OK <success> error code <failure>
 **
 */
 static VMK_ReturnStatus
-sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
-              sfvmk_txqType_t type, vmk_uint32 evqIndex)
+sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex, vmk_uint32 evqIndex)
 {
   sfvmk_txq_t *pTxq = NULL;
   VMK_ReturnStatus status = VMK_BAD_PARAM;
@@ -82,7 +80,6 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
     goto failed_create_lock;
   }
 
-  pTxq->type = type;
   pTxq->evqIndex = evqIndex;
   pTxq->index = txqIndex;
   pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
@@ -184,13 +181,8 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  /* For each TXQ_TYPE_IP_TCP_UDP_CKSUM TXQ there is one EVQ
-   * EVQ-0 also handles:
-   * Events for one (shared) TXQ_TYPE_NON_CKSUM TXQ
-   * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
-   */
-  pAdapter->numTxqsAllocated = MIN((SFVMK_TXQ_NTYPES - 1 + pAdapter->numEvqsAllocated),
-                                    pAdapter->numTxqsAllotted);
+  pAdapter->numTxqsAllocated = MIN(pAdapter->numEvqsAllocated,
+                                   pAdapter->numTxqsAllotted);
 
   txqArraySize = sizeof(sfvmk_txq_t *) * pAdapter->numTxqsAllocated;
 
@@ -198,53 +190,31 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   if (pAdapter->ppTxq == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter,"vmk_HeapAlloc failed");
     status = VMK_NO_MEMORY;
-    goto done;
+    goto failed_txq_alloc;
   }
   vmk_Memset(pAdapter->ppTxq, 0, txqArraySize);
 
-  status = sfvmk_txqInit(pAdapter, SFVMK_TXQ_TYPE_NON_CKSUM,
-                         SFVMK_TXQ_TYPE_NON_CKSUM, evqIndex);
-  if(status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_txqInit(%u) failed status: %s",
-                        SFVMK_TXQ_TYPE_NON_CKSUM, vmk_StatusToString(status));
-    goto failed_non_cksum_txq_init;
-  }
-
-  status = sfvmk_txqInit(pAdapter, SFVMK_TXQ_TYPE_IP_CKSUM,
-                         SFVMK_TXQ_TYPE_IP_CKSUM, evqIndex);
-  if(status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqInit(%u) failed status: %s",
-                        SFVMK_TXQ_TYPE_IP_CKSUM, vmk_StatusToString(status));
-    goto failed_ip_cksum_txq_init;
-  }
-
-  /* Initialize SFVMK_TXQ_IP_TCP_UDP_CKSUM transmit queues */
-  for (qIndex = SFVMK_TXQ_NTYPES - 1; qIndex < pAdapter->numTxqsAllocated;
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated;
        qIndex++, evqIndex++) {
-    status = sfvmk_txqInit(pAdapter, qIndex, SFVMK_TXQ_TYPE_IP_TCP_UDP_CKSUM,
-                           evqIndex);
+    status = sfvmk_txqInit(pAdapter, qIndex, evqIndex);
     if (status) {
       SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqInit(%u) failed status: %s",
                           qIndex, vmk_StatusToString(status));
-      goto failed_tcpudp_cksum_txq_init;
+      goto failed_txq_init;
     }
   }
 
   goto done;
 
-failed_tcpudp_cksum_txq_init:
-  while (qIndex >= SFVMK_TXQ_NTYPES)
+failed_txq_init:
+  while (qIndex)
     sfvmk_txqFini(pAdapter, --qIndex);
 
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_TYPE_IP_CKSUM);
-
-failed_ip_cksum_txq_init:
-  sfvmk_txqFini(pAdapter, SFVMK_TXQ_TYPE_NON_CKSUM);
-
-failed_non_cksum_txq_init:
-  pAdapter->numTxqsAllocated = 0;
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->ppTxq);
   pAdapter->ppTxq = NULL;
+
+failed_txq_alloc:
+  pAdapter->numTxqsAllocated = 0;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);

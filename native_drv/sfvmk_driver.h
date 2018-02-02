@@ -119,13 +119,6 @@ typedef struct sfvmk_port_s {
   vmk_uint32          fcRequested;
 } sfvmk_port_t;
 
-typedef enum sfvmk_txqType_e {
-  SFVMK_TXQ_TYPE_NON_CKSUM = 0,
-  SFVMK_TXQ_TYPE_IP_CKSUM,
-  SFVMK_TXQ_TYPE_IP_TCP_UDP_CKSUM,
-  SFVMK_TXQ_NTYPES
-} sfvmk_txqType_t;
-
 typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_UNINITIALIZED = 0,
   SFVMK_TXQ_STATE_INITIALIZED,
@@ -141,7 +134,6 @@ typedef struct sfvmk_txq_s {
   vmk_uint32          ptrMask;
   efsys_mem_t         mem;
   sfvmk_txqState_t    state;
-  sfvmk_txqType_t     type;
 } sfvmk_txq_t;
 
 typedef enum sfvmk_rxqState_e {

@@ -570,13 +570,15 @@ VMK_ReturnStatus sfvmk_vpdSetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData
                                   vmk_uint8 vpdLen);
 
 /* Locking mechanism to serialize multiple writers's access to protected sharedData area */
-static inline void sfvmk_sharedAreaBeginWrite(sfvmk_uplink_t *pUplink)
+static inline void __attribute__((always_inline))
+sfvmk_sharedAreaBeginWrite(sfvmk_uplink_t *pUplink)
 {
   vmk_SpinlockLock(pUplink->shareDataLock);
   vmk_VersionedAtomicBeginWrite(&pUplink->sharedData.lock);
 }
 
-static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
+static inline void __attribute__((always_inline))
+sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
 {
   vmk_VersionedAtomicEndWrite(&pUplink->sharedData.lock);
   vmk_SpinlockUnlock(pUplink->shareDataLock);
@@ -601,7 +603,8 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
 **
 ** \return: index from where TXQs is starting in vmk_UplinkSharedQueueData array
 */
-static inline vmk_uint32 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
+static inline vmk_uint32 __attribute__((always_inline))
+sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 {
   /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
    * It is structured to record information about maxRxQueues receive
@@ -616,7 +619,8 @@ static inline vmk_uint32 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 **
 ** \return: pointer to queue data from where TXQs is starting
 */
-static inline vmk_UplinkSharedQueueData* sfvmk_getUplinkTxSharedQueueData(sfvmk_uplink_t *pUplink)
+static inline __attribute__((always_inline))
+vmk_UplinkSharedQueueData* sfvmk_getUplinkTxSharedQueueData(sfvmk_uplink_t *pUplink)
 {
   /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
    * It is structured to record information about maxRxQueues receive

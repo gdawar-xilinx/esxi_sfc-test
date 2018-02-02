@@ -3884,7 +3884,7 @@ sfvmk_configQueueDataCoalescParams(sfvmk_adapter_t *pAdapter,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
-  VMK_ASSERT_NOT_NULL(pParam);
+  VMK_ASSERT_NOT_NULL(pParams);
 
   /* Once gloabl coalesce params are set, set to every TX/RX queues */
   sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);

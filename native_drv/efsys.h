@@ -242,8 +242,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint32_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -258,8 +257,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -275,8 +273,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_oword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_oword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -295,8 +292,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint32_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)));    \
                                                                         \
             EFSYS_PROBE2(mem_writed, unsigned int, (_offset),           \
                 uint32_t, (_edp)->ed_u32[0]);                           \
@@ -311,8 +307,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)));    \
                                                                         \
             EFSYS_PROBE3(mem_writeq, unsigned int, (_offset),           \
                 uint32_t, (_eqp)->eq_u32[1],                            \
@@ -329,8 +324,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED((_offset), sizeof (efx_oword_t)),   \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED((_offset), sizeof (efx_oword_t)));  \
                                                                         \
             EFSYS_PROBE5(mem_writeo, unsigned int, (_offset),           \
                 uint32_t, (_eop)->eo_u32[3],                            \
@@ -505,7 +499,7 @@ typedef uint64_t    efsys_stat_t;
         const _t __x = (_t)(_x);                                        \
         const _t __y = (_t)(_y);                                        \
         if (!(__x _op __y))                                             \
-          VMK_ASSERT("assertion failed at %s:%u",__FILE__, __LINE__);   \
+          VMK_ASSERT(0);   \
         } while(0)
 
 #define EFSYS_ASSERT3U(_x, _op, _y)     EFSYS_ASSERT3(_x, _op, _y, uint64_t)

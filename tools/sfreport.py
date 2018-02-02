@@ -604,9 +604,9 @@ def sf_module_file(output_file):
 
 #- function to retrieve info on Netqueue status
 def net_queue_status(output_file,sfvmk_adapter_list):
-    lines = ('<p>')
     output_file.write('<h1 id="NetQueue Status"style="font-size:26px;"> NetQueue Status:<br></H1>')
     for interface in sfvmk_adapter_list:
+        lines = ('<p>')
         output_file.write('<h1"style="font-size:18px;"> Network queue status of %s: <br></H1>' % interface)
         netq_cmd = "vsish -e cat /net/pNics/"+ interface +"/txqueues/queues/0/stats"
         netq_status = execute(netq_cmd)

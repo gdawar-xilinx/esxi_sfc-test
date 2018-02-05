@@ -95,7 +95,6 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
   pTxq->evqIndex = evqIndex;
   pTxq->index = txqIndex;
   pTxq->hwVlanTci = 0;
-  pTxq->isCso = VMK_TRUE;
   pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
   pAdapter->ppTxq[txqIndex] = pTxq;
 
@@ -521,6 +520,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   }
 
   vmk_SpinlockLock(pTxq->lock);
+  pTxq->isCso = VMK_TRUE;
   pTxq->pTxMap = pTxMap;
   pTxq->pPendDesc = pPendDesc;
   pTxq->nPendDesc = 0;

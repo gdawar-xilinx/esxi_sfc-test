@@ -1405,7 +1405,7 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
       descLen = MIN(elemBytesLeft, pAdapter->txDmaDescMaxSize);
       /* pkt headers need a separate DMA desc */
       if ((i == 0) && first) {
-        VMK_ASSERT(pXmitInfo->headerLen >= descLen);
+        VMK_ASSERT(pXmitInfo->headerLen <= descLen);
         descLen = pXmitInfo->headerLen;
       }
 

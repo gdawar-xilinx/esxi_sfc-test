@@ -658,8 +658,9 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                         "Adapter has been reset, MTU %u applied", mtu);
-    status = VMK_OK;
   }
+
+  status = VMK_OK;
 
 failed_quiesce_io:
 failed_start_io:

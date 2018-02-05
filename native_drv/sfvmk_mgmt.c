@@ -29,6 +29,21 @@
 #include "sfvmk_driver.h"
 #include "sfvmk_mgmt_interface.h"
 
+static const efx_nvram_type_t nvramTypes[] = {
+  [SFVMK_NVRAM_BOOTROM]     = EFX_NVRAM_BOOTROM,
+  [SFVMK_NVRAM_BOOTROM_CFG] = EFX_NVRAM_BOOTROM_CFG,
+  [SFVMK_NVRAM_MC]          = EFX_NVRAM_MC_FIRMWARE,
+  [SFVMK_NVRAM_MC_GOLDEN]   = EFX_NVRAM_MC_GOLDEN,
+  [SFVMK_NVRAM_PHY]         = EFX_NVRAM_PHY,
+  [SFVMK_NVRAM_NULL_PHY]    = EFX_NVRAM_NULLPHY,
+  [SFVMK_NVRAM_FPGA]        = EFX_NVRAM_FPGA,
+  [SFVMK_NVRAM_FCFW]        = EFX_NVRAM_FCFW,
+  [SFVMK_NVRAM_CPLD]        = EFX_NVRAM_CPLD,
+  [SFVMK_NVRAM_FPGA_BACKUP] = EFX_NVRAM_FPGA_BACKUP,
+  [SFVMK_NVRAM_UEFIROM]     = EFX_NVRAM_UEFIROM,
+  [SFVMK_NVRAM_DYNAMIC_CFG] = EFX_NVRAM_DYNAMIC_CFG,
+};
+
 /*! \brief  Get adapter pointer based on hash.
 **
 ** \param[in] pMgmtParm pointer to managment param
@@ -712,6 +727,109 @@ sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
     default:
       pDevIface->status = VMK_BAD_PARAM;
       goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback routine to post NVRAM req
+**
+** \param[in]  pCookies    pointer to cookie
+** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface  pointer to device interface structure
+** \param[in/out]  pCmd       pointer to NVRAM cmd struct
+**
+** \return: VMK_OK  <success>
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND:      In case of dev not found
+**     VMK_NOT_SUPPORTED:  Operation not supported
+**     VMK_BAD_PARAM:      Unknown option or NULL input param
+**     VMK_FAILURE:        Any other error
+**
+*/
+VMK_ReturnStatus
+sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
+                        vmk_MgmtEnvelope    *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_nvramCmd_t    *pCmd)
+{
+  sfvmk_adapter_t               *pAdapter = NULL;
+  efx_nic_t                     *pNic;
+  efx_nvram_type_t               type;
+  VMK_ReturnStatus               status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pCmd) {
+    SFVMK_ERROR("pCmd: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (pCmd->type >= SFVMK_NVRAM_TYPE_UNKNOWN) {
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  pNic = pAdapter->pNic;
+  type = nvramTypes[pCmd->type];
+
+  if (type == EFX_NVRAM_MC_GOLDEN &&
+      (pCmd->op == SFVMK_NVRAM_OP_WRITE ||
+       pCmd->op == SFVMK_NVRAM_OP_ERASE ||
+       pCmd->op == SFVMK_NVRAM_OP_SET_VER)) {
+    pDevIface->status = VMK_NOT_SUPPORTED;
+    goto end;
+  }
+
+  switch (pCmd->op) {
+    case SFVMK_NVRAM_OP_SIZE:
+      status = efx_nvram_size(pNic, type, (size_t *)&pCmd->size);
+      break;
+
+    case SFVMK_NVRAM_OP_GET_VER:
+      status = efx_nvram_get_version(pNic, type,
+                                     &pCmd->subtype, &pCmd->version[0]);
+      break;
+
+    case SFVMK_NVRAM_OP_SET_VER:
+      status = efx_nvram_set_version(pNic, type, &pCmd->version[0]);
+      break;
+
+    /* TODO: Will add support for these in future */
+    case SFVMK_NVRAM_OP_READ:
+    case SFVMK_NVRAM_OP_WRITE:
+    case SFVMK_NVRAM_OP_ERASE:
+    default:
+      status = VMK_NOT_SUPPORTED;
+      break;
+  }
+
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Operation = %u failed with error %s",
+                       pCmd->op, vmk_StatusToString(status));
+    pDevIface->status = status;
+    goto end;
   }
 
   pDevIface->status = VMK_OK;

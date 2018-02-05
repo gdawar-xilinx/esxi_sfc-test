@@ -50,6 +50,7 @@
  ** SFVMK_CB_LINK_SPEED_REQUEST:       Get/Set the link speed and autoneg
  ** SFVMK_CB_VERINFO_GET:              Get various version info
  ** SFVMK_CB_INTR_MODERATION_REQUEST:  Change Interrupt Moderation settings
+ ** SFVMK_CB_NVRAM_REQUEST:            NVRAM operations callback
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -61,6 +62,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_LINK_SPEED_REQUEST,
   SFVMK_CB_VERINFO_GET,
   SFVMK_CB_INTR_MODERATION_REQUEST,
+  SFVMK_CB_NVRAM_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -332,6 +334,73 @@ typedef struct sfvmk_intrCoalsParam_s {
   vmk_uint32         txFramesHigh;
 } __attribute__((__packed__)) sfvmk_intrCoalsParam_t;
 
+/* NVRAM Command max payload size*/
+#define SFVMK_NVRAM_MAX_PAYLOAD         32*1024
+
+/* Get size of NVRAM partition */
+#define	SFVMK_NVRAM_OP_SIZE		0x00000001
+
+/* Read data from NVRAM partition */
+#define	SFVMK_NVRAM_OP_READ		0x00000002
+
+/* Write data into NVRAM partition */
+#define	SFVMK_NVRAM_OP_WRITE		0x00000003
+
+/* Erase NVRAM partition */
+#define	SFVMK_NVRAM_OP_ERASE		0x00000004
+
+/* Get NVRAM partition version */
+#define	SFVMK_NVRAM_OP_GET_VER		0x00000005
+
+/* Set NVRAM partition version */
+#define	SFVMK_NVRAM_OP_SET_VER		0x00000006
+
+/** NVRAM Partition Types */
+typedef enum sfvmk_nvramType_e {
+  SFVMK_NVRAM_BOOTROM,
+  SFVMK_NVRAM_BOOTROM_CFG,
+  SFVMK_NVRAM_MC,
+  SFVMK_NVRAM_MC_GOLDEN,
+  SFVMK_NVRAM_PHY,
+  SFVMK_NVRAM_NULL_PHY,
+  SFVMK_NVRAM_FPGA,
+  SFVMK_NVRAM_FCFW,
+  SFVMK_NVRAM_CPLD,
+  SFVMK_NVRAM_FPGA_BACKUP,
+  SFVMK_NVRAM_UEFIROM,
+  SFVMK_NVRAM_DYNAMIC_CFG,
+  SFVMK_NVRAM_TYPE_UNKNOWN
+} sfvmk_nvramType_t;
+
+/*! \brief struct sfvmk_nvramCmd_s for performing
+ **        NVRAM operations
+ **
+ ** op[in]          Operation type (Size/Read/write/flash/ver_get/ver_set)
+ **
+ ** type[in]        Type of NVRAM
+ **
+ ** offset[in]      Location of NVRAM where to start
+ **                 read/write
+ **
+ ** size[in/out]    Size of buffer, should be <= SFVMK_NVRAM_MAX_PAYLOAD
+ **
+ ** subtype[out]    NVRAM subtype, part of get NVRAM version
+ **
+ ** version[in/out] Version info
+ **
+ ** data[in/out]    NVRAM data for read/write
+ **
+ */
+typedef	struct sfvmk_nvramCmd_s {
+  vmk_uint32        op;
+  sfvmk_nvramType_t type;
+  vmk_uint32        offset;
+  vmk_uint32        size;
+  vmk_uint32        subtype;
+  vmk_uint16        version[4];
+  vmk_uint8         data[SFVMK_NVRAM_MAX_PAYLOAD];
+} __attribute__((__packed__)) sfvmk_nvramCmd_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -398,6 +467,12 @@ VMK_ReturnStatus sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
                                           vmk_MgmtEnvelope *pEnvelope,
                                           sfvmk_mgmtDevInfo_t *pDevIface,
                                           sfvmk_intrCoalsParam_t *pIntrMod);
+
+VMK_ReturnStatus sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
+                                         vmk_MgmtEnvelope *pEnvelope,
+                                         sfvmk_mgmtDevInfo_t *pDevIface,
+                                         sfvmk_nvramCmd_t *pNvrCmd);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -412,6 +487,7 @@ VMK_ReturnStatus sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtLinkSpeedRequest NULL
 #define sfvmk_mgmtVerInfoCallback NULL
 #define sfvmk_mgmtIntrModeration NULL
+#define sfvmk_mgmtNVRAMCallback NULL
 #endif
 
 #endif

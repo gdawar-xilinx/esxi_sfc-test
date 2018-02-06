@@ -169,11 +169,12 @@ typedef enum sfvmk_portState_e {
 } sfvmk_portState_t;
 
 typedef struct sfvmk_port_s {
-  sfvmk_portState_t   state;
-  efx_link_mode_t     linkMode;
-  vmk_uint32          fcRequested;
-  vmk_uint32          advertisedCapabilities;
-  efsys_mem_t	      macStatsDmaBuf;
+  sfvmk_portState_t     state;
+  efx_link_mode_t       linkMode;
+  vmk_uint32            fcRequested;
+  vmk_uint32            advertisedCapabilities;
+  efsys_mem_t	        macStatsDmaBuf;
+  efx_phy_media_type_t  mediumType;
 } sfvmk_port_t;
 
 typedef enum sfvmk_txqType_e {

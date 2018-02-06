@@ -503,6 +503,9 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
     goto failed_port_init;
   }
 
+  /* Populate media information */
+  efx_phy_media_type_get(pAdapter->pNic, &pPort->mediumType);
+
   /* Set the SDU */
   pdu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
   status = efx_mac_pdu_set(pNic, pdu);
@@ -684,8 +687,35 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
 
   memset(pAdapter->adapterStats, 0, EFX_MAC_NSTATS * sizeof(uint64_t));
 
+  /* Initialize filter and port just to get the media type. This media info
+   * is used by the vmkernel before calling startIO. After getting media info
+   * tear down port and filter efx module */
+  status = efx_filter_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_filter_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = efx_port_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_port_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_port_init;
+  }
+  efx_phy_media_type_get(pAdapter->pNic, &pPort->mediumType);
+
+  efx_port_fini(pAdapter->pNic);
+  efx_filter_fini(pAdapter->pNic);
+
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
+
   status = VMK_OK;
+
+  goto done;
+
+failed_port_init:
+  efx_filter_fini(pAdapter->pNic);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

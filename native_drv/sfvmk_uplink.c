@@ -1092,7 +1092,9 @@ static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
     goto done;
   }
 
-  efx_phy_media_type_get(pAdapter->pNic, &mediumType);
+  vmk_MutexLock(pAdapter->lock);
+  mediumType = pAdapter->port.mediumType;
+  vmk_MutexUnlock(pAdapter->lock);
 
   switch (mediumType) {
     case EFX_PHY_MEDIA_QSFP_PLUS:

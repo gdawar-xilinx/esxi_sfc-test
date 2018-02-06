@@ -775,11 +775,16 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 
   /* Probe  NIC and build the configuration data area. */
-  status = efx_nic_probe(pAdapter->pNic);
+  status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe failed status: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
                         vmk_StatusToString(status));
-    goto failed_nic_probe;
+    status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
+                          vmk_StatusToString(status));
+      goto failed_nic_probe;
+    }
   }
 
   /* Initialize NVRAM. */

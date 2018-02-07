@@ -812,7 +812,7 @@ if __name__=="__main__":
     cmd = 'esxcli ' + server + ' network nic list |grep sfvmk'
     sf_adapters = execute(cmd)
     if sf_adapters == 1:
-       print("CAUTION: Sfreport will be generated for sfvmk driver only.\n")
+       print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare NIC is NOT visible\n")
        sys.exit()
     if sf_adapters:
        for line in sf_adapters.split('\n'):

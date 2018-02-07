@@ -761,3 +761,102 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
 }
 
+/*! \brief  Get the PHY advertised capabilities
+**
+** \param[in]   pAdapter          pointer to sfvmk_adapter_t
+** \param[in]   efxPhyCap         EFX PHY capability
+**                                Supported value: EFX_PHY_CAP_DEFAULT for now
+** \param[out]  pSupportedModes   pointer to array of vmk_UplinkSupportedMode
+** \param[out]  pCount            number of supported modes
+**
+** \return:  void
+*/
+void
+sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
+                    vmk_UplinkSupportedMode *pSupportedModes,
+                    vmk_uint32 *pCount)
+{
+  vmk_uint32 index = 0;
+  efx_phy_cap_type_t cap;
+  vmk_uint32 supportedCaps;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+  efx_phy_adv_cap_get(pAdapter->pNic, efxPhyCap, &supportedCaps);
+
+  for (cap = EFX_PHY_CAP_10HDX; cap < EFX_PHY_CAP_NTYPES; cap++) {
+    if ((supportedCaps & (1U << cap)) == 0)
+      continue;
+
+    /* Only SFP and QSFP modules are supported */
+    pSupportedModes[index].media = VMK_LINK_MEDIA_UNKNOWN;
+
+    switch (cap) {
+      case EFX_PHY_CAP_10HDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        break;
+
+      case EFX_PHY_CAP_10FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_100HDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        break;
+
+      case EFX_PHY_CAP_100FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_1000HDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        break;
+
+      case EFX_PHY_CAP_1000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_10000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_25000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_40000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_50000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      case EFX_PHY_CAP_100000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        break;
+
+      default:
+        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                            "Unsupported cap = %d", cap);
+        continue;
+    }
+    index++;
+  }
+
+  *pCount = index;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PORT, SFVMK_LOG_LEVEL_DBG,
+                      "No of supported modes = %u", index);
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+}

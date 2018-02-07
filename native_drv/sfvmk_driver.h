@@ -523,6 +523,9 @@ VMK_ReturnStatus sfvmk_macStatsUpdate(sfvmk_adapter_t *pAdapter);
 void sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState);
 void sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed *pSpeed,
                            vmk_Bool *pAutoNeg);
+void sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
+                         vmk_UplinkSupportedMode *pSupportedModes,
+                         vmk_uint32 *pCount);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

@@ -1991,16 +1991,16 @@ done:
 
 /*! \brief  Update supported link modes for reporting to VMK interface
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[in]  efxPhyCap PHY capability to get, EFX_PHY_CAP_DEFAULT for now
+**                       EFX_PHY_CAP_CURRENT will be supported later
 **
 ** \return: void
 */
 void
-sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
+sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap)
 {
-  efx_phy_cap_type_t cap;
-  vmk_uint32 supportedCaps;
-  vmk_uint32 index = 0;
+  vmk_uint32 *pCount = NULL;
   vmk_UplinkSupportedMode *pSupportedModes = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -2010,84 +2010,15 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_DEFAULT, &supportedCaps);
+  if(efxPhyCap != EFX_PHY_CAP_DEFAULT) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid efxPhyCap [%u] value", efxPhyCap);
+    goto done;
+  }
 
   pSupportedModes = pAdapter->uplink.supportedModes;
+  pCount = &pAdapter->uplink.numSupportedModes;
 
-  for (cap = EFX_PHY_CAP_10HDX; cap < EFX_PHY_CAP_NTYPES; cap++) {
-    if ((supportedCaps & (1U << cap)) == 0)
-      continue;
-
-    /* Only SFP and QSFP modules are supported */
-    pSupportedModes[index].media = VMK_LINK_MEDIA_UNKNOWN;
-
-    switch (cap) {
-      case EFX_PHY_CAP_10HDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        break;
-
-      case EFX_PHY_CAP_10FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_100HDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        break;
-
-      case EFX_PHY_CAP_100FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_1000HDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        break;
-
-      case EFX_PHY_CAP_1000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_10000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_25000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_40000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_50000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      case EFX_PHY_CAP_100000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        break;
-
-      default:
-        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                            "Unsupported cap = %d", cap);
-        continue;
-    }
-    index++;
-  }
-  pAdapter->uplink.numSupportedModes = index;
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "No of supported modes = %u", index);
+  sfvmk_getPhyAdvCaps(pAdapter, efxPhyCap, pSupportedModes, pCount);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -2810,7 +2741,7 @@ sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter)
     goto failed_create_lock;
   }
 
-  sfvmk_updateSupportedCap(pAdapter);
+  sfvmk_updateSupportedCap(pAdapter, EFX_PHY_CAP_DEFAULT);
 
   /* Initialize shared data area */
   pSharedData = &pAdapter->uplink.sharedData;

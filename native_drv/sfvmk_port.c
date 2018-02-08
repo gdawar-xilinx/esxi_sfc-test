@@ -764,8 +764,8 @@ done:
 /*! \brief  Get the PHY advertised capabilities
 **
 ** \param[in]   pAdapter          pointer to sfvmk_adapter_t
-** \param[in]   efxPhyCap         EFX PHY capability
-**                                Supported value: EFX_PHY_CAP_DEFAULT for now
+** \param[in]   efxPhyCap         EFX PHY capability; either of
+**                                EFX_PHY_CAP_DEFAULT or EFX_PHY_CAP_CURRENT
 ** \param[out]  pSupportedModes   pointer to array of vmk_UplinkSupportedMode
 ** \param[out]  pCount            number of supported modes
 **

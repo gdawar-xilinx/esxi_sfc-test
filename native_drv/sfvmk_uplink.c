@@ -253,6 +253,25 @@ const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
    .selfTestRun          = sfvmk_selfTestRun,
 };
 
+
+/****************************************************************************
+ *               vmk_UplinkAdvertisedModesOps Handlers                      *
+ ****************************************************************************/
+static VMK_ReturnStatus
+sfvmk_advModesGet(vmk_AddrCookie driverData,
+                  vmk_UplinkAdvertisedMode *pModes,
+                  vmk_uint32 *pNumModes);
+
+static VMK_ReturnStatus
+sfvmk_advModesSet(vmk_AddrCookie driverData,
+                  vmk_UplinkAdvertisedMode *pModes,
+                  vmk_uint32 numModes);
+
+const static vmk_UplinkAdvertisedModesOps sfvmk_advModesOps = {
+  .getAdvertisedModes  = sfvmk_advModesGet,
+  .setAdvertisedModes  = sfvmk_advModesSet,
+};
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -1531,6 +1550,16 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /* Register advertise modes capability */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_ADVERTISE_MODES,
+                                 (vmk_UplinkAdvertisedModesOps *)&sfvmk_advModesOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_ADVERTISE_MODES failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
@@ -1992,8 +2021,8 @@ done:
 /*! \brief  Update supported link modes for reporting to VMK interface
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[in]  efxPhyCap PHY capability to get, EFX_PHY_CAP_DEFAULT for now
-**                       EFX_PHY_CAP_CURRENT will be supported later
+** \param[in]  efxPhyCap PHY capability to get, either of
+**                       EFX_PHY_CAP_DEFAULT or EFX_PHY_CAP_CURRENT
 **
 ** \return: void
 */
@@ -2010,13 +2039,16 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap)
     goto done;
   }
 
-  if(efxPhyCap != EFX_PHY_CAP_DEFAULT) {
+  if (efxPhyCap == EFX_PHY_CAP_DEFAULT) {
+    pSupportedModes = pAdapter->uplink.supportedModes;
+    pCount = &pAdapter->uplink.numSupportedModes;
+  } else if (efxPhyCap == EFX_PHY_CAP_CURRENT) {
+    pSupportedModes = pAdapter->uplink.advertisedModes;
+    pCount = &pAdapter->uplink.numAdvertisedModes;
+  } else {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid efxPhyCap [%u] value", efxPhyCap);
     goto done;
   }
-
-  pSupportedModes = pAdapter->uplink.supportedModes;
-  pCount = &pAdapter->uplink.numSupportedModes;
 
   sfvmk_getPhyAdvCaps(pAdapter, efxPhyCap, pSupportedModes, pCount);
 
@@ -4204,3 +4236,66 @@ done:
 
   return status;
 }
+
+/*! \brief uplink callback function to get advertised modes
+**
+** \param[in]        cookie     pointer to sfvmk_adapter_t
+** \param[out]       pModes     advertised modes being advertised by driver
+** \param[in, out]   pNumModes  number of advertised modes
+**
+** \return: VMK_OK on success, VMK_FAILURE otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_advModesGet(vmk_AddrCookie cookie,
+                  vmk_UplinkAdvertisedMode *pModes,
+                  vmk_uint32 *pNumModes)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 num;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto done;
+  }
+
+  /* update the current snapshot of advertised capabilities */
+  sfvmk_updateSupportedCap(pAdapter, EFX_PHY_CAP_CURRENT);
+
+  num = MIN(*pNumModes, pAdapter->uplink.numAdvertisedModes);
+  VMK_ASSERT_GT(num, 0);
+  vmk_Memcpy(pModes, pAdapter->uplink.advertisedModes,
+             num * sizeof(vmk_UplinkAdvertisedMode));
+  *pNumModes = num;
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief uplink callback function to set advertised modes
+**
+** \param[in]   cookie    pointer to sfvmk_adapter_t
+** \param[in]   pModes    advertised modes to be set
+** \param[in]   numModes  number of advertised modes
+**
+** \return: VMK_NOT_SUPPORTED
+**
+*/
+static VMK_ReturnStatus
+sfvmk_advModesSet(vmk_AddrCookie cookie,
+                  vmk_UplinkAdvertisedMode *pModes,
+                  vmk_uint32 numModes)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return VMK_NOT_SUPPORTED;
+}
+

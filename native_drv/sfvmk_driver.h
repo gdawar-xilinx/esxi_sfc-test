@@ -306,6 +306,9 @@ typedef struct sfvmk_uplink_s {
   /* Structure advertising a mode (speed/duplex/media) that is supported by an uplink. */
   vmk_UplinkSupportedMode    supportedModes[EFX_PHY_CAP_NTYPES];
   vmk_uint32                 numSupportedModes;
+  /* Currently advertised modes (speed/duplex/media) */
+  vmk_UplinkAdvertisedMode   advertisedModes[EFX_PHY_CAP_NTYPES];
+  vmk_uint32                 numAdvertisedModes;
   /* Uplink registration data. */
   vmk_UplinkRegData          regData;
   /* Data shared between uplink layer and NIC driver. */

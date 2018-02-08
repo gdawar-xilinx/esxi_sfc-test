@@ -101,7 +101,7 @@ static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
   vmk_ByteCount maxSize = 0;
-  vmk_HeapAllocationDescriptor allocDesc[19];
+  vmk_HeapAllocationDescriptor allocDesc[20];
   VMK_ReturnStatus status;
 
   allocDesc[0].size = vmk_LogHeapAllocSize();
@@ -183,7 +183,10 @@ sfvmk_calcHeapSize(void)
   allocDesc[18].alignment = 0;
   allocDesc[18].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
 
-  /* TODO: Add space for firmware download */
+  /* Allocaion done for both Signed and Unsigned Image type*/
+  allocDesc[19].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
+  allocDesc[19].alignment = 0;
+  allocDesc[19].count = 1;
 
   status = vmk_HeapDetermineMaxSize(allocDesc,
                                     sizeof(allocDesc) / sizeof(allocDesc[0]),

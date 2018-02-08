@@ -51,6 +51,7 @@
  ** SFVMK_CB_VERINFO_GET:              Get various version info
  ** SFVMK_CB_INTR_MODERATION_REQUEST:  Change Interrupt Moderation settings
  ** SFVMK_CB_NVRAM_REQUEST:            NVRAM operations callback
+ ** SFVMK_CB_IMG_UPDATE:               Perform Image Update
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -63,6 +64,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_VERINFO_GET,
   SFVMK_CB_INTR_MODERATION_REQUEST,
   SFVMK_CB_NVRAM_REQUEST,
+  SFVMK_CB_IMG_UPDATE,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -401,6 +403,21 @@ typedef	struct sfvmk_nvramCmd_s {
   vmk_uint8         data[SFVMK_NVRAM_MAX_PAYLOAD];
 } __attribute__((__packed__)) sfvmk_nvramCmd_t;
 
+/*! \brief struct sfvmk_imgUpdate_s to update
+ **       firmware image
+ **
+ ** pFileBuffer[in]    Pointer to Buffer Containing
+ **                    Update File's contents
+ **
+ ** size[in]           size of the update file
+ **
+ */
+typedef struct sfvmk_imgUpdate_s{
+  vmk_uint64          pFileBuffer;
+  vmk_uint32          size;
+} __attribute__((__packed__)) sfvmk_imgUpdate_t;
+
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -473,6 +490,11 @@ VMK_ReturnStatus sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
                                          sfvmk_mgmtDevInfo_t *pDevIface,
                                          sfvmk_nvramCmd_t *pNvrCmd);
 
+VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
+                                             vmk_MgmtEnvelope *pEnvelope,
+                                             sfvmk_mgmtDevInfo_t *pDevIface,
+                                             sfvmk_imgUpdate_t *pImgUpdate);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -488,6 +510,7 @@ VMK_ReturnStatus sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtVerInfoCallback NULL
 #define sfvmk_mgmtIntrModeration NULL
 #define sfvmk_mgmtNVRAMCallback NULL
+#define sfvmk_mgmtImgUpdateCallback NULL
 #endif
 
 #endif

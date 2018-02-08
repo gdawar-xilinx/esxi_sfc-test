@@ -27,7 +27,6 @@
 #include "efx_mcdi.h"
 #include "efx_regs_mcdi.h"
 #include "sfvmk_driver.h"
-#include "sfvmk_mgmt_interface.h"
 
 static const efx_nvram_type_t nvramTypes[] = {
   [SFVMK_NVRAM_BOOTROM]     = EFX_NVRAM_BOOTROM,
@@ -733,6 +732,83 @@ sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
 
 end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback to perform Image Update
+**
+** \param[in]      pCookies    pointer to cookie
+** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
+** \param[in/out]  pDevIface   pointer to sfvmk_mgmtDevInfo_t
+** \param[in/out]  pImgUpdate  pointer to sfvmk_imgUpdate_t structure
+**
+** \return VMK_OK
+**     Below error values are filled in the status field of
+**     sfvmk_mgmtDevInfo_t.
+**     VMK_NOT_FOUND      :  In case of dev not found
+**     VMK_BAD_PARAM      :  Invalid Ioctl option or wrong
+**                           input param
+**     VMK_NO_MEMORY      :  Memory Allocation failed
+**     VMK_NOT_SUPPORTED  :  Unsupported Firmware type
+**     VMK_FAILURE        :  Copy from User or NVRAM operation failure
+**
+*/
+VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_imgUpdate_t *pImgUpdate)
+{
+  sfvmk_adapter_t  *pAdapter = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (!pImgUpdate) {
+    SFVMK_ERROR("pImgUpdate: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (pImgUpdate->size == 0) {
+    SFVMK_ERROR("pImgUpdate: Invalid file size");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (!pImgUpdate->pFileBuffer) {
+    SFVMK_ERROR("pFileBuffer: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found", pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto semunlock;
+  }
+
+  status = sfvmk_performUpdate(pImgUpdate, pAdapter);
+  if (status != VMK_OK)
+  {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Update Operation failed for deivce");
+    pDevIface->status = status;
+    goto semunlock;
+  }
+
+  pDevIface->status = VMK_OK;
+
+semunlock:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+
+end:
   return VMK_OK;
 }
 

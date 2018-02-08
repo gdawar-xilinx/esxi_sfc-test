@@ -176,6 +176,10 @@ def vmkernel_logs(output_file):
     output_file.write('<h1 id="VMkernel logs"style="font-size:26px;"> VMkernel logs: <br></H1>')
     dmesg_logs = execute('dmesg -c |grep sfvmk')
     lines = ('<p>')
+    if dmesg_logs == 1:
+       lines += 'No logs specific to sfvmk were found' 
+       output_file.write('%s</p>'%lines)
+       return
     dmesg = dmesg_logs.split('\n')
     for line in dmesg:
         lines += '<small>%s</small><br>'%line

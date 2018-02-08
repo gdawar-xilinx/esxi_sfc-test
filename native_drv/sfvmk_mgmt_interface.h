@@ -215,6 +215,8 @@ typedef struct sfvmk_vpdInfo_s {
 } __attribute__((__packed__)) sfvmk_vpdInfo_t;
 
 /* Define various link speed numbers supported by SFVMK driver */
+#define SFVMK_LINK_SPEED_10_MBPS    10
+#define SFVMK_LINK_SPEED_100_MBPS   100
 #define SFVMK_LINK_SPEED_1000_MBPS  1000
 #define SFVMK_LINK_SPEED_10000_MBPS 10000
 #define SFVMK_LINK_SPEED_25000_MBPS 25000

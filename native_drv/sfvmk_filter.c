@@ -129,6 +129,54 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
   return status;
 }
 
+/*! \brief  Prepare a VxLAN filter rule
+ * **
+ * ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
+ * ** \param[in]      innerMAC   pointer to inner MAC address
+ * ** \param[in]      outerMAC   pointer to outer MAC address
+ * ** \param[in]      vxlanID    vxlan ID
+ * ** \param[in/out]  pFdbEntry  pointer to filter DB entry
+ * **
+ * ** \return: VMK_OK if success, error number if failed
+ * **
+ * */
+static VMK_ReturnStatus
+sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
+                            vmk_EthAddress innerMac,
+                            vmk_EthAddress outerMac,
+                            vmk_VlanID vxlanID,
+                            sfvmk_filterDBEntry_t *pFdbEntry)
+{
+  VMK_ReturnStatus status = VMK_OK;
+  vmk_uint8 vni[EFX_VNI_OR_VSID_LEN];
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
+                      "Create VXLAN Filter %p: VXLAN ID %u"
+                      " %02x:%02x:%02x:%02x:%02x:%02x"
+                      " %02x:%02x:%02x:%02x:%02x:%02x",
+                      pFdbEntry, vxlanID,
+                      innerMac[0], innerMac[1], innerMac[2],
+                      innerMac[3], innerMac[4], innerMac[5],
+                      outerMac[0], outerMac[1], outerMac[2],
+                      outerMac[3], outerMac[4], outerMac[5]);
+
+  vni[0] = vxlanID & 0xFF;
+  vni[1] = (vxlanID >> 8) & 0xFF;
+  vni[2] = (vxlanID >> 16) & 0xFF;
+
+  status = efx_filter_spec_set_vxlan_full(&pFdbEntry->spec,
+                                          vni,
+                                          innerMac,
+                                          outerMac);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Prepare VxLAN HW filter "
+                        "failed with error code %s",
+                        vmk_StatusToString(status));
+  }
+
+  return status;
+}
+
 /*! \brief  Prepare a hardware filter rule
 **
 ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
@@ -186,8 +234,15 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
       status = VMK_NOT_SUPPORTED;
       break;
 
-    /* TODO: Will add support for these in future */
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
+      status = sfvmk_prepareVXLANFilterRule(pAdapter,
+                                            pFilter->vxlanFilterInfo->innerMAC,
+                                            pFilter->vxlanFilterInfo->outerMAC,
+                                            pFilter->vxlanFilterInfo->vxlanID,
+                                            pFdbEntry);
+      break;
+
+    /* TODO: Will add support for GENEVE in future */
     case VMK_UPLINK_QUEUE_FILTER_CLASS_GENEVE:
     default:
       SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not supported",

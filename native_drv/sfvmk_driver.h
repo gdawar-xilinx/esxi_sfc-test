@@ -390,6 +390,8 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 numEvqsAllotted;
   vmk_uint32                 numTxqsAllotted;
   vmk_uint32                 numRxqsAllotted;
+  vmk_uint32                 numRSSQs;
+  vmk_uint32                 numNetQs;
   /* Interrupt moderation in micro seconds */
   vmk_uint32                 intrModeration;
 
@@ -409,7 +411,6 @@ typedef struct sfvmk_adapter_s {
   size_t                     rxBufferStartAlignment;
   /* Max frame size that should be accepted */
   size_t                     rxMaxFrameSize;
-  vmk_Bool                   enableRSS;
 
   sfvmk_port_t               port;
 
@@ -555,7 +556,47 @@ VMK_ReturnStatus sfvmk_rxStart(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState);
 void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
 void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
+VMK_ReturnStatus sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
+                                 vmk_uint8 *pKey,
+                                 vmk_uint32 keySize,
+                                 vmk_uint32 *pIndTable,
+                                 vmk_uint32 indTableSize);
 
+/*! \brief disable RSS by making numRSSQs as 0  in adapter data structure
+**
+** \param[in]  pAdapter  pointer to adapter structure
+**
+** \return: none
+*/
+static inline void sfvmk_disableRSS(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  pAdapter->numRSSQs = 0;
+}
+
+/*! \brief Check if RSS enable by checking numRSSQs
+**
+** \param[in]  pAdapter  pointer to adapter structure
+**
+** \return: VMK_TRUE if RSS is enable VMK_FALSE otherwise
+*/
+static inline vmk_Bool sfvmk_isRSSEnable(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  return (pAdapter->numRSSQs > 0) ;
+}
+
+/*! \brief Get RSS start queue index
+**
+** \param[in]  pAdapter  pointer to adapter structure
+**
+** \return:  RSS start queue index
+*/
+static inline vmk_uint32 sfvmk_getRSSQStartIndex(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  return pAdapter->numNetQs;
+}
 /* Functions for Uplink filter handling */
 VMK_ReturnStatus sfvmk_allocFilterDBHash(sfvmk_adapter_t *pAdapter);
 void sfvmk_freeFilterDBHash(sfvmk_adapter_t *pAdapter);

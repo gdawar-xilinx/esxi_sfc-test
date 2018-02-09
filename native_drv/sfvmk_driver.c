@@ -445,6 +445,8 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   else if (modParams.rssQCount == 1)
     modParams.rssQCount = 0;
 
+  pAdapter->numNetQs = modParams.netQCount;
+
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
   limits.edl_max_evq_count = MIN((modParams.netQCount + modParams.rssQCount),
                                  MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count));

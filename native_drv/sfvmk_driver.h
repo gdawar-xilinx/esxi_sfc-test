@@ -205,8 +205,9 @@ typedef struct sfvmk_txMapping_s {
 } sfvmk_txMapping_t;
 
 typedef enum {
-   SFVMK_TX_TSO  = 1 << 0,
-   SFVMK_TX_VLAN = 1 << 1,
+   SFVMK_TX_TSO       = 1 << 0,
+   SFVMK_TX_VLAN      = 1 << 1,
+   SFVMK_TX_ENCAP_TSO = 1 << 2,
 } sfvmk_offloadType_t;
 
 typedef enum {
@@ -221,7 +222,9 @@ typedef struct sfvmk_xmitInfo_s {
    vmk_uint32          headerLen;
    vmk_uint32          firstSgLen;
    vmk_uint32          mss;
+   /* IPv4 packet ID from the original/inner packet */
    vmk_uint16          packetId;
+   vmk_uint16          outerPacketId;
    vmk_uint32          dmaDescsEst;
 
    /* pXmitPkt is the one we need to transmit. pOrigPkt is the one forwarded by
@@ -231,6 +234,16 @@ typedef struct sfvmk_xmitInfo_s {
    vmk_PktHandle       *pOrigPkt;
    vmk_PktHandle       *pXmitPkt;
 } sfvmk_xmitInfo_t;
+
+typedef struct sfvmk_hdrInfo_s {
+  vmk_PktHeaderEntry  *pHdrEntry;
+  void                *pMappedPtr;
+} sfvmk_hdrInfo_t;
+
+typedef struct sfvmk_hdrParseCtrl_s {
+    vmk_uint16       expHdrType;
+    sfvmk_hdrInfo_t  *pHdrInfo;
+} sfvmk_hdrParseCtrl_t;
 
 typedef struct sfvmk_txq_s {
   struct sfvmk_adapter_s  *pAdapter;

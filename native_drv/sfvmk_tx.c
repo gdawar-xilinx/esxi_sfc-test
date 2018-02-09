@@ -37,6 +37,30 @@
 #define SFVMK_VLAN_VID_MASK                   0x0fff
 #define SFVMK_TX_TSO_DMA_DESC_MAX             EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX
 
+static sfvmk_hdrInfo_t sfvmk_ipHdr      = {NULL, NULL};
+static sfvmk_hdrInfo_t sfvmk_tcpHdr     = {NULL, NULL};
+static sfvmk_hdrInfo_t sfvmk_encapIpHdr = {NULL, NULL};
+
+static
+sfvmk_hdrParseCtrl_t sfvmk_tsoHdrList[] = {
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
+  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_ipHdr},
+  { VMK_PKT_HEADER_L4_TCP,           &sfvmk_tcpHdr},
+  { 0,                               NULL}
+};
+
+static
+sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
+  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_ipHdr},
+  { VMK_PKT_HEADER_L4_UDP,           NULL},
+  { VMK_PKT_HEADER_ENCAP_VXLAN,      NULL},
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
+  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_encapIpHdr},
+  { VMK_PKT_HEADER_L4_TCP,           &sfvmk_tcpHdr},
+  { 0,                               NULL}
+};
+
 /*! \brief  Allocate resources required for a particular TX queue.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -173,7 +197,8 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pCfg);
 
   if ((pCfg->enc_features & EFX_FEATURE_FW_ASSISTED_TSO_V2) &&
-      (pCfg->enc_fw_assisted_tso_v2_enabled)) {
+      ((pCfg->enc_fw_assisted_tso_v2_enabled) ||
+       (pCfg->enc_fw_assisted_tso_v2_encap_enabled))) {
     pAdapter->isTsoFwAssisted = VMK_TRUE;
   } else {
     pAdapter->isTsoFwAssisted = VMK_FALSE;
@@ -758,7 +783,8 @@ sfvmk_txDmaDescEstimate(sfvmk_txq_t *pTxq,
      numDesc += SFVMK_TXD_NEEDED(pSge->length, pAdapter->txDmaDescMaxSize);
   }
 
-  if (pXmitInfo->offloadFlag & SFVMK_TX_TSO) {
+  if ((pXmitInfo->offloadFlag & SFVMK_TX_TSO) ||
+      (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
     /* For hw TSO, due to hardware constraint, headers and data must be
      * placed on different desc, so we assume 1 more desc is needed to separate
      * headers and data in the first SG. If the first SG contains exactly the
@@ -1020,151 +1046,180 @@ done:
 */
 static inline VMK_ReturnStatus
 sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
-                    vmk_PktHandle *pkt,
-                    sfvmk_xmitInfo_t *pXmitInfo)
+                   vmk_PktHandle *pkt,
+                   sfvmk_xmitInfo_t *pXmitInfo)
 {
-   VMK_ReturnStatus     status = VMK_FAILURE;
-   sfvmk_adapter_t      *pAdapter = NULL;
-   vmk_PktHeaderEntry   *pL2HdrEntry = NULL;
-   vmk_PktHeaderEntry   *pL3HdrEntry = NULL;
-   vmk_PktHeaderEntry   *pL4HdrEntry = NULL;
-   vmk_IPv4Hdr          *pL3Hdr = NULL;
-   vmk_TCPHdr           *pL4Hdr = NULL;
-   const efx_nic_cfg_t  *pCfg = NULL;
-   vmk_uint32           tcphOff = 0;
-   vmk_uint32           totalHdrLen = 0;
-   vmk_uint32           firstSgLen = 0;
+  VMK_ReturnStatus       status = VMK_FAILURE;
+  sfvmk_adapter_t        *pAdapter = NULL;
+  const  efx_nic_cfg_t   *pCfg = NULL;
+  vmk_uint32             tcphOff = 0;
+  vmk_uint32             totalHdrLen = 0;
+  vmk_uint32             firstSgLen = 0;
+  vmk_TCPHdr             *pTcpHdr = NULL;
+  vmk_uint16             hdrIndex;
+  sfvmk_hdrParseCtrl_t   *pExpectHdrList = NULL;
 
-   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
-   VMK_ASSERT_NOT_NULL(pTxq);
-   pAdapter = pTxq->pAdapter;
-   VMK_ASSERT_NOT_NULL(pAdapter);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
-   pCfg = efx_nic_cfg_get(pAdapter->pNic);
-   if (pCfg == NULL) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "pCfg pointer NULL");
-     status = VMK_FAILURE;
-     goto done;
-   }
+  VMK_ASSERT_NOT_NULL(pTxq);
+  pAdapter = pTxq->pAdapter;
+  VMK_ASSERT_NOT_NULL(pAdapter);
 
-   pXmitInfo->pOrigPkt = pkt;
+  pCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "pCfg pointer NULL");
+    status = VMK_FAILURE;
+    goto done;
+  }
 
-   status = vmk_PktHeaderL4Find(pkt, &pL4HdrEntry, NULL);
-   if (status != VMK_OK) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to find L4 header: %s",
-                         vmk_StatusToString(status));
-     goto done;
-   }
+  pXmitInfo->pOrigPkt = pkt;
 
-   status = vmk_PktHeaderL3Find(pkt, &pL3HdrEntry, NULL);
-   if (status != VMK_OK) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to find L3 header: %s",
-                         vmk_StatusToString(status));
-     goto done;
-   }
+  if (vmk_PktIsInnerOffload(pkt)  &&
+      (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
+   pExpectHdrList = sfvmk_encapTsoHdrList;
+  }
+  else if (pXmitInfo->offloadFlag & SFVMK_TX_TSO) {
+    pExpectHdrList = sfvmk_tsoHdrList;
+  }
+  else {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected Offload flag : 0x%x",
+                        pXmitInfo->offloadFlag);
+    status = VMK_FAILURE;
+    goto done;
+  }
 
-   status = vmk_PktHeaderL2Find(pkt, &pL2HdrEntry, NULL);
-   if (status != VMK_OK) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to find L2 header: %s",
-                         vmk_StatusToString(status));
-     goto done;
-   }
+  for (hdrIndex = 0; pExpectHdrList[hdrIndex].expHdrType != 0; hdrIndex++) {
+    vmk_PktHeaderEntry   *pHdrEntry = NULL;
 
-   /* Check L3 protocol */
-   if ((pL2HdrEntry->nextHdrProto != VMK_ETH_TYPE_IPV4_NBO) &&
-      (pL2HdrEntry->nextHdrProto != VMK_ETH_TYPE_IPV6_NBO)) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "Non IP packet in TSO handling, protocol: %u",
-                         vmk_CPUToBE16(pL2HdrEntry->nextHdrProto));
-     status = VMK_FAILURE;
-     goto done;
-   }
-
-   /* Check L4 protocol */
-   if (pL3HdrEntry->nextHdrProto != VMK_IP_PROTO_TCP) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "Non TCP packet in TSO handling");
-     status = VMK_FAILURE;
-     goto done;
-   }
-
-   /* SF NIC cannot use FW assisted TSO if TCP header offset is beyond limit(208)
-    * In practice, max offset of TCP header should be
-    * Ethernet(14) + ipv4(20~60)/ipv6(40) + ipv6 extension header
-    * Since we don't claim any offload for IPv6 with extension headers, it's
-    * impossible to exceed enc_tx_tso_tcp_header_offset_limit(208), so simply
-    * drop the pkt. Refer section 2.3.3 of Doxbox doc SF-108452-SW for details.
-    */
-
-   tcphOff = pL3HdrEntry->nextHdrOffset;
-   if (VMK_UNLIKELY(tcphOff > pCfg->enc_tx_tso_tcp_header_offset_limit)) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Tcp hdr offset: %u beyond limit: %u",
-                          tcphOff, pCfg->enc_tx_tso_tcp_header_offset_limit);
-      status = VMK_FAILURE;
+    if ((status = vmk_PktHeaderEntryGet(pkt, hdrIndex, &pHdrEntry)) != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get pkt header entry: %s"
+                          "at index: %u",vmk_StatusToString(status), hdrIndex);
       goto done;
-   }
+    }
 
-   if (pL2HdrEntry->nextHdrProto == VMK_ETH_TYPE_IPV4_NBO) {
-      status = vmk_PktHeaderDataGet(pkt, pL3HdrEntry, (void **)&pL3Hdr);
-      if (status != VMK_OK) {
-         SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get L3 header data");
-         goto done;
-      }
-      pXmitInfo->packetId = pL3Hdr->identification;
-      vmk_PktHeaderDataRelease(pkt, pL3HdrEntry, (void *)pL3Hdr, VMK_FALSE);
-   } else {
+    if ((pHdrEntry->type & pExpectHdrList[hdrIndex].expHdrType) !=
+         pExpectHdrList[hdrIndex].expHdrType) {
+	SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected hdr type 0x%x. Expected = 0x%x",
+        pHdrEntry->type, pExpectHdrList[hdrIndex].expHdrType);
+	goto done;
+    }
+
+   if (pExpectHdrList[hdrIndex].pHdrInfo != NULL) {
+       pExpectHdrList[hdrIndex].pHdrInfo->pHdrEntry = pHdrEntry;
+       status = vmk_PktHeaderDataGet(pkt, pHdrEntry,
+				     (void **) &(pExpectHdrList[hdrIndex].pHdrInfo->pMappedPtr));
+       if (status != VMK_OK) {
+         SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get pkt header: %s at index: %u",
+                             vmk_StatusToString(status), hdrIndex);
+	 goto done;
+       }
+    }
+  }
+
+  if (sfvmk_ipHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
+    pXmitInfo->packetId = ((vmk_IPv4Hdr *)sfvmk_ipHdr.pMappedPtr)->identification;
+  else if (sfvmk_ipHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
+    pXmitInfo->packetId = 0;
+  else {
+    status = VMK_FAILURE;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected L3 header type: 0x%x,"
+                        "expected is : 0x%x or 0x%x",
+                        sfvmk_ipHdr.pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
+                        VMK_PKT_HEADER_L3_IPv6);
+    goto done;
+  }
+
+  if (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO) {
+    /* move packetId to outerPacketId as the packet is enncapsulated */
+    pXmitInfo->outerPacketId = pXmitInfo->packetId;
+    if (sfvmk_encapIpHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
+      pXmitInfo->packetId = ((vmk_IPv4Hdr *)sfvmk_encapIpHdr.pMappedPtr)->identification;
+    else if (sfvmk_encapIpHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
       pXmitInfo->packetId = 0;
-   }
-
-   status = vmk_PktHeaderDataGet(pkt, pL4HdrEntry, (void **)&pL4Hdr);
-   if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get L4 header data");
-      goto done;
-   }
-
-   if(((vmk_TCPHdr *)pL4Hdr)->syn || ((vmk_TCPHdr *)pL4Hdr)->urg) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "incompatible TCP flag 0x%x on TSO packet",
-                ((vmk_TCPHdr *)pL4Hdr)->flags);
+    else {
       status = VMK_FAILURE;
+      SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected Encap L3 header type: 0x%x,"
+                          "expected is : 0x%x or 0x%x",
+                          sfvmk_encapIpHdr.pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
+                          VMK_PKT_HEADER_L3_IPv6);
       goto done;
-   }
+    }
+  }
 
-   pXmitInfo->seqNumNbo = vmk_CPUToBE32(((vmk_TCPHdr *)pL4Hdr)->seq);
-   vmk_PktHeaderDataRelease(pkt, pL4HdrEntry, (void *)pL4Hdr, VMK_FALSE);
+  /* SF NIC cannot use FW assisted TSO if TCP header offset is beyond limit(208)
+   * In practice, max offset of TCP header should be
+   * Ethernet(14) + ipv4(20~60)/ipv6(40) + ipv6 extension header +
+   * UDP(8) + VXLAN(8) + Ethernet(14) + ip4(20~60)/6(40) for vxlan pkts
+   * Since we don't claim any offload for IPv6 with extension headers, it's
+   * impossible to exceed enc_tx_tso_tcp_header_offset_limit(208), so simply
+   * drop the pkt. Refer section 2.3.3 of Doxbox doc SF-108452-SW for details.
+   */
+  tcphOff = sfvmk_tcpHdr.pHdrEntry->nextHdrOffset;
 
-   /* Check if need to defragment headers to leverage hw TSO */
-   firstSgLen = vmk_PktSgElemGet(pkt, 0)->length;
-   totalHdrLen = pL4HdrEntry->nextHdrOffset;
-   if (firstSgLen < totalHdrLen) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                          "Pkt headers are fragmented, headerLen = %u, first SG len = %u",
-                          totalHdrLen, firstSgLen);
-      pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_HEADER;
-   }
+  if (VMK_UNLIKELY(tcphOff > pCfg->enc_tx_tso_tcp_header_offset_limit)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Tcp hdr offset: %u beyond limit: %u",
+                        tcphOff, pCfg->enc_tx_tso_tcp_header_offset_limit);
+    status = VMK_FAILURE;
+    goto done;
+  }
 
-   /* Correct the over-estimation if the first SG fully covers all the headers
-    * without any payload data.
-    */
-   if (firstSgLen == totalHdrLen) {
-     pXmitInfo->dmaDescsEst -= 1;
-     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                         "Estimated number of DMA desc adjusted to %u",
+  pTcpHdr = (vmk_TCPHdr *)sfvmk_tcpHdr.pMappedPtr;
+  if(pTcpHdr->syn || pTcpHdr->urg) {
+     SFVMK_ADAPTER_ERROR(pAdapter, "incompatible TCP flag 0x%x on TSO packet",
+     (pTcpHdr->flags));
+     status = VMK_FAILURE;
+     goto done;
+  }
+
+  pXmitInfo->seqNumNbo = vmk_CPUToBE32(pTcpHdr->seq);
+
+  /* Check if need to defragment headers to leverage hw TSO */
+  firstSgLen = vmk_PktSgElemGet(pkt, 0)->length;
+  totalHdrLen = sfvmk_tcpHdr.pHdrEntry->nextHdrOffset;
+
+  if (firstSgLen < totalHdrLen) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                        "Pkt headers are fragmented, headerLen = %u, first SG len = %u",
+                        totalHdrLen, firstSgLen);
+    pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_HEADER;
+  }
+
+  /* Correct the over-estimation if the first SG fully covers all the headers
+   * without any payload data.
+   */
+  if (firstSgLen == totalHdrLen) {
+    pXmitInfo->dmaDescsEst -= 1;
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                        "Estimated number of DMA desc adjusted to %u",
                          pXmitInfo->dmaDescsEst);
-   }
+  }
 
-   /* Check if the number of desc is beyond limit */
-   if (pXmitInfo->dmaDescsEst > SFVMK_TX_TSO_DMA_DESC_MAX) {
-     pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_SGES;
-     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                         "Estimated no of DMA desc[%u] beyond limit of FATSOv2",
-                         pXmitInfo->dmaDescsEst);
-   }
+  /* Check if the number of desc is beyond limit */
+  if (pXmitInfo->dmaDescsEst > SFVMK_TX_TSO_DMA_DESC_MAX) {
+    pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_SGES;
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                        "Estimated no of DMA desc[%u] beyond limit of FATSOv2",
+                        pXmitInfo->dmaDescsEst);
+  }
 
-   pXmitInfo->headerLen = totalHdrLen;
-   pXmitInfo->firstSgLen = firstSgLen;
-   pXmitInfo->mss = vmk_PktGetLargeTcpPacketMss(pkt);
+  pXmitInfo->headerLen = totalHdrLen;
+  pXmitInfo->firstSgLen = firstSgLen;
+  pXmitInfo->mss = vmk_PktGetLargeTcpPacketMss(pkt);
 
 done:
-   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
-   return status;
+  if (sfvmk_ipHdr.pMappedPtr)
+    vmk_PktHeaderDataRelease(pkt, sfvmk_ipHdr.pHdrEntry,
+                             (void *)sfvmk_ipHdr.pMappedPtr, VMK_FALSE);
+  if (sfvmk_encapIpHdr.pMappedPtr)
+    vmk_PktHeaderDataRelease(pkt, sfvmk_encapIpHdr.pHdrEntry,
+                             (void *)sfvmk_encapIpHdr.pMappedPtr, VMK_FALSE);
+  if (pTcpHdr)
+    vmk_PktHeaderDataRelease(pkt, sfvmk_tcpHdr.pHdrEntry,
+                             (void *)pTcpHdr, VMK_FALSE);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+
+  return status;
 }
 
 /*! \brief Re-structure the packet to fix FATSOv2 constraint violations.
@@ -1295,7 +1350,7 @@ sfvmk_hwTsoOptDesc(sfvmk_txq_t *pTxq,
 
    efx_tx_qdesc_tso2_create(pTxq->pCommonTxq,
                             pXmitInfo->packetId,
-                            0,
+                            pXmitInfo->outerPacketId,
                             pXmitInfo->seqNumNbo,
                             pXmitInfo->mss,
                             desc,
@@ -1305,8 +1360,10 @@ sfvmk_hwTsoOptDesc(sfvmk_txq_t *pTxq,
    *pId = (*pId + EFX_TX_FATSOV2_OPT_NDESCS) & pTxq->ptrMask;
 
    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                       "TSO opt desc pktID = %u, seqNumNbo = %u, mss = %u",
-                       pXmitInfo->packetId, pXmitInfo->seqNumNbo, pXmitInfo->mss);
+                       "TSO opt desc pktID = %u, outerPktID = %u,"
+                       "seqNumNbo = %u, mss = %u",
+                       pXmitInfo->packetId, pXmitInfo->outerPacketId,
+                       pXmitInfo->seqNumNbo, pXmitInfo->mss);
 }
 
 /*! \brief Prepare and dispatch packet using FATSOv2
@@ -1356,9 +1413,10 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "TSO desc, pXmitPkt=%p, pOrigPkt=%p, numElems=%u "
-                      "mss=%u, headerLen=%u, pktId=%u, startID=%u",
+                      "mss=%u, headerLen=%u, pktId=%u, outerPktId=%u, startID=%u",
                       pXmitPkt, pOrigPkt, numElems, pXmitInfo->mss,
-                      pXmitInfo->headerLen, pXmitInfo->packetId, startID);
+                      pXmitInfo->headerLen, pXmitInfo->packetId,
+                      pXmitInfo->outerPacketId, startID);
 
   /* options desc */
   sfvmk_hwTsoOptDesc(pTxq, pXmitInfo, &id);
@@ -1596,7 +1654,8 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    }
 
    /* TSO handling*/
-   if (pXmitInfo->offloadFlag & SFVMK_TX_TSO) {
+   if ((pXmitInfo->offloadFlag & SFVMK_TX_TSO) ||
+       (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
      status = sfvmk_txHwTso(pTxq, pXmitInfo, &txMapId);
      if (status != VMK_OK) {
        SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx TSO failed: %s",
@@ -1677,12 +1736,15 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   vmk_Memset(&xmitInfo, 0, sizeof(sfvmk_xmitInfo_t));
   xmitInfo.offloadFlag |= vmk_PktMustVlanTag(pkt) ? SFVMK_TX_VLAN : 0;
   xmitInfo.offloadFlag |= vmk_PktIsLargeTcpPacket(pkt) ? SFVMK_TX_TSO : 0;
+  xmitInfo.offloadFlag |= vmk_PktIsInnerLargeTcpPacket(pkt) ? SFVMK_TX_ENCAP_TSO : 0;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "Xmit start, pkt = %p, TX VLAN offload %s needed, "
-                      "TSO %sabled numElems = %u, pktLen = %u", pkt,
+                      "TSO %sabled ENCAP_TSO %sabled numElems = %u,"
+                      "pktLen = %u", pkt,
                       xmitInfo.offloadFlag & SFVMK_TX_VLAN ? "" : "not ",
                       xmitInfo.offloadFlag & SFVMK_TX_TSO  ? "en" : "dis",
+                      xmitInfo.offloadFlag & SFVMK_TX_ENCAP_TSO  ? "en" : "dis",
                       vmk_PktSgArrayGet(pkt)->numElems,
                       vmk_PktFrameLenGet(pkt));
 
@@ -1713,7 +1775,8 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   xmitInfo.pOrigPkt = NULL;
   xmitInfo.pXmitPkt = pkt;
 
-  if (xmitInfo.offloadFlag & SFVMK_TX_TSO) {
+  if ((xmitInfo.offloadFlag & SFVMK_TX_TSO) ||
+      (xmitInfo.offloadFlag & SFVMK_TX_ENCAP_TSO)) {
     status = sfvmk_fillXmitInfo(pTxq, pkt, &xmitInfo);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "failed to parse xmit pkt info");

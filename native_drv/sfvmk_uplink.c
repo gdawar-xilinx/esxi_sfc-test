@@ -4555,7 +4555,7 @@ sfvmk_rssStateInit(vmk_AddrCookie cookie,
 
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pRssHashKey);
-  VMK_ASSERT_NOT_NULL(pRSSIndTable);
+  VMK_ASSERT_NOT_NULL(pRssIndTable);
 
   vmk_MutexLock(pAdapter->lock);
 
@@ -4619,7 +4619,7 @@ sfvmk_rssIndTableUpdate(vmk_AddrCookie cookie,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
-  VMK_ASSERT_NOT_NULL(pRSSIndTable);
+  VMK_ASSERT_NOT_NULL(pRssIndTable);
 
   vmk_MutexLock(pAdapter->lock);
 

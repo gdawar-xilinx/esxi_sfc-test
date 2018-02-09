@@ -521,6 +521,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   vmk_SpinlockLock(pTxq->lock);
   pTxq->isCso = VMK_TRUE;
+  pTxq->isEncapCso = VMK_FALSE;
   pTxq->pTxMap = pTxMap;
   pTxq->pPendDesc = pPendDesc;
   pTxq->nPendDesc = 0;
@@ -1526,15 +1527,22 @@ done:
 **
 */
 static void
-sfvmk_txCreateCsumDesc(sfvmk_txq_t *pTxq, vmk_Bool isCso) {
+sfvmk_txCreateCsumDesc(sfvmk_txq_t *pTxq, vmk_Bool isCso, vmk_Bool isEncapCso) {
+
+  vmk_uint16 flags = 0;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_TX);
   SFVMK_ADAPTER_DEBUG(pTxq->pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "isCso: %u", isCso);
+                      "isCso: %u, isEncapCso: %u", isCso, isEncapCso);
+
+  if(isCso)
+    flags = EFX_TXQ_CKSUM_TCPUDP | EFX_TXQ_CKSUM_IPV4;
+
+  if(isEncapCso)
+    flags |= EFX_TXQ_CKSUM_INNER_TCPUDP | EFX_TXQ_CKSUM_INNER_IPV4;
 
   efx_tx_qdesc_checksum_create(pTxq->pCommonTxq,
-                               (isCso == VMK_TRUE) ?
-                               (EFX_TXQ_CKSUM_TCPUDP|EFX_TXQ_CKSUM_IPV4):0,
+                               flags,
                                &pTxq->pPendDesc[pTxq->nPendDesc ++]);
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_TX);
@@ -1557,6 +1565,7 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
    vmk_uint32 txMapId = (pTxq->added) & pTxq->ptrMask;
    vmk_Bool isCso = VMK_FALSE;
+   vmk_Bool isEncapCso = VMK_FALSE;
 
    SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
    VMK_ASSERT(pTxq->nPendDesc == 0);
@@ -1564,11 +1573,23 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    /* VLAN handling */
    sfvmk_txMaybeInsertTag(pTxq, pXmitInfo, &txMapId);
 
-   isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
-           vmk_PktIsMustCsum(pXmitInfo->pXmitPkt);
-   if (pTxq->isCso != isCso) {
-     sfvmk_txCreateCsumDesc(pTxq, isCso);
+   if (vmk_PktIsInnerOffload(pXmitInfo->pXmitPkt) == VMK_TRUE) {
+     isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+             vmk_PktIsMustOuterCsum(pXmitInfo->pXmitPkt);
+
+     isEncapCso = vmk_PktIsInnerLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+                  vmk_PktIsMustInnerCsum(pXmitInfo->pXmitPkt);
+   }
+   else {
+     isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+             vmk_PktIsMustCsum(pXmitInfo->pXmitPkt);
+     isEncapCso = 0;
+   }
+
+   if ((pTxq->isCso != isCso) || (pTxq->isEncapCso != isEncapCso)) {
+     sfvmk_txCreateCsumDesc(pTxq, isCso, isEncapCso);
      pTxq->isCso = isCso;
+     pTxq->isEncapCso = isEncapCso;
      /* for option descriptors, make sure txqComplete doesn't try clean-up */
      vmk_Memset(&pTxq->pTxMap[txMapId], 0, sizeof(sfvmk_txMapping_t));
      txMapId = (txMapId + 1) & pTxq->ptrMask;

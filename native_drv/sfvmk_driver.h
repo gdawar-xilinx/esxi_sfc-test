@@ -260,6 +260,7 @@ typedef struct sfvmk_txq_s {
   /* The last VLAN TCI seen on the queue if FW-assisted tagging is used */
   vmk_uint16              hwVlanTci;
   vmk_Bool                isCso;
+  vmk_Bool                isEncapCso;
 
   /* The following fields change more often and are read regularly
    * on the transmit and transmit completion path */

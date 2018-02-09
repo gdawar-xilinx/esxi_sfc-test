@@ -40,15 +40,6 @@
 /* Refill delay */
 #define SFVMK_RXQ_REFILL_DELAY_MS       10
 
-/* Hash key for RSS */
-static uint8_t sfvmk_toepKey[] = {
-  0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
-  0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
-  0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
-  0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
-  0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa
-};
-
 /*! \brief    Configure RSS by setting hash key, indirection table
 **            and scale mode.
 **
@@ -74,6 +65,11 @@ sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter is not yet started");
+    goto done;
+  }
+
   status = efx_rx_scale_default_support_get(pAdapter->pNic, &supportRSS);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_default_support_get failed status: %s",
@@ -94,7 +90,7 @@ sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
   }
 
   status = efx_rx_scale_tbl_set(pAdapter->pNic, EFX_RSS_CONTEXT_DEFAULT,
-                                pIndTable, EFX_RSS_TBL_SIZE);
+                                pIndTable, indTableSize);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_tbl_set failed status: %s",
                         vmk_StatusToString(status));
@@ -1082,6 +1078,8 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
     goto failed_rxq_init;
   }
 
+  pAdapter->rssInit = VMK_FALSE;
+
   pAdapter->rxBufferSize = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
 
   pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
@@ -1105,22 +1103,6 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
   /* Maximum frame size that should be accepted */
   pAdapter->rxMaxFrameSize = pAdapter->uplink.sharedData.mtu +
                              sizeof(vmk_EthHdr) + sizeof(vmk_VLANHdr);
-
-  if (sfvmk_isRSSEnable(pAdapter)) {
-    vmk_uint32 index;
-    vmk_uint32 rxIndirTable[EFX_RSS_TBL_SIZE];
-
-    for (index = 0; index < EFX_RSS_TBL_SIZE; index++)
-      rxIndirTable[index] = (index % pAdapter->numRSSQs);
-
-    status = sfvmk_configRSS(pAdapter, sfvmk_toepKey, sizeof(sfvmk_toepKey),
-                             rxIndirTable, EFX_RSS_TBL_SIZE);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_configRSS failed status: %s",
-                          vmk_StatusToString(status));
-      sfvmk_disableRSS(pAdapter);
-    }
-  }
 
   /* Start the receive queue(s). */
   for (qIndex = 0; qIndex < pAdapter->numRxqsAllocated; qIndex++) {

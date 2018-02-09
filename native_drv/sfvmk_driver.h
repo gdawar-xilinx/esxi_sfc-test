@@ -69,6 +69,8 @@
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
 #define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ
 
+#define SFVMK_RSS_HASH_KEY_SIZE       40
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -392,6 +394,8 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 numRxqsAllotted;
   vmk_uint32                 numRSSQs;
   vmk_uint32                 numNetQs;
+  vmk_uint32                 rssHashKeySize;
+  vmk_Bool                   rssInit;
   /* Interrupt moderation in micro seconds */
   vmk_uint32                 intrModeration;
 
@@ -411,6 +415,8 @@ typedef struct sfvmk_adapter_s {
   size_t                     rxBufferStartAlignment;
   /* Max frame size that should be accepted */
   size_t                     rxMaxFrameSize;
+  vmk_uint8                  rssHashKey[SFVMK_RSS_HASH_KEY_SIZE];
+  vmk_uint32                 rssIndTable[EFX_RSS_TBL_SIZE];
 
   sfvmk_port_t               port;
 

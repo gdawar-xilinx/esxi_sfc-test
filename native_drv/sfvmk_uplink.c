@@ -74,6 +74,28 @@ static vmk_UplinkNetDumpOps sfvmkNetDumpOps = {
 };
 
 /****************************************************************************
+ *                Dynamic RSS Handler                                       *
+ ****************************************************************************/
+static VMK_ReturnStatus
+sfvmk_rssParamsGet(vmk_AddrCookie,
+                   vmk_UplinkQueueRSSParams *pParam);
+
+static VMK_ReturnStatus
+sfvmk_rssStateInit(vmk_AddrCookie,
+                   vmk_UplinkQueueRSSHashKey *pRSSHashKey,
+                   vmk_UplinkQueueRSSIndTable *pIndTable);
+
+static VMK_ReturnStatus
+sfvmk_rssIndTableUpdate(vmk_AddrCookie,
+                        vmk_UplinkQueueRSSIndTable *pIndTable);
+
+static const vmk_UplinkQueueRSSDynOps sfvmkRssDynOps = {
+  .queueGetRSSParams = sfvmk_rssParamsGet,
+  .queueInitRSSState = sfvmk_rssStateInit,
+  .queueUpdateRSSIndTable = sfvmk_rssIndTableUpdate
+};
+
+/****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_uplinkTx(vmk_AddrCookie, vmk_PktList);
@@ -1652,6 +1674,20 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /* Register dynamic RSS capability */
+  if (sfvmk_isRSSEnable(pAdapter)) {
+    status = vmk_UplinkQueueRegisterFeatureOps(pAdapter->uplink.handle,
+                                               VMK_UPLINK_QUEUE_FEAT_RSS_DYN,
+                                               (void *)&sfvmkRssDynOps);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_UplinkQueueRegisterFeatureOps failed status: %s",
+                          vmk_StatusToString(status));
+    }
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "Dynamic RSS capability not registered");
+  }
+
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
@@ -2400,6 +2436,7 @@ sfvmk_destroyNetPollForRSSQs(sfvmk_adapter_t *pAdapter)
 ** \param[in]   pAdapter pointer to sfvmk_adapter_t
 ** \param[out]  pQid     ptr to uplink Q ID
 ** \param[out]  pNetPoll ptr to netpoll registered with this Q
+** \param[in]   feat     uplink queue feature
 **
 ** \return:  VMK_BAD_PARAM   Input arguments are not valid
 ** \return:  VMK_OK          Able to create uplink queue
@@ -2407,7 +2444,8 @@ sfvmk_destroyNetPollForRSSQs(sfvmk_adapter_t *pAdapter)
 static VMK_ReturnStatus
 sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
                       vmk_UplinkQueueID *pQid,
-                      vmk_NetPoll *pNetPoll)
+                      vmk_NetPoll *pNetPoll,
+                      vmk_UplinkQueueFeature feat)
 {
   vmk_UplinkSharedQueueData *pQueueData;
   vmk_UplinkSharedQueueInfo *pQueueInfo;
@@ -2428,7 +2466,7 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
   pQueueInfo = &pAdapter->uplink.queueInfo;
 
   queueStartIndex = sfvmk_getUplinkRxqStartIndex(&pAdapter->uplink);
-  queueEndIndex = queueStartIndex + pAdapter->uplink.queueInfo.maxRxQueues - 1;
+  queueEndIndex = queueStartIndex + sfvmk_getNumUplinkRxq(pAdapter) - 1;
 
   pQueueData = &pQueueInfo->queueData[0];
 
@@ -2438,15 +2476,25 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
-  /* Check if queue is free */
-  for (queueIndex = queueStartIndex; queueIndex <= queueEndIndex; queueIndex++)
-    if (sfvmk_isQueueFree(&pAdapter->uplink, queueIndex))
-      break;
+  if (feat & (VMK_UPLINK_QUEUE_FEAT_RSS |
+              VMK_UPLINK_QUEUE_FEAT_RSS_DYN)) {
+    queueIndex = sfvmk_getRSSQStartIndex(pAdapter);
+    if (!sfvmk_isQueueFree(&pAdapter->uplink, queueIndex)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "RSS leading Q is in use");
+      status = VMK_FAILURE;
+      goto done;
+    }
+  } else {
+    /* Check if queue is free */
+    for (queueIndex = queueStartIndex; queueIndex <= queueEndIndex; queueIndex++)
+      if (sfvmk_isQueueFree(&pAdapter->uplink, queueIndex))
+        break;
 
-  if (queueIndex > queueEndIndex) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "All Qs are in use");
-    status = VMK_FAILURE;
-    goto done;
+    if (queueIndex > queueEndIndex) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "All Qs are in use");
+      status = VMK_FAILURE;
+      goto done;
+    }
   }
 
   /* Make uplink queue */
@@ -2616,7 +2664,7 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
         pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
 
       if (queueIndex == sfvmk_getRSSQStartIndex(pAdapter))
-        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS;
+        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
 
       pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }
@@ -2868,7 +2916,7 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
   }
 
   /* Create default RX uplink queue */
-  status = sfvmk_createUplinkRxq(pAdapter, &pQueueInfo->defaultRxQueueID, NULL);
+  status = sfvmk_createUplinkRxq(pAdapter, &pQueueInfo->defaultRxQueueID, NULL, 0);
   if (pQueueInfo->queueData == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkRxq failed status: %s",
                         vmk_StatusToString(status));
@@ -3082,7 +3130,7 @@ sfvmk_allocQueue(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
         SFVMK_ADAPTER_ERROR(pAdapter, "Null net poll ptr");
         goto done;
       }
-      status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll);
+      status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll, 0);
       if (status != VMK_OK) {
         SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkRxq failed status: %s",
                             vmk_StatusToString(status));
@@ -3127,6 +3175,7 @@ sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_UplinkQueueFeature feat = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -3138,13 +3187,20 @@ sfvmk_allocQueueWithAttr(vmk_AddrCookie cookie, vmk_UplinkQueueType qType,
   if (pAttr) {
     switch (pAttr->type) {
       case VMK_UPLINK_QUEUE_ATTR_FEAT:
-        /* TODO: Dynamic RSS handling */
+        feat = pAttr->args.features;
         if (pNetPoll == NULL) {
           SFVMK_ADAPTER_ERROR(pAdapter, "Null net poll ptr");
           goto done;
         }
-        if (!pAttr->args.features) {
-          status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll);
+
+        if ((feat & (VMK_UPLINK_QUEUE_FEAT_RSS |
+                     VMK_UPLINK_QUEUE_FEAT_RSS_DYN |
+                     VMK_UPLINK_QUEUE_FEAT_PAIR)) || (!feat)) {
+          if (vmk_UplinkQueueIDType(*pQID) == VMK_UPLINK_QUEUE_TYPE_TX) {
+            SFVMK_ADAPTER_ERROR(pAdapter, "RSS valid only for RXQ");
+            break;
+          }
+          status = sfvmk_createUplinkRxq(pAdapter, pQID, pNetPoll, feat);
           if (status != VMK_OK) {
             SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createUplinkRxq failed status: %s",
                                 vmk_StatusToString(status));
@@ -4433,6 +4489,176 @@ done:
 
   return status;
 }
+
+/*! \brief  Uplink callback function to get the RSS params.
+**          (numRSSPools, number of RSS Qs, indirection and hash key size)
+**
+** \param[in]  cookie     vmk_AddrCookie
+** \param[out] pParams    vmk_UplinkQueueRSSParams which have RSS info.
+**
+** \return: VMK_OK on success or error code otherwise
+*/
+static VMK_ReturnStatus
+sfvmk_rssParamsGet(vmk_AddrCookie cookie,
+                   vmk_UplinkQueueRSSParams *pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pParams);
+
+  if (!sfvmk_isRSSEnable(pAdapter)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not enabled");
+    goto done;
+  }
+
+  /* Vmkernel supports only 1 RSS Pool Currently */
+  pParams->numRSSPools = 1;
+  pParams->numRSSQueuesPerPool = pAdapter->numRSSQs;
+
+  /* Length of the RSS hash key in bytes */
+  pParams->rssHashKeySize = SFVMK_RSS_HASH_KEY_SIZE;
+
+  /* Size of the RSS indirection table */
+  pParams->rssIndTableSize = EFX_RSS_TBL_SIZE;
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  Uplink callback function to init RSS configuration with the
+**          given hash key and indirectional table.
+**
+** \param[in]  cookie         vmk_AddrCookie
+** \param[in]  pRssHashKey    pointer to vmk_UplinkQueueRSSHashKey
+** \param[in]  pRssIndTable   pointer to vmk_UplinkQueueRSSIndTable
+**
+** \return: VMK_OK on success or error code otherwise
+*/
+static VMK_ReturnStatus
+sfvmk_rssStateInit(vmk_AddrCookie cookie,
+                   vmk_UplinkQueueRSSHashKey *pRssHashKey,
+                   vmk_UplinkQueueRSSIndTable *pRssIndTable)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 tableSize, i;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pRssHashKey);
+  VMK_ASSERT_NOT_NULL(pRSSIndTable);
+
+  vmk_MutexLock(pAdapter->lock);
+
+  if (!sfvmk_isRSSEnable(pAdapter)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not enabled");
+    goto done;
+  }
+
+  if (pRssHashKey->keySize > SFVMK_RSS_HASH_KEY_SIZE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid hash key size(%u)",
+                        pRssHashKey->keySize);
+    goto done;
+  }
+
+  tableSize = MIN(EFX_RSS_TBL_SIZE, pRssIndTable->tableSize);
+  VMK_ASSERT_GT(tableSize, 0);
+
+  for (i = 0; i < tableSize; i++)
+    pAdapter->rssIndTable[i] = pRssIndTable->table[i];
+
+  /* Configure RSS */
+  status = sfvmk_configRSS(pAdapter,
+                           (vmk_uint8 *)&pRssHashKey->key,
+                           pRssHashKey->keySize,
+                           pAdapter->rssIndTable,
+                           tableSize);
+  if (status) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_configRss Failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  memcpy(pAdapter->rssHashKey, &pRssHashKey->key, pRssHashKey->keySize);
+  pAdapter->rssHashKeySize = pRssHashKey->keySize;
+  pAdapter->rssInit = VMK_TRUE;
+
+done:
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  Uplink callback function to reconfigure indirectional table
+**          for RSS.
+**
+** \param[in]  cookie         vmk_AddrCookie
+** \param[in]  pRssIndTable   pointer to vmk_UplinkQueueRSSIndTable
+**
+** \return: VMK_OK on success or error code otherwise
+*/
+static VMK_ReturnStatus
+sfvmk_rssIndTableUpdate(vmk_AddrCookie cookie,
+                        vmk_UplinkQueueRSSIndTable *pRssIndTable)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 tableSize, i;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pRSSIndTable);
+
+  vmk_MutexLock(pAdapter->lock);
+
+  if (!sfvmk_isRSSEnable(pAdapter)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not enabled");
+    goto done;
+  }
+
+  if (!pAdapter->rssInit) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not yet Initialized");
+    goto done;
+  }
+
+  tableSize = MIN(EFX_RSS_TBL_SIZE, pRssIndTable->tableSize);
+  VMK_ASSERT_GT(tableSize, 0);
+
+  for (i = 0; i < tableSize; i++)
+    pAdapter->rssIndTable[i] = pRssIndTable->table[i];
+
+  /* Configure RSS */
+  status = sfvmk_configRSS(pAdapter,
+                           pAdapter->rssHashKey,
+                           pAdapter->rssHashKeySize,
+                           pAdapter->rssIndTable,
+                           tableSize);
+  if (status) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_configRss Failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
 
 /*! \brief uplink callback function to get advertised modes
 **

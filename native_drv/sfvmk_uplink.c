@@ -1950,23 +1950,44 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *) cookie.ptr;
   VMK_ReturnStatus status = VMK_FAILURE;
+  VMK_ReturnStatus rc = VMK_FAILURE;
+  unsigned int attempt;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
-    return VMK_BAD_PARAM;
+    status = VMK_BAD_PARAM;
+    goto done;
   }
 
   vmk_MutexLock(pAdapter->lock);
-  status = sfvmk_startIO(pAdapter);
+
+  for (attempt = 0; attempt < 3; ++attempt) {
+    status = sfvmk_startIO(pAdapter);
+    if (status == VMK_OK) {
+      goto start_io_done;
+    }
+
+    /* Sleep for 100 milliseconds */
+    rc = sfvmk_worldSleep(SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC);
+    if (rc != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                          vmk_StatusToString(rc));
+      /* World is dying */
+      break;
+    }
+  }
+
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Uplink Start IO failed with status: %s",
                         vmk_StatusToString(status));
   }
 
+start_io_done:
   vmk_MutexUnlock(pAdapter->lock);
 
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
 }
@@ -1976,7 +1997,8 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK <success or if adapter is already in the start state> 
+** \return: Error code   <failure>
 **
 */
 static VMK_ReturnStatus
@@ -1989,7 +2011,8 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
-    status = VMK_FAILURE;
+    /* This should not normally happen so recording it as an error instead of log */
+    status = VMK_OK;
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is already started");
     goto done;
   }

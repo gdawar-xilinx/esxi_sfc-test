@@ -60,8 +60,11 @@
 /* Max number of NetQ supported */
 #define SFVMK_MAX_NETQ_COUNT          16
 
+/* Max number of RSSQ supported */
+#define SFVMK_MAX_RSSQ_COUNT          4
+
 /* 20 EVQs, 16 for NetQ and 4 for RSS */
-#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 4
+#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + SFVMK_MAX_RSSQ_COUNT
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
 #define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ

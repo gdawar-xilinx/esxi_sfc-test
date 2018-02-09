@@ -29,10 +29,14 @@
 /* Default number of NetQ supported */
 #define SFVMK_NETQ_COUNT_DEFAULT 8
 
+/* Default number of RSSQ supported */
+#define SFVMK_RSSQ_COUNT_DEFAULT 4
+
 /* Initialize module params with default values */
 sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
   .netQCount = SFVMK_NETQ_COUNT_DEFAULT,
+  .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
 };
 
 /* List of module parameters */
@@ -40,6 +44,9 @@ VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Mask
 VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
                    "NetQ count(includes defQ) [Min:1 Max:16 Default:8]"
                    "(invalid value sets netQCount to default value(8))");
+VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
+                   "RSSQ count [Min:1 (RSS disable) Max:4 Default:4]"
+                   "(Invalid value sets rssQCount to default value(4))");
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -428,14 +435,19 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
    * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
    * MCDI events
    * Error events from firmware/hardware
-   * TODO: calculation of EVQs when RSS feature is added */
+   */
 
   if ((modParams.netQCount == 0) || (modParams.netQCount > SFVMK_MAX_NETQ_COUNT))
     modParams.netQCount = SFVMK_NETQ_COUNT_DEFAULT;
 
+  if (modParams.rssQCount > SFVMK_MAX_RSSQ_COUNT)
+    modParams.rssQCount = SFVMK_RSSQ_COUNT_DEFAULT;
+  else if (modParams.rssQCount == 1)
+    modParams.rssQCount = 0;
+
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
-  limits.edl_max_evq_count = MIN(modParams.netQCount, MIN(limits.edl_max_rxq_count,
-                                 limits.edl_max_txq_count));
+  limits.edl_max_evq_count = MIN((modParams.netQCount + modParams.rssQCount),
+                                 MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count));
   pAdapter->numEvqsDesired = limits.edl_max_evq_count;
 
   limits.edl_min_rxq_count = limits.edl_min_evq_count;

@@ -82,6 +82,7 @@ module_def = {
 			 "imported/mcdi_mon.c",
 			 "imported/medford_nic.c",
 			 "imported/medford2_nic.c",
+                         "imported/efx_tunnel.c",
                        ],
    "includes"        : [
                          "./imported",

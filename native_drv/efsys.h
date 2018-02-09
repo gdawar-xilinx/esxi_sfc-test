@@ -165,6 +165,7 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 
 #define EFSYS_OPT_EV_PREFETCH 0
 
+#define EFSYS_OPT_TUNNEL 1
 
 #define EFSYS_OPT_LICENSING 0
 

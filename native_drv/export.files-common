@@ -47,6 +47,7 @@ imported/mcdi_mon.c
 imported/mcdi_mon.h
 imported/medford_impl.h
 imported/medford_nic.c
+imported/efx_tunnel.c
 imported/efx_annote.h
 imported/medford2_impl.h
 imported/medford2_nic.c

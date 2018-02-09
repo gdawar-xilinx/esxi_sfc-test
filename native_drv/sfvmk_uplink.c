@@ -273,8 +273,18 @@ static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
                                           vmk_UplinkSelfTestString *pStringsBuf);
 
 const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
-   .selfTestResultLenGet = sfvmk_selfTestResultLenGet,
-   .selfTestRun          = sfvmk_selfTestRun,
+  .selfTestResultLenGet = sfvmk_selfTestResultLenGet,
+  .selfTestRun          = sfvmk_selfTestRun,
+};
+
+/****************************************************************************
+ *               vmk_UplinkEncapOffloadOps Handlers                         *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie,
+                                              vmk_uint16 portNumNBO);
+
+const static vmk_UplinkEncapOffloadOps sfvmk_encapOffloadOps = {
+  .vxlanPortUpdate = sfvmk_vxlanPortUpdate,
 };
 
 
@@ -1688,6 +1698,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "Dynamic RSS capability not registered");
   }
 
+  /* Register capability for encap offload   */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_ENCAP_OFFLOAD,
+                                 (vmk_UplinkEncapOffloadOps *)
+                                 &sfvmk_encapOffloadOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_ENCAP_OFFLOAD register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
@@ -2027,9 +2049,29 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
     goto failed_filter_db_init;
   }
 
+  /* TBD : Add check for vxlan support using module param */
+
+  /* Tunnel reconfigure triggers reset, this flag
+   * is being used to prevent resets in a loop */
+  if (pAdapter->startIOTunnelReCfgReqd == VMK_TRUE) {
+    status = efx_tunnel_reconfigure(pAdapter->pNic);
+    /* Tunnel_reconfigure returns VMK_RETRY to indicate impending reboot */
+    if ((status != VMK_OK) && (status != VMK_RETRY)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_reconfigure failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_reconfig;
+    }
+
+    pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
+  }
+
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
+
   status = VMK_OK;
   goto done;
+
+failed_tunnel_reconfig:
+  sfvmk_freeFilterDBHash(pAdapter);
 
 failed_filter_db_init:
   sfvmk_txStop(pAdapter);
@@ -4362,6 +4404,100 @@ static VMK_ReturnStatus sfvmk_selfTestResultLenGet(vmk_AddrCookie cookie,
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to configugre VXLAN UDP port number.
+**
+** \param[in]  cookie       pointer to sfvmk_adapter_t
+** \param[in]  portNumNBO   VXLAN UDP port number in network byte order
+**
+** \return: VMK_OK on success or error code
+**
+*/
+static VMK_ReturnStatus
+sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+  vmk_MutexLock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "sfvmk_vxlanPortUpdate: New port num :%u Current port: %u",
+                      vmk_BE16ToCPU(portNumNBO), pAdapter->vxlanUdpPort);
+
+  if (pAdapter->vxlanUdpPort == vmk_BE16ToCPU(portNumNBO)) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "No change in vxlan port number (new:%u) (old:%u)",
+                        vmk_BE16ToCPU(portNumNBO), pAdapter->vxlanUdpPort);
+    goto tunnel_port_exist;
+  }
+
+  if (pAdapter->vxlanUdpPort != 0) {
+    /* Remove Existing port number before updating new one */
+    status = efx_tunnel_config_udp_remove(pAdapter->pNic,
+                                          pAdapter->vxlanUdpPort,
+                                          EFX_TUNNEL_PROTOCOL_VXLAN);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_remove failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_port_remove;
+    }
+  }
+
+  status = efx_tunnel_config_udp_add(pAdapter->pNic,
+	                             vmk_BE16ToCPU(portNumNBO),
+                                     EFX_TUNNEL_PROTOCOL_VXLAN);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "efx_tunnel_config_udp_add (%u) failed status: %s",
+                        vmk_BE16ToCPU(portNumNBO), vmk_StatusToString(status));
+    goto failed_tunnel_port_cfg;
+  }
+
+  /* Reconfigure tunnel */
+  status = efx_tunnel_reconfigure(pAdapter->pNic);
+  /* Tunnel_reconfigure returns VMK_RETRY to indicate impending reboot */
+  if ((status != VMK_OK) && (status != VMK_RETRY)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_reconfigure (%u) failed status: %s",
+                          vmk_BE16ToCPU(portNumNBO), vmk_StatusToString(status));
+
+    /* Remove added port before exit */
+    efx_tunnel_config_udp_remove(pAdapter->pNic,
+                                 vmk_BE16ToCPU(portNumNBO),
+                                 EFX_TUNNEL_PROTOCOL_VXLAN);
+
+    /* Reset Vxlan port number from adapter data structure as well */
+    pAdapter->vxlanUdpPort = 0;
+    goto failed_tunnel_recfg;
+  }
+
+  pAdapter->vxlanUdpPort = vmk_BE16ToCPU(portNumNBO);
+  pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "sfvmk_vxlanPortUpdate: Updated VxLAN Port number :%u",
+                      pAdapter->vxlanUdpPort);
+tunnel_port_exist:
+  status = VMK_OK;
+
+failed_tunnel_port_remove:
+failed_tunnel_port_cfg:
+failed_tunnel_recfg:
+  vmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

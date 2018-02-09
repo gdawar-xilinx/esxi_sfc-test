@@ -689,6 +689,94 @@ done:
   return status;
 }
 
+#define SFVMK_DEFAULT_VXLAN_PORT_NUM 8472
+
+/*! \brief Initialize and add tunnel port
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static VMK_ReturnStatus
+sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  uint16_t vxlanPortNum = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  status = efx_tunnel_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Get default vxlan port number */
+  vxlanPortNum = (vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) ?
+                  vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) :
+                  SFVMK_DEFAULT_VXLAN_PORT_NUM);
+
+  status = efx_tunnel_config_udp_add(pAdapter->pNic,
+                                     vxlanPortNum,
+                                     EFX_TUNNEL_PROTOCOL_VXLAN);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_config_udp_add failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_tunnel_port_add;
+  }
+
+  pAdapter->vxlanUdpPort = vxlanPortNum;
+  pAdapter->startIOTunnelReCfgReqd = VMK_TRUE;
+
+  status = VMK_OK;
+  goto done;
+
+failed_tunnel_port_add:
+  efx_tunnel_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  Clear out tunnel configuration
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK <success> error code <failure>
+**
+*/
+static void
+sfvmk_tunnelFini(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* Remove vxlan port number if already configured */
+  if (pAdapter->vxlanUdpPort) {
+    status = efx_tunnel_config_udp_remove(pAdapter->pNic,
+                                          pAdapter->vxlanUdpPort,
+                                          EFX_TUNNEL_PROTOCOL_VXLAN);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_remove (%d) failed status: %s",
+                           pAdapter->vxlanUdpPort, vmk_StatusToString(status));
+    }
+  }
+
+  efx_tunnel_fini(pAdapter->pNic);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -885,6 +973,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_rx_init;
   }
 
+  status = sfvmk_tunnelInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_tunnel_init;
+  }
+
   status = sfvmk_mutexInit("adapterLock", &pAdapter->lock);
   if(status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mutexInit failed status %s",
@@ -931,6 +1026,9 @@ failed_uplinkData_init:
   sfvmk_mutexDestroy(pAdapter->lock);
 
 failed_mutex_init:
+  sfvmk_tunnelFini(pAdapter);
+
+failed_tunnel_init:
   sfvmk_rxFini(pAdapter);
 
 failed_rx_init:
@@ -1134,6 +1232,7 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_destroyHelper(pAdapter);
   sfvmk_uplinkDataFini(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);
+  sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);
   /* Deinit port */

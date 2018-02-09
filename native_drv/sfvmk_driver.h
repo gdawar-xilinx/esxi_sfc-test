@@ -445,6 +445,10 @@ typedef struct sfvmk_adapter_s {
   vmk_VersionedAtomic        isRxCsumLock;
   vmk_Bool                   isRxCsumEnabled;
   vmk_Bool                   isTsoFwAssisted;
+
+  /* VxLAN UDP port number */
+  vmk_uint16                 vxlanUdpPort;
+  vmk_Bool                   startIOTunnelReCfgReqd;
 } sfvmk_adapter_t;
 
 extern const sfvmk_pktOps_t sfvmk_packetOps[];

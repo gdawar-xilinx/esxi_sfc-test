@@ -235,11 +235,19 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
       break;
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
-      status = sfvmk_prepareVXLANFilterRule(pAdapter,
+      if (modParams.vxlanOffload) {
+        status = sfvmk_prepareVXLANFilterRule(pAdapter,
                                             pFilter->vxlanFilterInfo->innerMAC,
                                             pFilter->vxlanFilterInfo->outerMAC,
                                             pFilter->vxlanFilterInfo->vxlanID,
                                             pFdbEntry);
+      }
+      else {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not enabled",
+                            pFdbEntry->class);
+        status = VMK_NOT_SUPPORTED;
+      }
+
       break;
 
     /* TODO: Will add support for GENEVE in future */

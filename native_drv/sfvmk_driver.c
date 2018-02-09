@@ -36,6 +36,7 @@
 sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
   .netQCount = SFVMK_NETQ_COUNT_DEFAULT,
+  .vxlanOffload = VMK_TRUE,
   .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
 };
 
@@ -47,6 +48,10 @@ VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
 VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
                    "RSSQ count [Min:1 (RSS disable) Max:4 Default:4]"
                    "(Invalid value sets rssQCount to default value(4))");
+VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
+                   "Enable / disable vxlan offload "
+                   "[0:Disable, 1:Enable (default)]");
+
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -973,11 +978,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_rx_init;
   }
 
-  status = sfvmk_tunnelInit(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_tunnel_init;
+  if (modParams.vxlanOffload) {
+    status = sfvmk_tunnelInit(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_init;
+    }
   }
 
   status = sfvmk_mutexInit("adapterLock", &pAdapter->lock);
@@ -1026,7 +1033,8 @@ failed_uplinkData_init:
   sfvmk_mutexDestroy(pAdapter->lock);
 
 failed_mutex_init:
-  sfvmk_tunnelFini(pAdapter);
+  if (modParams.vxlanOffload)
+    sfvmk_tunnelFini(pAdapter);
 
 failed_tunnel_init:
   sfvmk_rxFini(pAdapter);
@@ -1232,7 +1240,8 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_destroyHelper(pAdapter);
   sfvmk_uplinkDataFini(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);
-  sfvmk_tunnelFini(pAdapter);
+  if (modParams.vxlanOffload)
+    sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);
   /* Deinit port */

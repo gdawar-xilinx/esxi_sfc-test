@@ -1698,16 +1698,18 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "Dynamic RSS capability not registered");
   }
 
-  /* Register capability for encap offload   */
-  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
-                                 VMK_UPLINK_CAP_ENCAP_OFFLOAD,
-                                 (vmk_UplinkEncapOffloadOps *)
-                                 &sfvmk_encapOffloadOps);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,
-                        "VMK_UPLINK_CAP_ENCAP_OFFLOAD register failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
+  if (modParams.vxlanOffload) {
+    /* Register capability for encap offload   */
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_ENCAP_OFFLOAD,
+                                   (vmk_UplinkEncapOffloadOps *)
+                                   &sfvmk_encapOffloadOps);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "VMK_UPLINK_CAP_ENCAP_OFFLOAD register failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
   }
 
 done:
@@ -2049,20 +2051,19 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
     goto failed_filter_db_init;
   }
 
-  /* TBD : Add check for vxlan support using module param */
-
-  /* Tunnel reconfigure triggers reset, this flag
-   * is being used to prevent resets in a loop */
-  if (pAdapter->startIOTunnelReCfgReqd == VMK_TRUE) {
-    status = efx_tunnel_reconfigure(pAdapter->pNic);
-    /* Tunnel_reconfigure returns VMK_RETRY to indicate impending reboot */
-    if ((status != VMK_OK) && (status != VMK_RETRY)) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_reconfigure failed status: %s",
-                          vmk_StatusToString(status));
-      goto failed_tunnel_reconfig;
+  if (modParams.vxlanOffload) {
+    /* Tunnel reconfigure triggers reset, this flag
+     * is being used to prevent resets in a loop */
+    if (pAdapter->startIOTunnelReCfgReqd == VMK_TRUE) {
+      status = efx_tunnel_reconfigure(pAdapter->pNic);
+      /* Tunnel_reconfigure returns VMK_RETRY to indicate impending reboot */
+      if ((status != VMK_OK) && (status != VMK_RETRY)) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_reconfigure failed status: %s",
+                            vmk_StatusToString(status));
+        goto failed_tunnel_reconfig;
+      }
+      pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
     }
-
-    pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
   }
 
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;

@@ -198,7 +198,8 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
 
   if ((pCfg->enc_features & EFX_FEATURE_FW_ASSISTED_TSO_V2) &&
       ((pCfg->enc_fw_assisted_tso_v2_enabled) ||
-       (pCfg->enc_fw_assisted_tso_v2_encap_enabled))) {
+       ((pCfg->enc_fw_assisted_tso_v2_encap_enabled) &&
+        (modParams.vxlanOffload)))) {
     pAdapter->isTsoFwAssisted = VMK_TRUE;
   } else {
     pAdapter->isTsoFwAssisted = VMK_FALSE;
@@ -1631,7 +1632,8 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    /* VLAN handling */
    sfvmk_txMaybeInsertTag(pTxq, pXmitInfo, &txMapId);
 
-   if (vmk_PktIsInnerOffload(pXmitInfo->pXmitPkt) == VMK_TRUE) {
+   if ((vmk_PktIsInnerOffload(pXmitInfo->pXmitPkt) == VMK_TRUE) &&
+       (modParams.vxlanOffload)) {
      isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
              vmk_PktIsMustOuterCsum(pXmitInfo->pXmitPkt);
 
@@ -1736,7 +1738,8 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   vmk_Memset(&xmitInfo, 0, sizeof(sfvmk_xmitInfo_t));
   xmitInfo.offloadFlag |= vmk_PktMustVlanTag(pkt) ? SFVMK_TX_VLAN : 0;
   xmitInfo.offloadFlag |= vmk_PktIsLargeTcpPacket(pkt) ? SFVMK_TX_TSO : 0;
-  xmitInfo.offloadFlag |= vmk_PktIsInnerLargeTcpPacket(pkt) ? SFVMK_TX_ENCAP_TSO : 0;
+  if (modParams.vxlanOffload)
+    xmitInfo.offloadFlag |= vmk_PktIsInnerLargeTcpPacket(pkt) ? SFVMK_TX_ENCAP_TSO : 0;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "Xmit start, pkt = %p, TX VLAN offload %s needed, "

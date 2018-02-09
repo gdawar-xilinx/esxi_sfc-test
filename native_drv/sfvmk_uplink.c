@@ -55,6 +55,8 @@ static void sfvmk_uplinkResetHelper(vmk_AddrCookie data);
 static VMK_ReturnStatus sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
                                                   vmk_LinkStatus *pLinkStatus);
 
+static vmk_uint32 sfvmk_getNumUplinkRxq(sfvmk_adapter_t *pAdapter);
+
 /****************************************************************************
  *                vmk_UplinkNetDumpOps Handler                              *
  ****************************************************************************/
@@ -272,6 +274,82 @@ const static vmk_UplinkAdvertisedModesOps sfvmk_advModesOps = {
   .setAdvertisedModes  = sfvmk_advModesSet,
 };
 
+/*! \brief Associate the RSS netpoll to the uplink
+**
+** \param[in]  adapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK on success or error code otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_associateRSSNetPoll(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_Name netpollName;
+  vmk_uint32 qIndex;
+  vmk_uint32 qStartIndex;
+  vmk_uint32 qEndIndex;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* NetPoll has already been associated for leading RSSQ */
+  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+
+  VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
+
+  for(qIndex = qStartIndex; qIndex < qEndIndex; qIndex++) {
+    vmk_NameFormat(&netpollName, "rss-%d", qIndex);
+    /* RSS netpoll are not associated to uplinkSharedQueueData,
+     * it need to be registered with uplink explicitly */
+    VMK_ASSERT_NOT_NULL(pAdapter->ppEvq[qIndex]);
+    status = vmk_NetPollRegisterUplink(pAdapter->ppEvq[qIndex]->netPoll,
+                                       pAdapter->uplink.handle, netpollName, VMK_FALSE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_NetPollRegisterUplink(%u) Failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto failed;
+    }
+  }
+
+  goto done;
+
+failed:
+  for (qIndex--; qIndex >= qStartIndex; qIndex--)
+    vmk_NetPollUnregisterUplink(pAdapter->ppEvq[qIndex]->netPoll);
+
+done:
+
+  return status;
+}
+
+/*! \brief Disassociate the RSS netpolls from the uplink
+ * **
+ * ** \param[in]  adapter pointer to sfvmk_adapter_t
+ * **
+ * ** \return: VMK_OK on success or error code otherwise
+ * **
+ * */
+static void
+sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 qIndex;
+  vmk_uint32 qStartIndex;
+  vmk_uint32 qEndIndex;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+
+  VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
+
+  for(qIndex = qStartIndex; qIndex < qEndIndex; qIndex++) {
+    VMK_ASSERT_NOT_NULL(pAdapter->ppEvq[qIndex]);
+    vmk_NetPollUnregisterUplink(pAdapter->ppEvq[qIndex]->netPoll);
+  }
+}
+
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -329,6 +407,15 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
     goto done;
   }
 
+  if(sfvmk_isRSSEnable(pAdapter)) {
+    status = sfvmk_associateRSSNetPoll(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_associateRSSNetPoll Failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
 done:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -374,6 +461,11 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
                         vmk_StatusToString(status));
     status = VMK_FAILURE;
     goto done;
+  }
+
+  if(sfvmk_isRSSEnable(pAdapter)) {
+    /* Disassociate Netpoll */
+    sfvmk_disassociateRssNetPoll(pAdapter);
   }
 
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
@@ -2226,6 +2318,83 @@ sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
   return pendCompletion;
 }
 
+VMK_ReturnStatus
+sfvmk_createNetPollForRSSQs(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
+{
+  vmk_uint32 qStartIndex;
+  vmk_uint32 qEndIndex;
+  vmk_uint32 qIndex;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* NetPoll has already been created for leading RSSQ */
+  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+
+  VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
+
+  /* Create NetQueue for RSS Queues */
+  for(qIndex = qStartIndex; qIndex < qEndIndex; qIndex++) {
+    vmk_NetPollProperties pollProp;
+
+    VMK_ASSERT_NOT_NULL(pAdapter->ppEvq[qIndex]);
+
+    /* Poll properties for creating netPoll */
+    pollProp.poll = sfvmk_netPollCB;
+    pollProp.priv.ptr = pAdapter->ppEvq[qIndex];
+    pollProp.deliveryCallback = NULL;
+    pollProp.features = VMK_NETPOLL_NONE;
+
+    status = vmk_NetPollCreate(&pollProp, serviceID, vmk_ModuleCurrentID,
+                               &pAdapter->ppEvq[qIndex]->netPoll);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_NetPollCreate(%u) failed status: %s",
+                          qIndex, vmk_StatusToString(status));
+      goto failed;
+    }
+  }
+
+  status = VMK_OK;
+  goto done;
+
+failed:
+  for (qIndex--; qIndex >= qStartIndex; qIndex--)
+    vmk_NetPollDestroy(pAdapter->ppEvq[qIndex]->netPoll);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+void
+sfvmk_destroyNetPollForRSSQs(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 qStartIndex;
+  vmk_uint32 qEndIndex;
+  vmk_uint32 qIndex;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* NetPoll has already been destroy for leading RSSQ */
+  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+
+  VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
+
+  for(qIndex = qStartIndex; qIndex < qEndIndex; qIndex++) {
+    VMK_ASSERT_NOT_NULL(pAdapter->ppEvq[qIndex]);
+    vmk_NetPollDestroy(pAdapter->ppEvq[qIndex]->netPoll);
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
 /*! \brief  Create uplink RXQ
 **
 ** \param[in]   pAdapter pointer to sfvmk_adapter_t
@@ -2439,8 +2608,16 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
       pQueueData->maxFilters = SFVMK_MAX_FILTER;
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
     } else {
-      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR |
-                                      VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
+      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR;
+      /* Dynamic netqueue mandates that it can pick any queue(s) to form RSS
+       * queue group. RSS is supported only on the last netqueue hence dynamic
+       * feature is disabled when RSS is enable */
+      if (!sfvmk_isRSSEnable(pAdapter))
+        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
+
+      if (queueIndex == sfvmk_getRSSQStartIndex(pAdapter))
+        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS;
+
       pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }
 
@@ -2630,9 +2807,17 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY |
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC;
 
-  /* Update max TX and RX queue*/
-  pQueueInfo->maxTxQueues =  pAdapter->numTxqsAllocated;
-  pQueueInfo->maxRxQueues =  pAdapter->numRxqsAllocated;
+  /* Update max TX and RX queue
+   * For base RSSQ one uplink netQ is added
+   * HWQs are sum of netQs and num of RSSQs
+   */
+  if (sfvmk_isRSSEnable(pAdapter)) {
+    pQueueInfo->maxTxQueues =  pAdapter->numNetQs + 1;
+    pQueueInfo->maxRxQueues =  pAdapter->numNetQs + 1;
+  } else {
+    pQueueInfo->maxTxQueues =  pAdapter->numNetQs;
+    pQueueInfo->maxRxQueues =  pAdapter->numNetQs;
+  }
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "maxTxQs: %d maxRxQs: %d ", pQueueInfo->maxTxQueues,
@@ -2663,6 +2848,15 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_rxqDataInit failed status: %s",
                         vmk_StatusToString(status));
     goto failed_rxqdata_init;
+  }
+
+  if (sfvmk_isRSSEnable(pAdapter)) {
+    status = sfvmk_createNetPollForRSSQs(pAdapter, serviceID);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createNetPollForRSSQs failed status: %s",
+                          vmk_StatusToString(status));
+      sfvmk_disableRSS(pAdapter);
+    }
   }
 
   /* Update shared TXQData */
@@ -2726,6 +2920,9 @@ sfvmk_sharedQueueInfoFini(sfvmk_adapter_t *pAdapter)
 
   /* Deallocate queueData for RXQ */
   sfvmk_rxqDataFini(pAdapter);
+
+  if (sfvmk_isRSSEnable(pAdapter))
+    sfvmk_destroyNetPollForRSSQs(pAdapter);
 
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->uplink.queueInfo.queueData);
   pAdapter->uplink.queueInfo.queueData = NULL;

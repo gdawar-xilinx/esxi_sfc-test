@@ -490,7 +490,6 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "Remove HW filter failed with error code %s",
                           vmk_StatusToString(status));
-      continue;
     }
 
     sfvmk_removeUplinkFilter(pAdapter, pFdbEntry->qID);

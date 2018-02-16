@@ -127,7 +127,7 @@ typedef enum sfvmk_mgmtDevOps_e {
  **
  ** inlen[in] The length of command parameters, in bytes.
  **
- ** outlen[in/out] On entry, the length available for the response, in bytes.
+ ** outlen[in,out] On entry, the length available for the response, in bytes.
  **	On return, the length used for the response, in bytes.
  **
  ** flags[out] Flags for the command or response.  The only flag defined
@@ -137,7 +137,7 @@ typedef enum sfvmk_mgmtDevOps_e {
  ** host_errno[out] On return, if EFX_MCDI_REQUEST_ERROR is included in flags,
  **	the suggested VMK error code for the error.
  **
- ** payload[in/out] On entry, the MCDI command parameters.  On return, the response.
+ ** payload[in,out] On entry, the MCDI command parameters.  On return, the response.
  **
  ** If the driver detects invalid parameters or a communication failure
  ** with the MC, the MGMT calback interface will return VMK_OK, errno will be set
@@ -163,7 +163,7 @@ typedef struct sfvmk_mcdiRequest_s {
  **        MC Logging dynamically
  **
  **  mcLoggingOp[in]  Command types to Get/Set MC Log state
- **  state[in/out]    MC Log state (True/False)
+ **  state[in,out]    MC Log state (True/False)
  */
 typedef struct sfvmk_mcdiLogging_s {
   sfvmk_mgmtDevOps_t  mcLoggingOp;
@@ -201,9 +201,9 @@ typedef struct sfvmk_pciInfo_s {
  **
  ** vpdKeyword[in]      VPD keyword
  **
- ** vpdLen[in/out]      Length of VPD Data
+ ** vpdLen[in,out]      Length of VPD Data
  **
- ** vpdPayload[in/out]  VPD data buffer
+ ** vpdPayload[in,out]  VPD data buffer
  **
  */
 typedef struct sfvmk_vpdInfo_s {
@@ -229,9 +229,9 @@ typedef struct sfvmk_vpdInfo_s {
  **
  **  type[in]        Type of operation (Get/Set)
  **
- **  speed[in/out]   Current link speed
+ **  speed[in,out]   Current link speed
  **
- **  autoNeg[in/out] Get/Set autoNeg
+ **  autoNeg[in,out] Get/Set autoNeg
  **
  **  Please Note: in case of set
  **    1. if autoneg is true then speed is ignored.
@@ -278,43 +278,43 @@ typedef struct sfvmk_versionInfo_s {
  **
  ** type[in]  Command type (Get/Set)
  **
- ** rxUsecs[in/out] number of microseconds to wait
+ ** rxUsecs[in,out] number of microseconds to wait
  **          for Rx, before interrupting
  **
- ** rxMaxFrames[in/out] maximum number of (Rx) frames
+ ** rxMaxFrames[in,out] maximum number of (Rx) frames
  **              to wait for, before interrupting
  **
- ** txUsecs[in/out] number of microseconds to wait
+ ** txUsecs[in,out] number of microseconds to wait
  **          for completed Tx, before interrupting
  **
- ** txMaxFrames[in/out] maximum number of completed (Tx)
+ ** txMaxFrames[in,out] maximum number of completed (Tx)
  **              frames to wait for, before interrupting
  **
- ** useAdaptiveRx[in/out] Use adaptive Rx coalescing
+ ** useAdaptiveRx[in,out] Use adaptive Rx coalescing
  **
- ** useAdaptiveTx[in/out] Use adaptive Tx coalescing
+ ** useAdaptiveTx[in,out] Use adaptive Tx coalescing
  **
- ** rateSampleInterval[in/out] Rate sampling interval
+ ** rateSampleInterval[in,out] Rate sampling interval
  **
- ** pktRateLowWatermark[in/out] Low packet rate watermark
+ ** pktRateLowWatermark[in,out] Low packet rate watermark
  **
- ** pktRateHighWatermark[in/out] High packet rate watermark
+ ** pktRateHighWatermark[in,out] High packet rate watermark
  **
- ** rxUsecsLow[in/out] Rx usecs low
+ ** rxUsecsLow[in,out] Rx usecs low
  **
- ** rxFramesLow[in/out] Rx frames low
+ ** rxFramesLow[in,out] Rx frames low
  **
- ** txUsecsLow[in/out] Tx usecs low
+ ** txUsecsLow[in,out] Tx usecs low
  **
- ** txFramesLow[in/out] Tx frames low
+ ** txFramesLow[in,out] Tx frames low
  **
- ** rxUsecsHigh[in/out] Rx usecs high
+ ** rxUsecsHigh[in,out] Rx usecs high
  **
- ** rxFramesHigh[in/out] Rx frames high
+ ** rxFramesHigh[in,out] Rx frames high
  **
- ** txUsecsHigh[in/out] Tx usecs high
+ ** txUsecsHigh[in,out] Tx usecs high
  **
- ** txFramesHigh[in/out] Tx frames high
+ ** txFramesHigh[in,out] Tx frames high
  **
  */
 typedef struct sfvmk_intrCoalsParam_s {
@@ -386,13 +386,13 @@ typedef enum sfvmk_nvramType_e {
  ** offset[in]      Location of NVRAM where to start
  **                 read/write
  **
- ** size[in/out]    Size of buffer, should be <= SFVMK_NVRAM_MAX_PAYLOAD
+ ** size[in,out]    Size of buffer, should be <= SFVMK_NVRAM_MAX_PAYLOAD
  **
  ** subtype[out]    NVRAM subtype, part of get NVRAM version
  **
- ** version[in/out] Version info
+ ** version[in,out] Version info
  **
- ** data[in/out]    NVRAM data for read/write
+ ** data[in,out]    NVRAM data for read/write
  **
  */
 typedef	struct sfvmk_nvramCmd_s {

@@ -94,9 +94,9 @@ sfvmk_generateFilterKey(sfvmk_adapter_t *pAdapter)
 /*! \brief  Prepare a VLAN MAC filter rule
 **
 ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
-** \param[in]      pMac       pointer to MAC address
+** \param[in]      mac        MAC address
 ** \param[in]      vlanID     vlan ID
-** \param[in/out]  pFdbEntry  pointer to filter DB entry
+** \param[in,out]  pFdbEntry  pointer to filter DB entry
 **
 ** \return: VMK_OK if success, error number if failed
 **
@@ -130,16 +130,16 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
 }
 
 /*! \brief  Prepare a VxLAN filter rule
- * **
- * ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
- * ** \param[in]      innerMAC   pointer to inner MAC address
- * ** \param[in]      outerMAC   pointer to outer MAC address
- * ** \param[in]      vxlanID    vxlan ID
- * ** \param[in/out]  pFdbEntry  pointer to filter DB entry
- * **
- * ** \return: VMK_OK if success, error number if failed
- * **
- * */
+ **
+ ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
+ ** \param[in]      innerMac   MAC address
+ ** \param[in]      outerMac   MAC address
+ ** \param[in]      vxlanID    vxlan ID
+ ** \param[in,out]  pFdbEntry  pointer to filter DB entry
+ **
+ ** \return: VMK_OK if success, error number if failed
+ **
+ */
 static VMK_ReturnStatus
 sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
                             vmk_EthAddress innerMac,
@@ -181,7 +181,7 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
 **
 ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
 ** \param[in]      pFilter    pointer to uplink filter info
-** \param[in/out]  pFdbEntry  pointer to filter DB entry
+** \param[in,out]  pFdbEntry  pointer to filter DB entry
 ** \param[in]      qidVal     queue ID value.
 ** \param[in]      filterKey  filter key value.
 **
@@ -266,9 +266,9 @@ done:
 **         the key-value pairs on a given hash table.
 **
 ** \param[in]     htbl   Hash handle.
-** \param[in]     Key    Hash key.
+** \param[in]     key    Hash key.
 ** \param[in]     value  Hash entry value stored at key
-** \param[in/out] data   pointer to sfvmk_filterDBIterCtx_t,
+** \param[in,out] data   pointer to sfvmk_filterDBIterCtx_t,
 **                       if a match is found then
 **                       foundFilterEntry field is set to true.
 **
@@ -427,9 +427,9 @@ sfvmk_removeFilterRule(sfvmk_adapter_t *pAdapter, vmk_uint32 filterKey)
 **         structure entry.
 **
 ** \param[in]     htbl   Hash handle.
-** \param[in]     Key    Hash key.
+** \param[in]     key    Hash key.
 ** \param[in]     value  Hash entry vlaue stored at key
-** \param[in/out] data   pointer to sfvmk_filterDBIterCtx_t
+** \param[in,out] data   pointer to sfvmk_filterDBIterCtx_t
 **
 ** \return: Key iterator stop command.
 **

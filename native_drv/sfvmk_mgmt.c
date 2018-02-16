@@ -81,8 +81,8 @@ end:
  **
  ** \param[in]      pCookies    Pointer to cookie
  ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface   Pointer to device interface structure
- ** \param[in/out]  pMgmtMcdi   Pointer to MCDI cmd struct
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pMgmtMcdi   Pointer to MCDI cmd struct
  **
  ** \return: VMK_OK  [success]
  **     Below error values are filled in the status field of
@@ -161,8 +161,8 @@ end:
  **
  ** \param[in]  pCookies    Pointer to cookie
  ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface  Pointer to device interface structure
- ** \param[in/out]  pMcdiLog   Pointer to MCDI log structure
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pMcdiLog   Pointer to MCDI log structure
  **
  ** \return: VMK_OK  [success]
  **     Below error values are filled in the status field of
@@ -240,8 +240,8 @@ end:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface  pointer to device interface structure
-** \param[in/out]  pPciInfo   pointer to sfvmk_pciInfo_s structure
+** \param[in,out]  pDevIface  pointer to device interface structure
+** \param[in,out]  pPciInfo   pointer to sfvmk_pciInfo_s structure
 **
 ** \return VMK_OK
 **     Below error values are filled in the status field of
@@ -308,8 +308,8 @@ end:
 **
 ** \param[in]      pCookies    pointer to cookie
 ** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to mgmt param
-** \param[in/out]  pVpdInfo    pointer to sfvmk_vpdInfo_s structure
+** \param[in,out]  pDevIface   pointer to mgmt param
+** \param[in,out]  pVpdInfo    pointer to sfvmk_vpdInfo_s structure
 **
 ** \return VMK_OK
 **     Below error values are filled in the status field of
@@ -390,8 +390,8 @@ end:
  **
  ** \param[in]  pCookies    pointer to cookie
  ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface   pointer to mgmt param
- ** \param[in/out]  pLinkOps   pointer to link ops structure
+ ** \param[in,out]  pDevIface   pointer to mgmt param
+ ** \param[in,out]  pLinkState  pointer to link state flag
  **
  ** \return VMK_OK
  **     Below error values are filled in the status field of
@@ -450,8 +450,8 @@ end:
  **
  ** \param[in]  pCookies    pointer to cookie
  ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface    pointer to device interface structure
- ** \param[in/out]  pLinkSpeed   pointer to speed and autoneg
+ ** \param[in,out]  pDevIface    pointer to device interface structure
+ ** \param[in,out]  pLinkSpeed   pointer to speed and autoneg
  **                              param structure
  **
  ** \return VMK_OK
@@ -532,8 +532,8 @@ end:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to device interface structure
-** \param[in/out]  pVerInfo    pointer to version info struct
+** \param[in,out]  pDevIface   pointer to device interface structure
+** \param[in,out]  pVerInfo    pointer to version info struct
 **
 ** \return: VMK_OK  [success]
 **     Below error values are filled in the status field of
@@ -645,8 +645,8 @@ end:
  **
  ** \param[in]  pCookies    pointer to cookie
  ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface  pointer to device interface structure
- ** \param[in/out]  pIntrMod   pointer to interrrupt
+ ** \param[in,out]  pDevIface  pointer to device interface structure
+ ** \param[in,out]  pIntrMod   pointer to interrrupt
  **                            moderation structure
  **
  ** \return VMK_OK
@@ -739,8 +739,8 @@ end:
 **
 ** \param[in]      pCookies    pointer to cookie
 ** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface   pointer to sfvmk_mgmtDevInfo_t
-** \param[in/out]  pImgUpdate  pointer to sfvmk_imgUpdate_t structure
+** \param[in,out]  pDevIface   pointer to sfvmk_mgmtDevInfo_t
+** \param[in,out]  pImgUpdate  pointer to sfvmk_imgUpdate_t structure
 **
 ** \return VMK_OK
 **     Below error values are filled in the status field of
@@ -816,8 +816,8 @@ end:
 **
 ** \param[in]  pCookies    pointer to cookie
 ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in/out]  pDevIface  pointer to device interface structure
-** \param[in/out]  pCmd       pointer to NVRAM cmd struct
+** \param[in,out]  pDevIface  pointer to device interface structure
+** \param[in,out]  pCmd       pointer to NVRAM cmd struct
 **
 ** \return: VMK_OK  [success]
 **     Below error values are filled in the status field of

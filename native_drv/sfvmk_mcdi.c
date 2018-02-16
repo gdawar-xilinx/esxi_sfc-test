@@ -254,7 +254,7 @@ done:
 
 /*! \brief helper routine to log mcdi request.
 **
-** \param[in/out] pBuffer   processed message buffer
+** \param[in,out] pBuffer   processed message buffer
 ** \param[in]     pData     input message buffer
 ** \param[in]     dataSize  input message buffer size
 ** \param[in]     pfxsize   offset at which prefix finishes

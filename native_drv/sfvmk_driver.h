@@ -83,9 +83,9 @@ extern void             sfvmk_driverUnregister(void);
 typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
-  SFVMK_SPINLOCK_RANK_UPLINK_LOCK
+  SFVMK_SPINLOCK_RANK_UPLINK_LOCK,
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
-  SFVMK_SPINLOCK_RANK_BAR_LOCK,
+  SFVMK_SPINLOCK_RANK_BAR_LOCK
 } sfvmk_spinlockRank_t;
 
 typedef enum sfvmk_mcdiState_e {

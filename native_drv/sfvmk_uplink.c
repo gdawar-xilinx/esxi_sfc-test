@@ -356,12 +356,12 @@ done:
 }
 
 /*! \brief Disassociate the RSS netpolls from the uplink
- * **
- * ** \param[in]  adapter pointer to sfvmk_adapter_t
- * **
- * ** \return: VMK_OK on success or error code otherwise
- * **
- * */
+ **
+ ** \param[in]  pAdapter pointer to sfvmk_adapter_t
+ **
+ ** \return: VMK_OK on success or error code otherwise
+ **
+ */
 static void
 sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
 {
@@ -385,8 +385,8 @@ sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
-** \param[in]  cookie     vmk_AddrCookie
-** \param[in]  uplink     uplink device
+** \param[in]  cookie       vmk_AddrCookie
+** \param[in]  uplinkHandle uplink device handle
 **
 ** \return: VMK_OK [success] error code [failure]
 **
@@ -526,7 +526,7 @@ done:
 ** \param[in]  pktList    List of packets to be transmitted
 **
 ** \return: VMK_OK [success]
-** \return: VMK_BUSY <failure when queue busy>
+** \return: VMK_BUSY when queue busy
 ** \return: VMK_FAILURE [failure]
 **
 */
@@ -1053,9 +1053,9 @@ done:
 
 /*! \brief uplink private statistics callback handler
 **
-** \param[in]  cookie   pointer to sfvmk_adapter_t
-** \param[out] statBuf  buffer to put device private stats
-** \param[in]  length   length of stats buf in bytes
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] pStatsBuf buffer to put device private stats
+** \param[in]  length    length of stats buf in bytes
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -1225,8 +1225,8 @@ done:
 
 /*! \brief uplink callback function to get the cable type
 **
-** \param[in]   cookie     pointer to sfvmk_adapter_t
-** \param[out]  cableType  ptr to cable type
+** \param[in]   cookie      pointer to sfvmk_adapter_t
+** \param[out]  pCableType  ptr to cable type
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -1296,8 +1296,8 @@ static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
 
 /*! \brief uplink callback function to get all cable type supported by interface.
 **
-** \param[in]   cookie     pointer to sfvmk_adapter_t
-** \param[out]  cableType  ptr to cable type
+** \param[in]   cookie      pointer to sfvmk_adapter_t
+** \param[out]  pCableType  ptr to cable type
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -1327,7 +1327,7 @@ done:
 /*! \brief uplink callback function to retrieve log level.
 **
 ** \param[in]   cookie    pointer to sfvmk_adapter_t
-** \param[out]  level     pointer to log level
+** \param[out]  pLevel     pointer to log level
 **
 ** \return: VMK_OK on success or error code otherwise
 **
@@ -2344,6 +2344,7 @@ sfvmk_isDefaultUplinkRxq(sfvmk_uplink_t *pUplink, vmk_uint32 qIndex)
 /*! \brief Check if given uplink TXQ is a default TXQ
 **
 ** \param[in]  pUplink  pointer to uplink structure
+** \param[in]  qIndex   Queue index
 **
 ** \return: VMK_TRUE    If it is a default TXQ
 ** \return: VMK_FALSE   otherwise
@@ -2406,9 +2407,11 @@ sfvmk_isValidTXQ(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 /*! \brief  The poll thread calls this callback function for polling packets.
 **
 ** \param[in]  cookie    pointer to sfvmk_evq_t
+** \param[in]  budget    Maximum number of packets to be
+**                       processed in each invocation
 **
-** \return: VMK_TRUE      <Completion is pending>
-**          VMK_FALSE     <No pending completion>
+** \return: VMK_TRUE if Completion is pending
+**          VMK_FALSE if No pending completion
 */
 static vmk_Bool
 sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
@@ -3183,7 +3186,7 @@ done:
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qType    Queue Type (Rx/Tx).
 ** \param[out] pQID     pointer to newly created uplink queue.
-** \param[out] pNetpoll pointer to net poll on top of the allocated queue if any.
+** \param[out] pNetPoll pointer to net poll on top of the allocated queue if any.
 **
 ** \return: VMK_OK on success or error code otherwise.
 */
@@ -3241,7 +3244,7 @@ done:
 ** \param[in]  numAttr  Number of attributes.
 ** \param[in]  pAttr    Queue attributes.
 ** \param[out] pQID     pointer to newly created uplink queue.
-** \param[out] pNetpoll pointer to net poll on top of the allocated queue if any.
+** \param[out] pNetPoll pointer to net poll on top of the allocated queue if any.
 **
 ** \return: VMK_OK on success or error code otherwise.
 */
@@ -3735,7 +3738,7 @@ end:
 ** \param[in]  cookie     pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qid        ID of already created queue.
 ** \param[in]  pFilter    New queue filter to be applied.
-** \param[out] pFID       New Filter ID.
+** \param[out] pFId       New Filter ID.
 ** \param[out] pPairHwQid Potential paired tx queue hardware index.
 **
 ** \return: VMK_OK [success] error code [failure]
@@ -3928,8 +3931,9 @@ sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
 
 /*! \brief add uplink filter
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  qidVal   Queue ID value
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[in]  qidVal     Queue ID value
+** \param[out] pPairHwQid Tx Queue ID pair
 **
 ** \return: void
 **
@@ -4408,7 +4412,7 @@ done:
 /*! \brief uplink callback function to get selfTest length.
 **
 ** \param[in]  cookie    pointer to sfvmk_adapter_t
-** \param[out] params    pointer to length of self test result
+** \param[out] pLen      pointer to length of self test result
 **                       in vmk_UplinkSelfTestResult or vmk_UplinkSelfTestString
 **
 ** \return: VMK_OK [success] error code [failure]
@@ -4542,12 +4546,12 @@ done:
 
 /*! \brief uplink callback function to run self tests
 **
-** \param[in]  cookie     pointer to sfvmk_adapter_t
-** \param[in]  online     if TRUE, perform online tests only else offline test
-** \param[out] pPassed    self test result which would be TRUE
-**                        only if all tests are passed
-** \param[out] pResultBuf buffer to store self test result
-** \param[out] pStringBuf buffer to store self test string
+** \param[in]  cookie      pointer to sfvmk_adapter_t
+** \param[in]  online      if TRUE, perform online tests only else offline test
+** \param[out] pPassed     self test result which would be TRUE
+**                         only if all tests are passed
+** \param[out] pResultBuf  buffer to store self test result
+** \param[out] pStringsBuf buffer to store self test string
 **
 ** \return: VMK_OK        When any one test is executed successfully
 ** \return: VMK_FAILURE   If test execution of all test cases fail

@@ -537,10 +537,11 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   VMK_ReturnStatus status = VMK_FAILURE;
   vmk_PktHandle *pkt;
   vmk_UplinkQueueID uplinkQid;
-  vmk_uint32 qid;
+  vmk_uint32 qid = 0;
   vmk_uint32 txqStartIndex;
   vmk_int16 maxRxQueues;
   vmk_int16 maxTxQueues;
+  vmk_Bool queueIdentified = VMK_FALSE;
   VMK_PKTLIST_ITER_STACK_DEF(iter);
   sfvmk_pktCompCtx_t compCtx = {
     .type = SFVMK_PKT_COMPLETION_OTHERS,
@@ -588,11 +589,14 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     goto release_all_pkts;
   }
 
+  queueIdentified = VMK_TRUE;
+
   vmk_SpinlockLock(pAdapter->ppTxq[qid]->lock);
 
   if (pAdapter->ppTxq[qid]->state != SFVMK_TXQ_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "TXQ state[%d] not yet started",
                         pAdapter->ppTxq[qid]->state);
+    vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_INVALID_QUEUE_STATE]);
     vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
     goto release_all_pkts;
   }
@@ -612,6 +616,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                           "Queue blocked, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
+      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]);
       status = VMK_BUSY;
       goto done;
     }
@@ -622,13 +627,18 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                           "Queue full, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
+      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]);
       goto done;
     } else if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_transmitPkt failed status %s",
                           vmk_StatusToString(status));
       sfvmk_pktRelease(pAdapter, &compCtx, pkt);
       vmk_AtomicInc64(&pAdapter->txDrops);
+      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]);
+      continue;
     }
+
+    vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_PKTS]);
   }
 
   vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
@@ -639,6 +649,8 @@ release_all_pkts:
     vmk_PktListIterRemovePkt(iter, &pkt);
     sfvmk_pktRelease(pAdapter, &compCtx, pkt);
     vmk_AtomicInc64(&pAdapter->txDrops);
+    if (queueIdentified)
+      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]);
   }
 
 done:
@@ -952,63 +964,240 @@ done:
   return status;
 }
 
-#define SFVMK_PRIV_STATS_ENTRY_LEN  80
-#define SFVMK_PRIV_STATS_BUFFER_SZ  (EFX_MAC_NSTATS * SFVMK_PRIV_STATS_ENTRY_LEN)
+#define SFVMK_PRIV_STATS_ENTRY_LEN  100
+#define SFVMK_PRIV_STATS_BUFFER_SZ  ((EFX_MAC_NSTATS * SFVMK_PRIV_STATS_ENTRY_LEN) + \
+                                     ((SFVMK_MAX_TXQ + SFVMK_MAX_RXQ) * \
+                                      SFVMK_PRIV_STATS_ENTRY_LEN))
 
-/*! \brief Fill the buffer with private stats
+/*! \brief Fill the buffer with a Tx queue stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter   pointer to sfvmk_adapter_t
-** \param[out] pStatsBuf  pointer to stats buffer to be filled
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[out] ppCurr    pointer to current position in stats buffer
+** \param[in]  pEnd      pointer to end position of stats buffer
+** \param[in]  qIndex    queue Index
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
-**           VMK_EOVERFLOW   If stats buffer overflowed
-**           VMK_FAILURE     Any other error
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
 */
 static VMK_ReturnStatus
-sfvmk_fillPrivStats(sfvmk_adapter_t *pAdapter, char *pStatsBuf)
+sfvmk_fillTxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
+                       const char *pEnd, vmk_uint16 qIndex)
 {
-  uint32_t id;
+  sfvmk_txq_t *pTxq;
   vmk_ByteCount offset = 0;
-  const char *pEntryName;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  status = vmk_StringFormat(pStatsBuf, SFVMK_PRIV_STATS_ENTRY_LEN,
-                            &offset, "\n");
+  pTxq = pAdapter->ppTxq[qIndex];
+  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
+                            &offset, "TxQ[%u]: %s %lu %s %lu %s %lu\n",
+                            qIndex,
+                            pSfvmkTxqStatsName[SFVMK_TXQ_PKTS],
+                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_PKTS]),
+                            pSfvmkTxqStatsName[SFVMK_TXQ_BYTES],
+                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_BYTES]),
+                            pSfvmkTxqStatsName[SFVMK_TXQ_DISCARD],
+                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_DISCARD]));
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
 
-  pStatsBuf += offset;
+  *ppCurr += offset;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief Fill the buffer with a Rx queue stats
+**         lock is already taken.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[out] ppCurr    pointer to current position in stats buffer
+** \param[in]  pEnd      pointer to end position of stats buffer
+** \param[in]  qIndex    queue Index
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
+*/
+static VMK_ReturnStatus
+sfvmk_fillRxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
+                       const char *pEnd, vmk_uint16 qIndex)
+{
+  sfvmk_rxq_t *pRxq;
+  vmk_ByteCount offset = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  pRxq = pAdapter->ppRxq[qIndex];
+  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
+                            &offset, "RxQ[%u]: %s %lu %s %lu %s %lu\n",
+                            qIndex,
+                            pSfvmkRxqStatsName[SFVMK_RXQ_PKTS],
+                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_PKTS]),
+                            pSfvmkRxqStatsName[SFVMK_RXQ_BYTES],
+                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_BYTES]),
+                            pSfvmkRxqStatsName[SFVMK_RXQ_DISCARD],
+                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_DISCARD]));
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  *ppCurr += offset;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief Fill the buffer with per Rx/Tx queue stats
+**         lock is already taken.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[out] pCurr     pointer to current position in stats buffer
+** \param[in]  pEnd      pointer to end position of stats buffer
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
+*/
+static VMK_ReturnStatus
+sfvmk_populateQueueStats(sfvmk_adapter_t *pAdapter,
+                         char            *pCurr,
+                         const char      *pEnd)
+{
+  vmk_uint16 maxRxQueues;
+  vmk_uint16 maxTxQueues;
+  vmk_uint16 qIndex;
+  vmk_ByteCount offset = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  maxRxQueues = sfvmk_getMaxRxHardwareQueues(pAdapter);
+  maxTxQueues = sfvmk_getMaxTxHardwareQueues(pAdapter);
+
+  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
+                            &offset, "  -- Per Hardware Queue Statistics\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pCurr += offset;
+
+  for (qIndex = 0; qIndex < maxRxQueues; qIndex++) {
+    status = sfvmk_fillRxQueueStats(pAdapter, &pCurr, pEnd, qIndex);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillRxQueueStats failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+  status = vmk_StringFormat(pCurr, (pEnd - pCurr), &offset, "\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pCurr += offset;
+
+  for (qIndex = 0; qIndex < maxTxQueues; qIndex++) {
+    status = sfvmk_fillTxQueueStats(pAdapter, &pCurr, pEnd, qIndex);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillTxQueueStats failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief Fill the buffer with private stats
+**         lock is already taken.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[out] pStart    pointer to start position in stats buffer
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
+*/
+static VMK_ReturnStatus
+sfvmk_fillPrivStats(sfvmk_adapter_t *pAdapter, char *pStart)
+{
+  uint32_t id;
+  vmk_ByteCount offset = 0;
+  char *pCurr;
+  const char *pEnd;
+  const char *pEntryName;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  pEnd = SFVMK_PRIV_STATS_BUFFER_SZ + pStart;
+  pCurr = pStart;
+
+  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
+                            &offset, "\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto string_format_failed;
+  }
+
+  pCurr += offset;
+
   for (id = 0; id < EFX_MAC_NSTATS; id++) {
     pEntryName = efx_mac_stat_name(pAdapter->pNic, id);
-    status = vmk_StringFormat(pStatsBuf, SFVMK_PRIV_STATS_ENTRY_LEN,
+    status = vmk_StringFormat(pCurr, (pEnd - pCurr),
                               &offset, "%s: %lu\n", pEntryName,
                               pAdapter->adapterStats[id]);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                           vmk_StatusToString(status));
-      goto done;
+      goto string_format_failed;
     }
 
-    if (offset >= SFVMK_PRIV_STATS_BUFFER_SZ) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Private stats buffer overflowed");
-      status = VMK_EOVERFLOW;
-      goto done;
-    }
-
-    pStatsBuf += offset;
+    pCurr += offset;
   }
 
-  /* TODO: Fill the driver maintained statistics
-   * SFVMK_PRIV_STATS_BUFFER_SZ would need to be
-   * updated accordingly */
+  /* Fill the driver maintained statistics */
+  status = sfvmk_populateQueueStats(pAdapter, pCurr, pEnd);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_populateQueueStats failed status: %s",
+                        vmk_StatusToString(status));
+    goto string_format_failed;
+  }
+
   status = VMK_OK;
+  goto done;
+
+string_format_failed:
+  VMK_ASSERT((status != VMK_LIMIT_EXCEEDED), "Private stats buffer overflowed");
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

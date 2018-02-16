@@ -197,6 +197,43 @@ typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_STARTED
 } sfvmk_txqState_t;
 
+/* Tx Queue statistics */
+typedef enum sfvmk_txqStats_e {
+  SFVMK_TXQ_PKTS = 0,
+  SFVMK_TXQ_BYTES,
+  SFVMK_TXQ_INVALID_QUEUE_STATE,
+  SFVMK_TXQ_QUEUE_BUSY,
+  SFVMK_TXQ_DMA_MAP_ERROR,
+  SFVMK_TXQ_DESC_POST_FAILED,
+  SFVMK_TXQ_TSO_PARSING_FAILED,
+  SFVMK_TXQ_TSO_LONG_HEADER_ERROR,
+  SFVMK_TXQ_QUEUE_BLOCKED,
+  SFVMK_TXQ_QUEUE_UNBLOCKED,
+  SFVMK_TXQ_SG_ELEM_GET_FAILED,
+  SFVMK_TXQ_SG_ELEM_TOO_LONG,
+  SFVMK_TXQ_PARTIAL_COPY_FAILED,
+  SFVMK_TXQ_DISCARD,
+  SFVMK_TXQ_MAX_STATS
+} sfvmk_txqStats_t;
+
+static const char * const pSfvmkTxqStatsName[] = {
+  "tx_pkts",
+  "tx_bytes",
+  "tx_invalid_queue_state",
+  "tx_queue_busy",
+  "tx_dma_map_error",
+  "tx_desc_post_failed",
+  "tx_tso_parsing_failed",
+  "tx_tso_long_header_error",
+  "tx_queue_blocked",
+  "tx_queue_unblocked",
+  "tx_sg_elem_get_failed",
+  "tx_sg_elem_too_long",
+  "tx_partial_copy_failed",
+  "tx_discard",
+  "tx_max_stats"
+};
+
 /* Buffer mapping information for descriptors in flight */
 typedef struct sfvmk_txMapping_s {
   vmk_PktHandle *pOrigPkt;
@@ -278,6 +315,8 @@ typedef struct sfvmk_txq_s {
   vmk_uint32              reaped;
   vmk_uint32              completed;
 
+  vmk_atomic64            stats[SFVMK_TXQ_MAX_STATS];
+
   /* The last VLAN TCI seen on the queue if FW-assisted tagging is used */
   vmk_uint16              hwVlanTci;
   vmk_Bool                isCso;
@@ -296,6 +335,39 @@ typedef struct sfvmk_rxSwDesc_s {
   vmk_PktHandle  *pPkt;
   vmk_IOA        ioAddr;
 } sfvmk_rxSwDesc_t;
+
+/* Rx Queue statistics */
+typedef enum sfvmk_rxqStats_e {
+  SFVMK_RXQ_PKTS = 0,
+  SFVMK_RXQ_BYTES,
+  SFVMK_RXQ_INVALID_DESC,
+  SFVMK_RXQ_INVALID_PKT_BUFFER,
+  SFVMK_RXQ_DMA_UNMAP_FAILED,
+  SFVMK_RXQ_PSEUDO_HDR_PKT_LEN_FAILED,
+  SFVMK_RXQ_PKT_HEAD_ROOM_FAILED,
+  SFVMK_RXQ_PKT_FRAME_MAPPED_PTR_FAILED,
+  SFVMK_RXQ_INVALID_BUFFER_DESC,
+  SFVMK_RXQ_INVALID_FRAME_SZ,
+  SFVMK_RXQ_INVALID_PROTO,
+  SFVMK_RXQ_DISCARD,
+  SFVMK_RXQ_MAX_STATS
+} sfvmk_rxqStats_t;
+
+static const char * const pSfvmkRxqStatsName[] = {
+  "rx_pkts",
+  "rx_bytes",
+  "rx_invalid_desc",
+  "rx_invalid_pkt_buffer",
+  "rx_dma_unmap_failed",
+  "rx_pseudo_hdr_pkt_len_failed",
+  "rx_pkt_head_room_failed",
+  "rx_pkt_frame_mapped_ptr_failed",
+  "rx_invalid_buffer_desc",
+  "rx_invalid_frame_sz",
+  "rx_invalid_proto",
+  "rx_discard",
+  "rx_max_stats"
+};
 
 typedef enum sfvmk_rxqState_e {
   SFVMK_RXQ_STATE_UNINITIALIZED = 0,
@@ -320,6 +392,7 @@ typedef struct sfvmk_rxq_s {
   vmk_uint32              completed;
   vmk_uint32              refillThreshold;
   vmk_uint32              refillDelay;
+  vmk_atomic64            stats[SFVMK_RXQ_MAX_STATS];
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 
@@ -629,6 +702,33 @@ static inline vmk_uint32 sfvmk_getRSSQStartIndex(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pAdapter);
   return pAdapter->numNetQs;
 }
+
+/*! \brief Get maximum Rx hardware queue number
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
+**
+** \return: number of max HW Rx queues
+*/
+static inline vmk_uint32 __attribute__((always_inline))
+sfvmk_getMaxRxHardwareQueues(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  return pAdapter->numRxqsAllocated;
+}
+
+/*! \brief Get maximum Tx hardware queue number
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
+**
+** \return: number of max HW Tx queues
+*/
+static inline vmk_uint32 __attribute__((always_inline))
+sfvmk_getMaxTxHardwareQueues(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  return pAdapter->numTxqsAllocated;
+}
+
 /* Functions for Uplink filter handling */
 VMK_ReturnStatus sfvmk_allocFilterDBHash(sfvmk_adapter_t *pAdapter);
 void sfvmk_freeFilterDBHash(sfvmk_adapter_t *pAdapter);

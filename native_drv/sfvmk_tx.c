@@ -680,6 +680,7 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
   sfvmk_txqReap(pTxq);
   sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
   pTxq->blocked = VMK_FALSE;
+  vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_UNBLOCKED]);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
@@ -865,14 +866,14 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   vmk_uint16 numElems;
   vmk_uint32 id, startID;
   vmk_SgElem inAddr, mappedAddr;
-  vmk_ByteCountSmall elemLength, pktLenLeft;
+  vmk_ByteCountSmall elemLength, pktLenLeft, pktLen;
   sfvmk_txMapping_t *pTxMap = pTxq->pTxMap;
   vmk_uint32 nPendDescOri = pTxq->nPendDesc;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   id = startID = *pTxMapId;
-  pktLenLeft = vmk_PktFrameLenGet(pXmitPkt);
+  pktLen = pktLenLeft = vmk_PktFrameLenGet(pXmitPkt);
   numElems = vmk_PktSgArrayGet(pXmitPkt)->numElems;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
@@ -882,6 +883,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   for (i = 0; i < numElems && pktLenLeft > 0; i ++) {
      pSgElem = vmk_PktSgElemGet(pXmitPkt, i);
      if (pSgElem == NULL) {
+       vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_SG_ELEM_GET_FAILED]);
        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktSgElemGet returned NULL");
        status = VMK_FAILURE;
        goto fail_map;
@@ -889,6 +891,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
 
      elemLength = pSgElem->length;
      if (elemLength > pAdapter->txDmaDescMaxSize) {
+       vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_SG_ELEM_TOO_LONG]);
        SFVMK_ADAPTER_ERROR(pAdapter, "ElemLength[%u] exceeded max allowed",
                            elemLength);
        status = VMK_FAILURE;
@@ -911,6 +914,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
         SFVMK_ADAPTER_ERROR(pAdapter,"Failed to map elem %lx size %u: %s",
                             pSgElem->addr, elemLength,
                             vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+        vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]);
         goto fail_map;
      }
 
@@ -937,6 +941,8 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
 
   *pTxMapId = id;
   descCount = pTxq->nPendDesc - nPendDescOri;
+
+  vmk_AtomicAdd64(&pTxq->stats[SFVMK_TXQ_BYTES], pktLen);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "non-TSO desc done: %d desc created, next startID = %d",
@@ -1321,6 +1327,7 @@ sfvmk_hwTsoFixPkt(sfvmk_txq_t *pTxq,
    * contents beyond that will be referring to buffers shared with pOrigPkt */
   status = vmk_PktPartialCopy(pOrigPkt, copyBytes, &pXmitPkt);
   if (status != VMK_OK) {
+    vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_PARTIAL_COPY_FAILED]);
     SFVMK_ADAPTER_ERROR(pAdapter, "Partial copy[%p] failed[%s], numBytes: %u",
                         pOrigPkt, vmk_StatusToString(status), copyBytes);
     goto done;
@@ -1453,6 +1460,7 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
       SFVMK_ADAPTER_ERROR(pAdapter,"Failed to map pkt %p size %u: %s",
                           pXmitPkt, pktLen,
                           vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
+      vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]);
       goto fail_map;
     }
 
@@ -1515,6 +1523,8 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
 
   descCount = pTxq->nPendDesc - nPendDescOri;
   VMK_ASSERT(descCount <= pXmitInfo->dmaDescsEst + EFX_TX_FATSOV2_OPT_NDESCS);
+
+  vmk_AtomicAdd64(&pTxq->stats[SFVMK_TXQ_BYTES], pktLen);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "FATSO done: created %u desc, next startID = %u",
@@ -1684,6 +1694,7 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    /* Post the pSgElemment list. */
    status = sfvmk_txqListPost(pTxq);
    if (status != VMK_OK) {
+     vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DESC_POST_FAILED]);
      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] post failed: %s",
                          pXmitInfo->pXmitPkt, vmk_StatusToString(status));
    }
@@ -1776,8 +1787,8 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_INFO,
                         "not enough desc entries in txq[%u], stopping the queue",
                         pTxq->index);
-
     status = VMK_BUSY;
+    vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_BLOCKED]);
     goto done;
   } else {
     pTxq->blocked = VMK_FALSE;
@@ -1791,6 +1802,7 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     status = sfvmk_fillXmitInfo(pTxq, pkt, &xmitInfo);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "failed to parse xmit pkt info");
+      vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_TSO_PARSING_FAILED]);
       goto done;
     }
 

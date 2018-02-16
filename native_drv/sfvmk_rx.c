@@ -422,6 +422,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   if ((pRxDesc == NULL) || (qIndex >= pAdapter->numRxqsAllocated)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid arguments pRxDesc = %p qIndex = %u",
                         pRxDesc, qIndex);
+    vmk_AtomicInc64(&pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_INVALID_DESC]);
     status = VMK_BAD_PARAM;
     goto done;
   }
@@ -429,6 +430,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   pPkt = pRxDesc->pPkt;
   if (pPkt == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NULL Pkt");
+    vmk_AtomicInc64(&pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_INVALID_PKT_BUFFER]);
     status = VMK_FAILURE;
     goto done;
   }
@@ -439,6 +441,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_DMAUnmapElem failed status: %s",
                         vmk_StatusToString(status));
+    vmk_AtomicInc64(&pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_DMA_UNMAP_FAILED]);
   }
 
   /* Convert checksum flags */
@@ -453,6 +456,9 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
     /* Deliver the pkt to uplink layer */
     vmk_NetPollRxPktQueue(pAdapter->ppEvq[qIndex]->netPoll, pPkt);
   }
+
+  vmk_AtomicAdd64(&pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_BYTES], pRxDesc->size);
+  vmk_AtomicInc64(&pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_PKTS]);
 
   pRxDesc->flags = EFX_DISCARD;
   pRxDesc->pPkt = NULL;
@@ -519,6 +525,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       if (status != VMK_OK) {
         SFVMK_ADAPTER_ERROR(pAdapter, "efx_pseudo_hdr_pkt_length_get failed status: %s",
                             vmk_StatusToString(status));
+        vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_PSEUDO_HDR_PKT_LEN_FAILED]);
         goto discard_pkt;
       }
       pRxDesc->size = len + pAdapter->rxPrefixSize;
@@ -534,6 +541,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     if(status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktPushHeadroom failed status: %s",
                           vmk_StatusToString(status));
+      vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_PKT_HEAD_ROOM_FAILED]);
       goto discard_pkt;
     }
     pRxDesc->size -= pAdapter->rxPrefixSize;
@@ -544,6 +552,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       if (!pFrameVa) {
         SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktFrameMappedPointerGet failed status: %s",
                             vmk_StatusToString(status));
+        vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_PKT_FRAME_MAPPED_PTR_FAILED]);
         goto discard_pkt;
       } else {
         if (vmk_PktIsBufDescWritable(pPkt) == VMK_TRUE) {
@@ -554,6 +563,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
         } else {
           SFVMK_ADAPTER_ERROR(pAdapter, "Buff desc is not writable(pkt size = %u",
                               pRxDesc->size);
+          vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_INVALID_BUFFER_DESC]);
           goto discard_pkt;
         }
       }
@@ -562,6 +572,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     if (VMK_UNLIKELY(pRxDesc->size > pAdapter->rxMaxFrameSize)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u]: pkt size(%u) is invalid",
                           pRxq->index, pRxDesc->size);
+      vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_INVALID_FRAME_SZ]);
       goto discard_pkt;
     }
 
@@ -584,6 +595,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
         break;
       default:
         SFVMK_ADAPTER_ERROR(pAdapter, "RX Desc with both ipv4 and ipv6 flags");
+        vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_INVALID_PROTO]);
         goto discard_pkt;
     }
 
@@ -593,6 +605,10 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     continue;
 
 discard_pkt:
+
+    if (pRxq->state == SFVMK_RXQ_STATE_STARTED)
+      vmk_AtomicInc64(&pRxq->stats[SFVMK_RXQ_DISCARD]);
+
     /* Return the packet to the pool */
     elem.ioAddr = pRxDesc->ioAddr;
     elem.length = pRxDesc->size;

@@ -72,7 +72,7 @@ static void sfvmk_forgetDevice(vmk_Device device);
 /*! \brief  Routine to check adapter's family, raise error if proper family
 ** is not found.
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_TRUE [success] VMK_FALSE [failure]
 */
@@ -127,7 +127,7 @@ done:
 
 /*! \brief  Routine to get pci device information such as vendor id , device ID
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
@@ -217,7 +217,7 @@ done:
 /*! \brief  Routine to create DMA engine.
 **
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
@@ -272,7 +272,7 @@ done:
 /*! \brief  Routine to destroy DMA engine.
 **
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */

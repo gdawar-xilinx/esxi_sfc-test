@@ -596,7 +596,7 @@ VMK_ReturnStatus sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
 
 /*! \brief disable RSS by making numRSSQs as 0  in adapter data structure
 **
-** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 **
 ** \return: none
 */
@@ -608,7 +608,7 @@ static inline void sfvmk_disableRSS(sfvmk_adapter_t *pAdapter)
 
 /*! \brief Check if RSS enable by checking numRSSQs
 **
-** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 **
 ** \return: VMK_TRUE if RSS is enable VMK_FALSE otherwise
 */
@@ -620,7 +620,7 @@ static inline vmk_Bool sfvmk_isRSSEnable(sfvmk_adapter_t *pAdapter)
 
 /*! \brief Get RSS start queue index
 **
-** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 **
 ** \return:  RSS start queue index
 */
@@ -700,7 +700,7 @@ sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 
 /*! \brief Get the pointer to tx shared queue data
 **
-** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 **
 ** \return: pointer to queue data from where TXQs is starting
 */

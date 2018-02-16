@@ -308,7 +308,7 @@ const static vmk_UplinkAdvertisedModesOps sfvmk_advModesOps = {
 
 /*! \brief Associate the RSS netpoll to the uplink
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK on success or error code otherwise
 **
@@ -1475,7 +1475,7 @@ end:
 
 /*! \brief function to register all driver cap with uplink device.
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK [success] error code [failure]
 **
@@ -2006,8 +2006,9 @@ done:
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success or if adapter is already in the start state> 
-** \return: Error code   [failure]
+** \return: VMK_OK [success] or if pAdapter
+**                 is already in the start state
+** \return: Error code [failure]
 **
 */
 static VMK_ReturnStatus

@@ -420,7 +420,7 @@ sfvmk_linkStateGet(sfvmk_adapter_t *pAdapter, vmk_LinkState *pLinkState)
 
 /*! \brief function to set the mac filter
 **
-** \param[in]  pAdapter  pointer to adapter structure
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 ** \param[in]  state     uplink state.
 **
 ** \return: VMK_OK on success or error code otherwise

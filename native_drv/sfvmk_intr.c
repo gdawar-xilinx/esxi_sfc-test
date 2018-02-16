@@ -319,7 +319,7 @@ done:
 
 /*! \brief start common interrupt module and setup the interrupt.
 **
-** \param[in] adapter pointer to sfvmk_adapter_t
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -387,7 +387,7 @@ done:
 
 /*! \brief unregistered all the interrupt.
 **
-** \param[in] adapter pointer to sfvmk_adapter_t
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK [success] error code [failure]
 */

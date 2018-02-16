@@ -403,7 +403,7 @@ done:
 
 /*! \brief Flush and destroy all common code TXQs.
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: void
 **
@@ -576,7 +576,7 @@ done:
 
 /*! \brief creates txq module for all allocated txqs.
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -1695,7 +1695,7 @@ done:
 
 /*! \brief function to check if the transmit queue is stopped
 **
-** \param[in]  adapter      pointer to sfvmk_adapter_t
+** \param[in]  pAdapter       pointer to sfvmk_adapter_t
 ** \param[in]  txqIndex     transmit queue id
 **
 ** \return: VMK_TRUE if txq is stopped, VMK_FALSE otherwise.

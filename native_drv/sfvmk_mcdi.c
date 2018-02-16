@@ -198,7 +198,7 @@ done:
 
 /*! \brief Routine to post MCDI user request
 **
-** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
+** \param[in] pAdapter pAdapter  pointer to sfvmk_adapter_t
 ** \param[in] pEmReq  mcdi command request
 **
 ** \return: VMK_OK [success],

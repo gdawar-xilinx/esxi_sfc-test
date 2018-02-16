@@ -41,6 +41,10 @@ BUILD_NUMBER  = 4598673
 TARGET        = $(CURDIR)/build
 SCONS_TARGET  = $(CURDIR)/.build
 IMPORTED_CODE = $(CURDIR)/imported
+DOXYGEN       = $(CURDIR)/../doxygen
+DOXYGEN_TARGET= $(DOXYGEN)/doc
+ESXI_DOXY_CFG = $(DOXYGEN)/esxi_doxy.cfg
+
 
 # Map VIB acceptance level to canonical default signing-key file base name
 ACCEPT_LEVEL = $(shell grep acceptance-level $(SRC)/$(MANIFEST))
@@ -76,6 +80,11 @@ all: vib
 imported/%:
 	@wget -q -O $@ $(V5_URL)/src/driver/common/$(@F)
 	@chmod a-w $@
+
+doc:
+	@mkdir $(DOXYGEN_TARGET)
+	@cd $(DOXYGEN_TARGET)
+	@doxygen $(ESXI_DOXY_CFG)
 
 imported_dir:
 	@mkdir -p $(IMPORTED_CODE)

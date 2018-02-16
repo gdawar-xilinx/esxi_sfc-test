@@ -205,7 +205,7 @@ sfvmk_calcHeapSize(void)
 **
 ** \param  None
 **
-** \return: 0 <success> or 1 <failure>
+** \return: 0 [success] or 1 [failure]
 **
 */
 int

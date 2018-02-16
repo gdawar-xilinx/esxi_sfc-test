@@ -35,7 +35,7 @@
  ** \param[in]  vpdKeyword     VPD keyword info
  ** \param[out] pVpdLen        Length of data copied into pVpdData
  **
- ** \return: VMK_OK <success> error code <failure>
+ ** \return: VMK_OK [success] error code [failure]
  **     Below error values values will be returned in
  **     case of failure,
  **     VMK_NO_MEMORY:      Memory allocation failed
@@ -120,7 +120,7 @@ end:
  ** \param[in]  vpdKeyword     VPD keyword info
  ** \param[in]  vpdLen         Length of data in pVpdData
  **
- ** \return: VMK_OK <success> error code <failure>
+ ** \return: VMK_OK [success] error code [failure]
  **     Below error values values will be returned in
  **     case of failure,
  **     VMK_NO_MEMORY:      Memory allocation failed

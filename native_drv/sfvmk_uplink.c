@@ -388,7 +388,7 @@ sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
 ** \param[in]  cookie     vmk_AddrCookie
 ** \param[in]  uplink     uplink device
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -459,7 +459,7 @@ done:
 **
 ** \param[in]  cookie     vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -525,9 +525,9 @@ done:
 ** \param[in]  cookie     pointer to sfvmk_adapter_t
 ** \param[in]  pktList    List of packets to be transmitted
 **
-** \return: VMK_OK <success>
+** \return: VMK_OK [success]
 ** \return: VMK_BUSY <failure when queue busy>
-** \return: VMK_FAILURE <failure>
+** \return: VMK_FAILURE [failure]
 **
 */
 static VMK_ReturnStatus
@@ -879,7 +879,7 @@ done:
 ** \param[in]  cookie  pointer to vmk_AddrCookie
 ** \param[out] pNicStats    ptr to stats
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -961,7 +961,7 @@ done:
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t
 ** \param[out] pStatsBuf  pointer to stats buffer to be filled
 **
-** \return: VMK_OK <success>
+** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
 **           VMK_EOVERFLOW   If stats buffer overflowed
 **           VMK_FAILURE     Any other error
@@ -1020,7 +1020,7 @@ done:
 ** \param[in]  cookie   pointer to sfvmk_adapter_t
 ** \param[out] pLength  length of the private stats in bytes
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_privStatsLengthGet(vmk_AddrCookie cookie, vmk_ByteCount *pLength)
@@ -1057,7 +1057,7 @@ done:
 ** \param[out] statBuf  buffer to put device private stats
 ** \param[in]  length   length of stats buf in bytes
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_privStatsGet(vmk_AddrCookie cookie,
@@ -1176,7 +1176,7 @@ sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 **
 ** \param[in]  cookie  vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1228,7 +1228,7 @@ done:
 ** \param[in]   cookie     pointer to sfvmk_adapter_t
 ** \param[out]  cableType  ptr to cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
                                            vmk_UplinkCableType *pCableType)
@@ -1275,7 +1275,7 @@ done:
 ** \param[in]   cookie     pointer to sfvmk_adapter_t
 ** \param[out]  cableType  cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
                                            vmk_UplinkCableType cableType)
@@ -1299,7 +1299,7 @@ static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
 ** \param[in]   cookie     pointer to sfvmk_adapter_t
 ** \param[out]  cableType  ptr to cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
                                                      vmk_UplinkCableType *pCableType)
@@ -1399,7 +1399,7 @@ done:
 ** \param[in]  cookie       pointer to sfvmk_adapter_t
 ** \param[out] pLinkStatus  pointer to link status
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **          VMK_BAD_PARAM:     NULL pointer to sfvmk_adapter_t
 **          VMK_FAILURE:       Other failure
 **
@@ -1477,7 +1477,7 @@ end:
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
@@ -1770,7 +1770,7 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
 ** \param[in]  cookie   pointer to sfvmk_adapter_t
 ** \param[out] params   pointer to vmk_UplinkRingParams
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1832,7 +1832,7 @@ done:
 ** \param[in]  cookie    pointer to sfvmk_adapter_t
 ** \param[in]  params    pointer to vmk_UplinkRingParams
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1926,7 +1926,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1951,7 +1951,7 @@ sfvmk_setDrvLimits(sfvmk_adapter_t *pAdapter)
 **
 ** \param[in]  cookie  pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2007,7 +2007,7 @@ done:
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK <success or if adapter is already in the start state> 
-** \return: Error code   <failure>
+** \return: Error code   [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2134,7 +2134,7 @@ done:
 **
 ** \param[in]  cookie  pointer to vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2168,7 +2168,7 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2677,7 +2677,7 @@ done:
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 ** \param[in]  serviceID   service to which work has to be charged
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2791,7 +2791,7 @@ done:
 **
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -2900,7 +2900,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3060,7 +3060,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -3461,7 +3461,7 @@ done:
 ** \param[in]  cookie   pointer to vmk_AddrCookie/sfvmk_adapter_t.
 ** \param[in]  qid      ID of already created queue.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_quiesceQueue(vmk_AddrCookie cookie,
@@ -3664,7 +3664,7 @@ done:
 ** \param[in]  qid      ID of already created queue.
 ** \param[in]  fid      ID of already created filter.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3737,7 +3737,7 @@ end:
 ** \param[out] pFID       New Filter ID.
 ** \param[out] pPairHwQid Potential paired tx queue hardware index.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3833,7 +3833,7 @@ end:
 ** \param[in]  qid      ID of already created queue.
 ** \param[out] pStats   Uplink queue stats
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3858,7 +3858,7 @@ sfvmk_getQueueStats(vmk_AddrCookie cookie,
 ** \param[in]  feature  Queue feature.
 ** \param[in]  setUnset Set or remove queue feature
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3883,7 +3883,7 @@ sfvmk_toggleQueueFeature(vmk_AddrCookie cookie,
 ** \param[in]  qid       ID of already created queue.
 ** \param[in]  priority  Queue priority
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -3907,7 +3907,7 @@ sfvmk_setQueueTxPriority(vmk_AddrCookie cookie,
 ** \param[in]  qid      ID of already created queue.
 ** \param[in]  pParams  Queue Coalesce parameters.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -4073,7 +4073,7 @@ end:
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -4109,7 +4109,7 @@ sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
 ** \param[in] pAdapter    pointer to sfvmk_adapter_t
 ** \param[in] moderation  Interrupt moderation value
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -4211,7 +4211,7 @@ sfvmk_configQueueDataCoalescParams(sfvmk_adapter_t *pAdapter,
 ** \param[in]  cookie    pointer to sfvmk_adapter_t
 ** \param[out] pParams   pointer to vmk_UplinkCoalesceParams
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -4410,7 +4410,7 @@ done:
 ** \param[out] params    pointer to length of self test result
 **                       in vmk_UplinkSelfTestResult or vmk_UplinkSelfTestString
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus sfvmk_selfTestResultLenGet(vmk_AddrCookie cookie,

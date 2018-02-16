@@ -248,8 +248,8 @@ done:
 **
 ** \param[in] arg        Pointer to eventQ
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 static boolean_t
 sfvmk_evInitialized(void *arg)
@@ -285,8 +285,8 @@ fail:
 ** \param[in] code     Exception code
 ** \param[in] data     Exception data
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 static boolean_t
 sfvmk_evException(void *arg, uint32_t code, uint32_t data)
@@ -339,8 +339,8 @@ fail:
 ** \param[in] arg        Pointer to event queue
 ** \param[in] linkMode   Specify link status (up/down, speed)
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_True  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_True  [failure]
 */
 static boolean_t
 sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode)
@@ -393,8 +393,8 @@ fail:
 ** \param[in] rxqIndex  RXQ index
 ** \param[in] swEvent   Software event.
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 static boolean_t
 sfvmk_evRxqFlush(void *arg, uint32_t rxqIndex, sfvmk_flushState_t flushState)
@@ -446,8 +446,8 @@ fail:
 ** \param[in] arg       Pointer to event queue
 ** \param[in] rxqIndex  RXQ Index
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 static boolean_t
 sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
@@ -460,8 +460,8 @@ sfvmk_evRxqFlushDone(void *arg, uint32_t rxqIndex)
 ** \param[in] arg       Pointer to event queue
 ** \param[in] rxqIndex  RXQ Index
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 static boolean_t
 sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
@@ -474,7 +474,7 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 ** \param[in] arg        Pointer to event queue
 ** \param[in] txqIndex   TXQ index
 **
-** \return: VMK_FALSE <success>
+** \return: VMK_FALSE [success]
 */
 static boolean_t
 sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
@@ -542,8 +542,8 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
 **
 ** \param[in] pEvq     Pointer to event queue
 **
-** \return: VMK_FALSE <Success>
-** \return: VMK_TRUE  <Failure>
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
 */
 VMK_ReturnStatus
 sfvmk_evqPoll(sfvmk_evq_t *pEvq)
@@ -646,7 +646,7 @@ done:
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
 ** \param[in]  qIndex      EventQ index
 **
-** \return: 0 <success> error code <failure>
+** \return: 0 [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
@@ -856,7 +856,7 @@ done:
 **
 ** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
 **
-** \return:  VMK_OK <success> error code <failure>
+** \return:  VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_evStart(sfvmk_adapter_t *pAdapter)
@@ -950,7 +950,7 @@ done:
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 ** \param[in]  qIndex      eventQ index
 **
-** \return:   VMK_OK <success> VMK_FAILURE < failure>
+** \return:   VMK_OK [success] VMK_FAILURE < failure>
 */
 static VMK_ReturnStatus
 sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
@@ -1056,7 +1056,7 @@ done:
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_evInit(sfvmk_adapter_t *pAdapter)

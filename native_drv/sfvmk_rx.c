@@ -127,7 +127,7 @@ done:
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 ** \param[in]  qIndex       RXQ Index
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_rxqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
@@ -223,7 +223,7 @@ done:
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 **
-** @return: VMK_OK <success> error code <failure>
+** @return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -763,7 +763,7 @@ done:
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
 ** \param[in]  qIndex      RXQ Index
 **
-** \return: VMK_OK <success> or error code <failure>
+** \return: VMK_OK [success] or error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
@@ -1047,7 +1047,7 @@ done:
 **
 ** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
@@ -1183,7 +1183,7 @@ done:
 **
 ** \param[in]  pRxq    Pointer to RXQ
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState)

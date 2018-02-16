@@ -201,7 +201,7 @@ done:
 ** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
 ** \param[in] pEmReq  mcdi command request
 **
-** \return: VMK_OK <success>,
+** \return: VMK_OK [success],
 **       Below error codes will be returned in case of failure,
 **       VMK_BAD_PARAM:      Invalid input/output buffer
 **       VMK_NOT_SUPPORTED:  MCDI feature not supported
@@ -387,7 +387,7 @@ sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state)
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)

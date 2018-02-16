@@ -74,7 +74,7 @@ static void sfvmk_forgetDevice(vmk_Device device);
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_TRUE <success> VMK_FALSE <failure>
+** \return: VMK_TRUE [success] VMK_FALSE [failure]
 */
 static vmk_Bool
 sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
@@ -533,7 +533,7 @@ done:
 **
 ** \param  pAdapter Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <Success> or VMK_FAILURE <Failure>
+** \return: VMK_OK [success] or VMK_FAILURE [failure]
 **
 */
 static VMK_ReturnStatus
@@ -649,7 +649,7 @@ const sfvmk_pktOps_t sfvmk_packetOps[SFVMK_PKT_COMPLETION_MAX] = {
 **
 ** \param[in]  pAdapter Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> or error code <failure>
+** \return: VMK_OK [success] or error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
@@ -700,7 +700,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -753,7 +753,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static void
@@ -1115,7 +1115,7 @@ sfvmk_startDevice(vmk_Device dev)
 **
 ** \param[in]  device handle.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_removeUplinkDevice(vmk_Device device)
@@ -1213,7 +1213,7 @@ done:
 **
 ** \param[in]  dev  pointer to vmkDevice
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_detachDevice(vmk_Device dev)

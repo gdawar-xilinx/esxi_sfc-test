@@ -75,7 +75,7 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 ** \param[in]  speed    link speed
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **          VMK_BAD_PARAM:     Wrong speed or duplex value
 **          VMK_NOT_SUPPORTED: Requested capability not supported
 **          VMK_FAILURE:       Other failure
@@ -306,7 +306,7 @@ done:
 **
 ** \param[in] pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK  <success>
+** \return: VMK_OK  [success]
 **     Below error values are returned in case of failure,
 **          VMK_NOT_READY:     Port is not yet ready
 **          VMK_TIMEOUT:       Stats update timed out
@@ -359,7 +359,7 @@ done:
 **
 ** \param[in]  Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -460,7 +460,7 @@ sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state)
 **
 ** \param[in]  pAdapter     Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success>  error code <failure>
+** \return: VMK_OK [success]  error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_portStart(sfvmk_adapter_t *pAdapter)
@@ -641,7 +641,7 @@ done:
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> Error code <failure>
+** \return: VMK_OK [success] Error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_portInit(sfvmk_adapter_t *pAdapter)

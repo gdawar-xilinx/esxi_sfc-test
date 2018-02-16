@@ -64,7 +64,7 @@ sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
 ** \param[in]  TX queue type
 ** \param[in]  associated event queue index
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -174,7 +174,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -432,7 +432,7 @@ sfvmk_txStop(sfvmk_adapter_t *pAdapter)
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
 ** \param[in]  qIndex      TXQ index
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
@@ -578,7 +578,7 @@ done:
 **
 ** \param[in]  adapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_txStart(sfvmk_adapter_t *pAdapter)
@@ -632,7 +632,7 @@ done:
 **
 ** \param[in]  pTxq    pointer to txq
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_txqFlushDone(sfvmk_txq_t *pTxq)

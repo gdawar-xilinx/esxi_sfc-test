@@ -31,7 +31,7 @@
 ** \param[in] arg          Pointer to client data passed while registering the interrupt
 ** \param[in] interCookie  Interrupt cookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_intrAckMSIX(void *arg, vmk_IntrCookie intrCookie)
@@ -73,7 +73,7 @@ done:
 ** \param[in] arg          Pointer to client data passed while registering the interrupt
 ** \param[in] interCookie  Interrupt cookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_intrAckLine(void *arg, vmk_IntrCookie intrCookie)
@@ -135,7 +135,7 @@ sfvmk_isr(void *arg, vmk_IntrCookie intrCookie)
 **
 ** \param[in] pAdapter   Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_registerInterrupts(sfvmk_adapter_t *pAdapter)
@@ -228,7 +228,7 @@ done:
 **
 ** \param[in] pAdapter   Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_unregisterInterrupts(sfvmk_adapter_t *pAdapter)
@@ -277,7 +277,7 @@ done:
 **
 ** \param[in] pAdapter   Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_enableInterrupts(sfvmk_adapter_t *pAdapter)
@@ -321,7 +321,7 @@ done:
 **
 ** \param[in] adapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_intrStart(sfvmk_adapter_t *pAdapter)
@@ -389,7 +389,7 @@ done:
 **
 ** \param[in] adapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_intrStop(sfvmk_adapter_t * pAdapter)
@@ -451,7 +451,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> or VMK_FAILURE <failure>
+** \return: VMK_OK [success] or VMK_FAILURE [failure]
 */
 VMK_ReturnStatus
 sfvmk_intrInit(sfvmk_adapter_t *pAdapter)

@@ -509,7 +509,7 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus

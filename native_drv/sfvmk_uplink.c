@@ -476,6 +476,15 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
     goto done;
   }
 
+  vmk_MutexLock(pAdapter->lock);
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_REGISTERED) {
+    vmk_MutexUnlock(pAdapter->lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter is not quiesced yet");
+    status = VMK_FAILURE;
+    goto done;
+  }
+  vmk_MutexUnlock(pAdapter->lock);
+
   if (pAdapter->uplink.handle == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Not associated with uplink");
     status = VMK_FAILURE;

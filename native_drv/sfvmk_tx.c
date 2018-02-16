@@ -37,28 +37,24 @@
 #define SFVMK_VLAN_VID_MASK                   0x0fff
 #define SFVMK_TX_TSO_DMA_DESC_MAX             EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX
 
-static sfvmk_hdrInfo_t sfvmk_ipHdr      = {NULL, NULL};
-static sfvmk_hdrInfo_t sfvmk_tcpHdr     = {NULL, NULL};
-static sfvmk_hdrInfo_t sfvmk_encapIpHdr = {NULL, NULL};
-
-static
+static const
 sfvmk_hdrParseCtrl_t sfvmk_tsoHdrList[] = {
-  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
-  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_ipHdr},
-  { VMK_PKT_HEADER_L4_TCP,           &sfvmk_tcpHdr},
-  { 0,                               NULL}
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_IP},
+  { VMK_PKT_HEADER_L4_TCP,           SFVMK_HDR_INFO_TYPE_TCP},
+  { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
 };
 
-static
+static const
 sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
-  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
-  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_ipHdr},
-  { VMK_PKT_HEADER_L4_UDP,           NULL},
-  { VMK_PKT_HEADER_ENCAP_VXLAN,      NULL},
-  { VMK_PKT_HEADER_L2_ETHERNET_MASK, NULL},
-  { VMK_PKT_HEADER_L3_MASK,          &sfvmk_encapIpHdr},
-  { VMK_PKT_HEADER_L4_TCP,           &sfvmk_tcpHdr},
-  { 0,                               NULL}
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_IP},
+  { VMK_PKT_HEADER_L4_UDP,           SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_ENCAP_VXLAN,      SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_ENCAP_IP},
+  { VMK_PKT_HEADER_L4_TCP,           SFVMK_HDR_INFO_TYPE_TCP},
+  { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
 };
 
 /*! \brief  Allocate resources required for a particular TX queue.
@@ -1056,13 +1052,21 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
   vmk_uint32             tcphOff = 0;
   vmk_uint32             totalHdrLen = 0;
   vmk_uint32             firstSgLen = 0;
-  vmk_TCPHdr             *pTcpHdr = NULL;
+  vmk_TCPHdr             *pTcpHdrData = NULL;
   vmk_uint16             hdrIndex;
-  sfvmk_hdrParseCtrl_t   *pExpectHdrList = NULL;
+  sfvmk_hdrInfoType_t    hdrInfoType;
+  const sfvmk_hdrParseCtrl_t   *pExpectHdrList = NULL;
+  sfvmk_hdrInfo_t hdrInfoArray[SFVMK_HDR_INFO_TYPE_MAX] = {{NULL, NULL},
+                                                           {NULL, NULL},
+                                                           {NULL, NULL}};
+  sfvmk_hdrInfo_t *pIpHdr      = &hdrInfoArray[SFVMK_HDR_INFO_TYPE_IP];
+  sfvmk_hdrInfo_t *pTcpHdr     = &hdrInfoArray[SFVMK_HDR_INFO_TYPE_TCP];
+  sfvmk_hdrInfo_t *pEncapIpHdr = &hdrInfoArray[SFVMK_HDR_INFO_TYPE_ENCAP_IP];
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   VMK_ASSERT_NOT_NULL(pTxq);
+
   pAdapter = pTxq->pAdapter;
   VMK_ASSERT_NOT_NULL(pAdapter);
 
@@ -1077,7 +1081,7 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
 
   if (vmk_PktIsInnerOffload(pkt)  &&
       (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
-   pExpectHdrList = sfvmk_encapTsoHdrList;
+    pExpectHdrList = sfvmk_encapTsoHdrList;
   }
   else if (pXmitInfo->offloadFlag & SFVMK_TX_TSO) {
     pExpectHdrList = sfvmk_tsoHdrList;
@@ -1100,32 +1104,33 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
 
     if ((pHdrEntry->type & pExpectHdrList[hdrIndex].expHdrType) !=
          pExpectHdrList[hdrIndex].expHdrType) {
-	SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected hdr type 0x%x. Expected = 0x%x",
-        pHdrEntry->type, pExpectHdrList[hdrIndex].expHdrType);
-	goto done;
+      SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected hdr type 0x%x. Expected = 0x%x",
+      pHdrEntry->type, pExpectHdrList[hdrIndex].expHdrType);
+      goto done;
     }
 
-   if (pExpectHdrList[hdrIndex].pHdrInfo != NULL) {
-       pExpectHdrList[hdrIndex].pHdrInfo->pHdrEntry = pHdrEntry;
-       status = vmk_PktHeaderDataGet(pkt, pHdrEntry,
-				     (void **) &(pExpectHdrList[hdrIndex].pHdrInfo->pMappedPtr));
-       if (status != VMK_OK) {
-         SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get pkt header: %s at index: %u",
+    hdrInfoType = pExpectHdrList[hdrIndex].hdrInfoType;
+    if (hdrInfoType != SFVMK_HDR_INFO_TYPE_UNUSED) {
+      hdrInfoArray[hdrInfoType].pHdrEntry = pHdrEntry;
+      status = vmk_PktHeaderDataGet(pkt, pHdrEntry,
+                                    (void **) &(hdrInfoArray[hdrInfoType].pMappedPtr));
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get pkt header: %s at index: %u",
                              vmk_StatusToString(status), hdrIndex);
-	 goto done;
-       }
+        goto done;
+      }
     }
   }
 
-  if (sfvmk_ipHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
-    pXmitInfo->packetId = ((vmk_IPv4Hdr *)sfvmk_ipHdr.pMappedPtr)->identification;
-  else if (sfvmk_ipHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
+  if (pIpHdr->pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
+    pXmitInfo->packetId = ((vmk_IPv4Hdr *)pIpHdr->pMappedPtr)->identification;
+  else if (pIpHdr->pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
     pXmitInfo->packetId = 0;
   else {
     status = VMK_FAILURE;
     SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected L3 header type: 0x%x,"
                         "expected is : 0x%x or 0x%x",
-                        sfvmk_ipHdr.pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
+                        pIpHdr->pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
                         VMK_PKT_HEADER_L3_IPv6);
     goto done;
   }
@@ -1133,15 +1138,15 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
   if (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO) {
     /* move packetId to outerPacketId as the packet is enncapsulated */
     pXmitInfo->outerPacketId = pXmitInfo->packetId;
-    if (sfvmk_encapIpHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
-      pXmitInfo->packetId = ((vmk_IPv4Hdr *)sfvmk_encapIpHdr.pMappedPtr)->identification;
-    else if (sfvmk_encapIpHdr.pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
+    if (pEncapIpHdr->pHdrEntry->type == VMK_PKT_HEADER_L3_IPv4)
+      pXmitInfo->packetId = ((vmk_IPv4Hdr *)pEncapIpHdr->pMappedPtr)->identification;
+    else if (pEncapIpHdr->pHdrEntry->type == VMK_PKT_HEADER_L3_IPv6)
       pXmitInfo->packetId = 0;
     else {
       status = VMK_FAILURE;
       SFVMK_ADAPTER_ERROR(pAdapter, "Unexpected Encap L3 header type: 0x%x,"
                           "expected is : 0x%x or 0x%x",
-                          sfvmk_encapIpHdr.pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
+                          pEncapIpHdr->pHdrEntry->type, VMK_PKT_HEADER_L3_IPv4,
                           VMK_PKT_HEADER_L3_IPv6);
       goto done;
     }
@@ -1155,7 +1160,8 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
    * impossible to exceed enc_tx_tso_tcp_header_offset_limit(208), so simply
    * drop the pkt. Refer section 2.3.3 of Doxbox doc SF-108452-SW for details.
    */
-  tcphOff = sfvmk_tcpHdr.pHdrEntry->nextHdrOffset;
+
+  tcphOff = pTcpHdr->pHdrEntry->nextHdrOffset;
 
   if (VMK_UNLIKELY(tcphOff > pCfg->enc_tx_tso_tcp_header_offset_limit)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Tcp hdr offset: %u beyond limit: %u",
@@ -1164,19 +1170,19 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
     goto done;
   }
 
-  pTcpHdr = (vmk_TCPHdr *)sfvmk_tcpHdr.pMappedPtr;
-  if(pTcpHdr->syn || pTcpHdr->urg) {
-     SFVMK_ADAPTER_ERROR(pAdapter, "incompatible TCP flag 0x%x on TSO packet",
-     (pTcpHdr->flags));
-     status = VMK_FAILURE;
-     goto done;
+  pTcpHdrData = (vmk_TCPHdr *)pTcpHdr->pMappedPtr;
+  if(pTcpHdrData->syn || pTcpHdrData->urg) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Incompatible TCP flag 0x%x on TSO packet",
+                        (pTcpHdrData->flags));
+    status = VMK_FAILURE;
+    goto done;
   }
 
-  pXmitInfo->seqNumNbo = vmk_CPUToBE32(pTcpHdr->seq);
+  pXmitInfo->seqNumNbo = vmk_CPUToBE32(pTcpHdrData->seq);
 
   /* Check if need to defragment headers to leverage hw TSO */
   firstSgLen = vmk_PktSgElemGet(pkt, 0)->length;
-  totalHdrLen = sfvmk_tcpHdr.pHdrEntry->nextHdrOffset;
+  totalHdrLen = pTcpHdr->pHdrEntry->nextHdrOffset;
 
   if (firstSgLen < totalHdrLen) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
@@ -1208,15 +1214,17 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
   pXmitInfo->mss = vmk_PktGetLargeTcpPacketMss(pkt);
 
 done:
-  if (sfvmk_ipHdr.pMappedPtr)
-    vmk_PktHeaderDataRelease(pkt, sfvmk_ipHdr.pHdrEntry,
-                             (void *)sfvmk_ipHdr.pMappedPtr, VMK_FALSE);
-  if (sfvmk_encapIpHdr.pMappedPtr)
-    vmk_PktHeaderDataRelease(pkt, sfvmk_encapIpHdr.pHdrEntry,
-                             (void *)sfvmk_encapIpHdr.pMappedPtr, VMK_FALSE);
-  if (pTcpHdr)
-    vmk_PktHeaderDataRelease(pkt, sfvmk_tcpHdr.pHdrEntry,
-                             (void *)pTcpHdr, VMK_FALSE);
+  if (pIpHdr->pMappedPtr)
+    vmk_PktHeaderDataRelease(pkt, pIpHdr->pHdrEntry,
+                             (void *)pIpHdr->pMappedPtr, VMK_FALSE);
+
+  if (pEncapIpHdr->pMappedPtr)
+    vmk_PktHeaderDataRelease(pkt, pEncapIpHdr->pHdrEntry,
+                             (void *)pEncapIpHdr->pMappedPtr, VMK_FALSE);
+
+  if (pTcpHdr->pMappedPtr)
+    vmk_PktHeaderDataRelease(pkt, pTcpHdr->pHdrEntry,
+                             (void *)pTcpHdr->pMappedPtr, VMK_FALSE);
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
 

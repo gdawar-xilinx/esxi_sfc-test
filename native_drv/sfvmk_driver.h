@@ -235,14 +235,22 @@ typedef struct sfvmk_xmitInfo_s {
    vmk_PktHandle       *pXmitPkt;
 } sfvmk_xmitInfo_t;
 
+typedef enum sfvmk_hdrInfoType_e {
+  SFVMK_HDR_INFO_TYPE_UNUSED = -1,
+  SFVMK_HDR_INFO_TYPE_IP,
+  SFVMK_HDR_INFO_TYPE_TCP,
+  SFVMK_HDR_INFO_TYPE_ENCAP_IP,
+  SFVMK_HDR_INFO_TYPE_MAX
+} sfvmk_hdrInfoType_t;
+
 typedef struct sfvmk_hdrInfo_s {
   vmk_PktHeaderEntry  *pHdrEntry;
   void                *pMappedPtr;
 } sfvmk_hdrInfo_t;
 
 typedef struct sfvmk_hdrParseCtrl_s {
-    vmk_uint16       expHdrType;
-    sfvmk_hdrInfo_t  *pHdrInfo;
+  vmk_uint16           expHdrType;
+  sfvmk_hdrInfoType_t  hdrInfoType;
 } sfvmk_hdrParseCtrl_t;
 
 typedef struct sfvmk_txq_s {

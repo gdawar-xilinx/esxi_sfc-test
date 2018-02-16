@@ -76,16 +76,16 @@ extern void             sfvmk_driverUnregister(void);
 
 /* Lock rank is based on the order in which locks are typically acquired.
  * A lock with higher rank can be acquired while holding a lock with a lower rank.
- * Uplink lock is primarily for control path and is at the highest rank.
- * NIC and BAR locks are taken by common code and are at the next highest rank.
- * TXQ and EVQ are the logical order in which the locks are taken.
+ * NIC and BAR locks are taken by common code and are at the highest rank.
+ * Uplink lock is primarily for control path and is at the next lower rank
+ * than NIC and BAR.TXQ and EVQ are the logical order in which the locks are taken.
  */
 typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
+  SFVMK_SPINLOCK_RANK_UPLINK_LOCK
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
   SFVMK_SPINLOCK_RANK_BAR_LOCK,
-  SFVMK_SPINLOCK_RANK_UPLINK_LOCK
 } sfvmk_spinlockRank_t;
 
 typedef enum sfvmk_mcdiState_e {

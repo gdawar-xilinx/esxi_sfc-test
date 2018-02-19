@@ -306,6 +306,20 @@ const static vmk_UplinkAdvertisedModesOps sfvmk_advModesOps = {
   .setAdvertisedModes  = sfvmk_advModesSet,
 };
 
+/****************************************************************************
+ *               vmk_UplinkPauseParamsOps Handlers                          *
+ ****************************************************************************/
+static VMK_ReturnStatus sfvmk_pauseParamGet(vmk_AddrCookie cookie,
+                                            vmk_UplinkPauseParams  *pauseParams);
+static VMK_ReturnStatus sfvmk_pauseParamSet(vmk_AddrCookie cookie,
+                                            vmk_UplinkPauseParams  pauseParams);
+
+
+static vmk_UplinkPauseParamsOps sfvmkPauseParamsOps = {
+  .pauseParamsGet = sfvmk_pauseParamGet,
+  .pauseParamsSet = sfvmk_pauseParamSet,
+};
+
 /*! \brief Associate the RSS netpoll to the uplink
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
@@ -1909,6 +1923,19 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
       goto done;
     }
   }
+
+  /* Register capability for pause param configuration */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_PAUSE_PARAMS,
+                                 (vmk_UplinkPauseParamsOps *)
+                                 &sfvmkPauseParamsOps);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VMK_UPLINK_CAP_PAUSE_PARAMS register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -5086,3 +5113,138 @@ sfvmk_advModesSet(vmk_AddrCookie cookie,
   return VMK_NOT_SUPPORTED;
 }
 
+/*! \brief uplink callback function to retrieve pause params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[out] pParams   pointer to vmk_UplinkPauseParams
+**
+** \return: VMK_OK on success, VMK_FAILURE otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_pauseParamGet(vmk_AddrCookie cookie,
+                    vmk_UplinkPauseParams *pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 fcntlWanted = VMK_FALSE;
+  vmk_uint32 fcntlLink   = VMK_FALSE;
+  vmk_uint32 mask        = VMK_FALSE;
+  sfvmk_port_t *pPort = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pPort = &pAdapter->port;
+
+  vmk_MutexLock(pAdapter->lock);
+
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
+    status = VMK_FAILURE;
+    goto failed_adapter_state;
+  }
+
+  efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntlLink);
+
+  pParams->txPauseEnabled = (fcntlWanted & EFX_FCNTL_GENERATE) ?
+                            VMK_TRUE : VMK_FALSE;
+  pParams->rxPauseEnabled = (fcntlWanted & EFX_FCNTL_RESPOND) ?
+                            VMK_TRUE : VMK_FALSE;
+
+  /* No separate control is available for pause autoneg, it would
+   * be always auto negotiated if link (10 Gbps and higher) is enabled */
+  pParams->autoNegotiate = VMK_TRUE;
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT, &mask);
+
+  pParams->localDeviceAdvertise = (mask & (1 << EFX_PHY_CAP_ASYM)) ?
+                                  VMK_UPLINK_FLOW_CTRL_ASYM_PAUSE :
+                                  VMK_UPLINK_FLOW_CTRL_PAUSE;
+
+  efx_phy_lp_cap_get(pAdapter->pNic, &mask);
+
+  pParams->linkPartnerAdvertise = (mask & (1 << EFX_PHY_CAP_ASYM)) ?
+                                 VMK_UPLINK_FLOW_CTRL_ASYM_PAUSE :
+                                 VMK_UPLINK_FLOW_CTRL_PAUSE;
+
+  status = VMK_OK;
+
+failed_adapter_state:
+  vmk_MutexUnlock(pAdapter->lock);
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief uplink callback function to set requested pause params.
+**
+** \param[in]  cookie    pointer to sfvmk_adapter_t
+** \param[in]  pParams   Pause parameters to set
+**
+** \return: VMK_OK on success, VMK_FAILURE otherwise
+**
+*/
+static VMK_ReturnStatus
+sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams pParams)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint32 fcntl = VMK_FALSE;
+  vmk_uint32 fcntlWanted = VMK_FALSE;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_port_t *pPort = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pPort = &pAdapter->port;
+
+  vmk_MutexLock(pAdapter->lock);
+
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
+    status = VMK_FAILURE;
+    goto failed_adapter_state;
+  }
+
+  efx_mac_fcntl_get(pAdapter->pNic, &fcntlWanted, &fcntl);
+
+  if (pParams.txPauseEnabled == VMK_TRUE)
+    fcntl |=  EFX_FCNTL_GENERATE;
+  else
+    fcntl &= ~EFX_FCNTL_GENERATE;
+
+  if (pParams.rxPauseEnabled == VMK_TRUE)
+    fcntl |= EFX_FCNTL_RESPOND;
+  else
+    fcntl &= ~EFX_FCNTL_RESPOND;
+
+  status = efx_mac_fcntl_set(pAdapter->pNic, fcntl, pParams.autoNegotiate);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_fcntl_set failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto failed_mac_fcntl_set;
+  }
+
+  status = VMK_OK;
+
+failed_adapter_state:
+failed_mac_fcntl_set:
+  vmk_MutexUnlock(pAdapter->lock);
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}

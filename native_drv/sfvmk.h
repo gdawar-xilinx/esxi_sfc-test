@@ -120,13 +120,14 @@ typedef enum sfvmk_logLevel_e {
 /* Errors (never masked) */
 #define SFVMK_ADAPTER_ERROR(pAdapter, fmt, ...)                              \
   do {                                                                       \
-      vmk_WarningMessage("[%s] "fmt, (pAdapter) ?                            \
+      vmk_WarningMessage("%s:%d: [%s] " fmt "\n",                            \
+                         __FUNCTION__, __LINE__, (pAdapter) ?                \
                          vmk_NameToString(&pAdapter->devName) : "sfvmk",     \
                          ##__VA_ARGS__);                                     \
   } while (0)
 
 #define SFVMK_ERROR(fmt, ...)                                                \
-  vmk_WarningMessage(fmt, ##__VA_ARGS__)
+  vmk_WarningMessage("%s:%d: " fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 /* Debug macro for function entry and exit */
 #define SFVMK_ADAPTER_DEBUG_FUNC(pAdapter, mask, string, fmt, ...)           \

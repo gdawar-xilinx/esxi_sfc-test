@@ -628,10 +628,15 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 
   /* Probe  NIC and build the configuration data area. */
-  if ((error = efx_nic_probe(pAdapter->pNic)) != 0) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe failed status: %s",
+  if ((error = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED)) != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
                         vmk_StatusToString(error));
-    goto failed_nic_probe;
+
+    if ((error = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE)) != 0) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
+                          vmk_StatusToString(error));
+      goto failed_nic_probe;
+    }
   }
 
   /* Reset NIC. */

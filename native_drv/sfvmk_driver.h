@@ -196,6 +196,19 @@ typedef struct sfvmk_adapter_s {
   /* PCI device name */
   vmk_Name                   pciDeviceName;
 
+  /* Adapter lock  is used to serialize code flow
+   * and access to adapter data i.e.  startIO/quiesceIO.
+   * It also protects the fields:
+   * Driver state
+   * Interrupt Param (intr, intrModeration, numRxqBuffDesc,
+   * numRxqBuffDesc, numTxqBuffDesc)
+   * Port
+   * Uplink
+   * RxQ Param (defRxqIndex, rxPrefixSize, rxBufferSize,
+   * rxBufferAlign, enableRSS)
+   */
+  vmk_Mutex                  lock;
+
   /* EFX /efsys related information */
   /* EFX family */
   efx_family_t               efxFamily;
@@ -254,6 +267,10 @@ sfvmk_createLock(sfvmk_adapter_t *pAdapter,
                  vmk_Lock *pLock);
 
 void sfvmk_destroyLock(vmk_Lock lock);
+
+/* mutex handler */
+VMK_ReturnStatus sfvmk_mutexInit(const char *pLockName,vmk_Mutex *pMutex);
+void sfvmk_mutexDestroy(vmk_Mutex mutex);
 
 /* Mempool handlers */
 vmk_VA sfvmk_memPoolAlloc(size_t size);

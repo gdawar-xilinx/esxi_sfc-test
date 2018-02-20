@@ -283,3 +283,43 @@ vmk_uint32 sfvmk_pow2GE(vmk_uint32 value)
 
   return (1ul << (order));
 }
+
+/*! \brief It creates a mutex lock with specified name and lock rank.
+**
+** \param[in]  pLockName    brief name for the mutexLock
+** \param[out] pMutex        mutex lock pointer to create
+**
+** \return: VMK_OK on success, and lock created. Error code if otherwise.
+*/
+VMK_ReturnStatus
+sfvmk_mutexInit(const char *pLockName, vmk_Mutex *pMutex)
+{
+  vmk_MutexCreateProps lockProps;
+  VMK_ReturnStatus status;
+
+  lockProps.moduleID = vmk_ModuleCurrentID;
+  lockProps.heapID = sfvmk_modInfo.heapID;
+  vmk_NameFormat(&lockProps.className, "sfvmk-%s", pLockName);
+
+  lockProps.type = VMK_MUTEX;
+  lockProps.domain = VMK_LOCKDOMAIN_INVALID;
+  lockProps.rank = VMK_MUTEX_UNRANKED;
+  status = vmk_MutexCreate(&lockProps, pMutex);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Failed to create mutex (%s)", vmk_StatusToString(status));
+  }
+
+  return status;
+}
+
+/*! \brief It destroy mutex.
+**
+** \param[in]  mutex  mutex handle
+**
+** \return: void
+*/
+void sfvmk_mutexDestroy(vmk_Mutex mutex)
+{
+  if (mutex != NULL)
+    vmk_MutexDestroy(mutex);
+}

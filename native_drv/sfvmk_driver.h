@@ -31,7 +31,6 @@ typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_UPLINK_LOCK,
   SFVMK_SPINLOCK_RANK_RXQ_LOCK,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
-  SFVMK_SPINLOCK_RANK_MCDI_LOCK,
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
   SFVMK_SPINLOCK_RANK_BAR_LOCK
 } sfvmk_spinlockRank_t;
@@ -48,7 +47,7 @@ typedef enum sfvmk_mcdiMode_e {
 
 typedef struct sfvmk_mcdi_s {
   efsys_mem_t           mem;
-  vmk_Lock              lock;
+  vmk_Mutex             lock;
   sfvmk_mcdiState_t     state;
   sfvmk_mcdiMode_t      mode;
   efx_mcdi_transport_t  transport;

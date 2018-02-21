@@ -60,9 +60,9 @@ sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
 /*! \brief  Allocate resources required for a particular TX queue.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  TX queue index
-** \param[in]  TX queue type
-** \param[in]  associated event queue index
+** \param[in]  txqIndex TX queue index
+** \param[in]  type     TX queue type
+** \param[in]  evqIndex associated event queue index
 **
 ** \return: VMK_OK [success] error code [failure]
 **
@@ -137,7 +137,7 @@ done:
 /*! \brief Release resources of a TXQ.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  tx queue index
+** \param[in]  qIndex   tx queue index
 **
 ** \return: void
 */
@@ -848,7 +848,7 @@ sfvmk_createDmaDesc(sfvmk_txq_t *pTxq,
 **
 ** \param[in]        pTxq       pointer to txq
 ** \param[in]        pXmitPkt   pointer to packet handle
-** \param[in, out]   txMapId    txMap Id for next element
+** \param[in,out]    pTxMapId   pointer to txMap Id for next element
 **
 ** \return: VMK_OK in success, error code otherwise
 */
@@ -1599,6 +1599,7 @@ done:
 **
 ** \param[in]  pTxq        pointer to txq
 ** \param[in]  isCso       whether to enable or disable cso
+** \param[in]  isEncapCso  whether to enable or disable Encapcso
 **
 ** \return: void
 **

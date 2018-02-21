@@ -800,7 +800,7 @@ sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 
 /*! \brief Get the pointer to tx shared queue data
 **
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
+** \param[in]  pUplink  pointer to uplink structure
 **
 ** \return: pointer to queue data from where TXQs is starting
 */

@@ -412,7 +412,7 @@ sfvmk_rxScheduleRefill(sfvmk_rxq_t *pRxq)
 /*! \brief   Deliver RX pkt to uplink layer
 **
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
-** \param[in]  rxDesc      RX descriptor
+** \param[in]  pRxDesc     RX descriptor
 ** \param[in]  qIndex      RXQ Index
 **
 ** \return: void
@@ -1205,7 +1205,8 @@ done:
 
 /*! \brief Set the RXQ flush state.
 **
-** \param[in]  pRxq    Pointer to RXQ
+** \param[in]  pRxq       Pointer to RXQ
+** \param[in]  flushState flush state
 **
 ** \return: VMK_OK [success] error code [failure]
 */

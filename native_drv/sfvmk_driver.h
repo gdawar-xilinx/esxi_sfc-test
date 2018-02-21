@@ -856,4 +856,8 @@ sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
 
 VMK_ReturnStatus
 sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state);
+
+void
+sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter);
+
 #endif /* __SFVMK_DRIVER_H__ */

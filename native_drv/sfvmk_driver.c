@@ -482,7 +482,7 @@ done:
 **
 ** \return: none
 */
-static void
+void
 sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter)
 {
   vmk_UplinkDriverInfo *pDrvInfo;

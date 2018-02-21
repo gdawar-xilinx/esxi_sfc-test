@@ -237,6 +237,13 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
                 vmk_StatusToString(status));
       goto fail3;
     }
+    status = sfvmk_worldSleep(100000);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "World Sleep Failed with err %s",
+                vmk_StatusToString(status));
+      goto fail3;
+    }
+    sfvmk_updateDrvInfo(pAdapter);
   }
 
 fail3:

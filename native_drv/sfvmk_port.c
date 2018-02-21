@@ -204,7 +204,7 @@ sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter,
 
 /*! \brief  Helper world queue function for link update
 **
-** \param[in]  vmk_AddrCookie  Pointer to sfvmk_adapter_t
+** \param[in] data  Pointer to sfvmk_adapter_t
 **
 ** \return: void
 */
@@ -228,7 +228,6 @@ done:
 /*! \brief  Update link mode and populate it to uplink device.
 **
 ** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
-** \param[in]  linkmode  LinkMode( link up/Down , Speed)
 **
 ** \return: void
 */
@@ -357,7 +356,7 @@ done:
 
 /*! \brief Fuction to submit link update request.
 **
-** \param[in]  Pointer to sfvmk_adapter_t
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK [success] error code [failure]
 **

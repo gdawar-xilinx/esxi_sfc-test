@@ -72,7 +72,7 @@ static const efx_ev_callbacks_t sfvmk_evCallbacks = {
 /*! \brief Called when a RX event received on eventQ
 **
 ** \param[in] arg      Ptr to event queue
-** \param[in[ label    Queue label
+** \param[in] label    Queue label
 ** \param[in] id       Last RX desc id to process.
 ** \param[in] size     Pkt size
 ** \param[in] flags    Pkt metadeta info
@@ -164,7 +164,7 @@ fail:
 /*! \brief called when a TX event received on eventQ
 **
 ** \param[in] arg      ptr to event queue
-** \param[in[ label    queue label
+** \param[in] label    queue label
 ** \param[in] id       last buffer descriptor index to process
 **
 ** \return: VMK_FALSE if number of Tx events processed in single interrupt
@@ -389,9 +389,9 @@ fail:
 
 /*! \brief Check flushed event received for a RXQ.
 **
-** \param[in] arg       Pointer to event queue
-** \param[in] rxqIndex  RXQ index
-** \param[in] swEvent   Software event.
+** \param[in] arg        Pointer to event queue
+** \param[in] rxqIndex   RXQ index
+** \param[in] flushState flush state
 **
 ** \return: VMK_FALSE [success]
 ** \return: VMK_TRUE  [failure]

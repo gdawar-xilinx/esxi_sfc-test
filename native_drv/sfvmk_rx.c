@@ -508,10 +508,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     pPkt = pRxDesc->pPkt;
     VMK_ASSERT_NOT_NULL(pPkt);
 
-    if (pRxDesc->flags & EFX_DISCARD) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Pkt is discarded");
+    if (pRxDesc->flags & EFX_DISCARD)
       goto discard_pkt;
-    }
 
     /* Length is stored in the packet preefix when EF10 hardware is operating
      * in cut-through mode (so that the RX event is generated before the

@@ -63,8 +63,8 @@ sfvmk_destroyLock(vmk_Lock lock)
 ** \param[in] size of the memory to be allocated.
 **            memory is allocated always in pages
 **
-** \return:   kernel virtual address of the memory allocated <success>
-**            NULL <failure>
+** \return:   kernel virtual address of the memory allocated [success]
+**            NULL [failure]
 */
 vmk_VA
 sfvmk_memPoolAlloc(size_t size)

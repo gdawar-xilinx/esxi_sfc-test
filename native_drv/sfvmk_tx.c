@@ -13,7 +13,7 @@
 ** \param[in]  TX queue index
 ** \param[in]  associated event queue index
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -162,7 +162,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus

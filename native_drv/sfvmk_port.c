@@ -122,7 +122,7 @@ done:
 **
 ** \param[in]  Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus
@@ -163,7 +163,7 @@ done:
 **
 ** \param[in]  pAdapter     Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success>  error code <failure>
+** \return: VMK_OK [success]  error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_portStart(sfvmk_adapter_t *pAdapter)
@@ -316,7 +316,7 @@ done:
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> Error code <failure>
+** \return: VMK_OK [success] Error code [failure]
 */
 VMK_ReturnStatus
 sfvmk_portInit(sfvmk_adapter_t *pAdapter)

@@ -52,7 +52,7 @@ static vmk_UplinkOps sfvmkUplinkOps = {
 ** \param[in]  cookie     vmk_AddrCookie
 ** \param[in]  uplink     uplink device
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -93,7 +93,7 @@ done:
 **
 ** \param[in]  cookie     vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -151,9 +151,9 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 ** \param[in]  cookie  vmk_AddrCookie
 ** \param[in]  mtu
 **
-** \return: VMK_OK <success>
-** \return: VMK_FAILURE <failure>
-** \return: VMK_BAD_PARAM <failure>
+** \return: VMK_OK [success]
+** \return: VMK_FAILURE [failure]
+** \return: VMK_BAD_PARAM [failure]
 **
 */
 static VMK_ReturnStatus
@@ -174,7 +174,7 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 ** \param[in]  cookie    vmk_AddrCookie
 ** \param[in]  admnState linkstate.
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -195,7 +195,7 @@ sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
 ** \param[in]  cookie  pointer to vmk_AddrCookie
 ** \param[out] pNicStats    ptr to stats
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -216,7 +216,7 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
 ** \param[in]  cookie      vmk_AddrCookie
 ** \param[in]  uplinkCap   uplink capability to be enabled
 **
-* @return: VMK_OK <success> error code <failure>
+* @return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -237,7 +237,7 @@ sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 ** \param[in]  cookie     vmk_AddrCookie
 ** \param[in]  uplinkCap  uplink cap to be disabled
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -257,7 +257,7 @@ sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
 **
 ** \param[in]  cookie  vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -277,7 +277,7 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -302,7 +302,7 @@ sfvmk_setDrvLimits(sfvmk_adapter_t *pAdapter)
 **
 ** \param[in]  cookie  pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -399,7 +399,7 @@ failed_adapter_ptr:
 **
 ** \param[in]  cookie  pointer to vmk_AddrCookie
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -839,7 +839,7 @@ done:
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 ** \param[in]  serviceID   service to which work has to be charged
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -944,7 +944,7 @@ done:
 **
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1053,7 +1053,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
@@ -1191,7 +1191,7 @@ done:
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 VMK_ReturnStatus

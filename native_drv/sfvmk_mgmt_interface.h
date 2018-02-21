@@ -90,7 +90,7 @@ typedef struct sfvmk_mgmtDevInfo_s {
  **
  ** inlen[in] The length of command parameters, in bytes.
  **
- ** outlen[in/out] On entry, the length available for the response, in bytes.
+ ** outlen[in,out] On entry, the length available for the response, in bytes.
  **	On return, the length used for the response, in bytes.
  **
  ** flags[out] Flags for the command or response.  The only flag defined
@@ -100,7 +100,7 @@ typedef struct sfvmk_mgmtDevInfo_s {
  ** host_errno[out] On return, if EFX_MCDI_REQUEST_ERROR is included in flags,
  **	the suggested VMK error code for the error.
  **
- ** payload[in/out] On entry, the MCDI command parameters.  On return, the response.
+ ** payload[in,out] On entry, the MCDI command parameters.  On return, the response.
  **
  ** If the driver detects invalid parameters or a communication failure
  ** with the MC, the MGMT calback interface will return VMK_OK, errno will be set

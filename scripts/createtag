@@ -18,7 +18,7 @@ fail () { log "$@"; exit 1; }
 
 # Usage
 usage () {
-    err "Usage: mmaketag <branch> [<desired new tag>]"
+    err "Usage: mmaketag <branch> [<desired new tag>] <build type>"
     err
     err "  branch:"
     err
@@ -32,12 +32,17 @@ usage () {
     err "      v1_1_m_bbbb"
     err "    Note that mmaketag will check that this tag does not already exist"
     err
+    err "  build type:"
+    err
+    err "    The build type can be either 'beta' or 'release'."
+    err
     exit 1
 }
-[ $# = 2 ] || usage
+[ $# = 3 ] || usage
 
 branch=$1
 tag=${2:-}
+buildtype=$3
 repo="esxi_sfc"
 prompt=true
 changes_pushed=false
@@ -110,6 +115,29 @@ versionupdate () {
     sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
 }
 
+# Update the buildtype in the Makefile to ${buildtype}
+buildtypeupdate () {
+    echo "updating BUILDTYPE as ${buildtype}"
+
+    file=$(pwd)/native_drv/Makefile
+    sed -i 's/\(BUILDTYPE     = \)\(.*\)$/\1'${buildtype}'/' $file
+}
+
+# Update the live-install/remove params in the sfvmk.sc file
+livevibparamupdate () {
+    if [ "$buildtype" = "beta" ]; then
+      livevibupdate="True"
+    else
+      livevibupdate="False"
+    fi
+
+    echo "updating live-install/remove params as ${livevibupdate} for ${buildtype} build"
+
+    file=$(pwd)/native_drv/sfvmk.sc
+    sed -i 's/\(\"live-install-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
+    sed -i 's/\(\"live-remove-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
+}
+
 # Return true (via $?) if the working directory contains local changes
 checkworkingdir () {
     local repo lines
@@ -166,5 +194,7 @@ sanitychecks
 hgpull
 checklasttag
 versionupdate
+buildtypeupdate
+livevibparamupdate
 maketag
 ${changes_pushed} && log "Please update the correct !TEST! entry with details"

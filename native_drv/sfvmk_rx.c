@@ -60,6 +60,8 @@ sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   efx_rx_scale_context_type_t supportRSS;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  vmk_uint32 rssModes;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
 
@@ -97,10 +99,18 @@ sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
+  rssModes = EFX_RX_HASH_IPV4 | EFX_RX_HASH_TCPIPV4;
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg != NULL) {
+    if (pNicCfg->enc_features & EFX_FEATURE_IPV6)
+      rssModes |= EFX_RX_HASH_IPV6 | EFX_RX_HASH_TCPIPV6;
+  }
+
   status = efx_rx_scale_mode_set(pAdapter->pNic,
-                                 EFX_RSS_CONTEXT_DEFAULT, EFX_RX_HASHALG_TOEPLITZ,
-                                 (1 << EFX_RX_HASH_IPV4) | (1 << EFX_RX_HASH_TCPIPV4) |
-                                 (1 << EFX_RX_HASH_IPV6) | (1 << EFX_RX_HASH_TCPIPV6), B_TRUE);
+                                 EFX_RSS_CONTEXT_DEFAULT,
+                                 EFX_RX_HASHALG_TOEPLITZ,
+                                 rssModes, B_TRUE);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_mode_set failed status: %s",
                         vmk_StatusToString(status));

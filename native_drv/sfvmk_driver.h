@@ -709,7 +709,7 @@ static inline vmk_uint32 sfvmk_getRSSQStartIndex(sfvmk_adapter_t *pAdapter)
 **
 ** \return: number of max HW Rx queues
 */
-static inline vmk_uint32 __attribute__((always_inline))
+static inline vmk_uint32
 sfvmk_getMaxRxHardwareQueues(sfvmk_adapter_t *pAdapter)
 {
   VMK_ASSERT_NOT_NULL(pAdapter);
@@ -722,7 +722,7 @@ sfvmk_getMaxRxHardwareQueues(sfvmk_adapter_t *pAdapter)
 **
 ** \return: number of max HW Tx queues
 */
-static inline vmk_uint32 __attribute__((always_inline))
+static inline vmk_uint32
 sfvmk_getMaxTxHardwareQueues(sfvmk_adapter_t *pAdapter)
 {
   VMK_ASSERT_NOT_NULL(pAdapter);
@@ -788,7 +788,7 @@ sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
 **
 ** \return: index from where TXQs is starting in vmk_UplinkSharedQueueData array
 */
-static inline vmk_uint32 __attribute__((always_inline))
+static inline vmk_uint32
 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 {
   /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
@@ -804,8 +804,8 @@ sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 **
 ** \return: pointer to queue data from where TXQs is starting
 */
-static inline __attribute__((always_inline))
-vmk_UplinkSharedQueueData* sfvmk_getUplinkTxSharedQueueData(sfvmk_uplink_t *pUplink)
+static inline vmk_UplinkSharedQueueData *
+sfvmk_getUplinkTxSharedQueueData(sfvmk_uplink_t *pUplink)
 {
   /* queueData is an array of vmk_UplinkSharedQueueData for all queues.
    * It is structured to record information about maxRxQueues receive

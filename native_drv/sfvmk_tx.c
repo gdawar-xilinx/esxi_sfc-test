@@ -10,8 +10,8 @@
 /*! \brief  Allocate resources required for a particular TX queue.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  TX queue index
-** \param[in]  associated event queue index
+** \param[in]  txqIndex TX queue index
+** \param[in]  evqIndex associated event queue index
 **
 ** \return: VMK_OK [success] error code [failure]
 **
@@ -111,7 +111,7 @@ done:
 /*! \brief Release resources of a TXQ.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  tx queue index
+** \param[in]  qIndex   tx queue index
 **
 ** \return: void
 */

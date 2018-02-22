@@ -175,9 +175,9 @@ fail:
 
 /*! \brief Check flushed event received for a RXQ.
 **
-** \param[in] arg       Pointer to event queue
-** \param[in] rxqIndex  RXQ index
-** \param[in] swEvent   Software event.
+** \param[in] arg        Pointer to event queue
+** \param[in] rxqIndex   RXQ index
+** \param[in] flushState flush state
 **
 ** \return: VMK_FALSE [success]
 ** \return: VMK_TRUE  [failure]

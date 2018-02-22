@@ -555,7 +555,8 @@ done:
 
 /*! \brief Set the RXQ flush state.
 **
-** \param[in]  pRxq    Pointer to RXQ
+** \param[in]  pRxq       Pointer to RXQ
+** \param[in]  flushState Flush state
 **
 ** \return: VMK_OK [success] error code [failure]
 */

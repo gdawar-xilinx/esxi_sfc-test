@@ -49,8 +49,8 @@ static vmk_UplinkOps sfvmkUplinkOps = {
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
-** \param[in]  cookie     vmk_AddrCookie
-** \param[in]  uplink     uplink device
+** \param[in]  cookie       vmk_AddrCookie
+** \param[in]  uplinkHandle uplink device
 **
 ** \return: VMK_OK [success] error code [failure]
 **
@@ -641,6 +641,7 @@ static inline vmk_uint32 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
 /*! \brief Check if given uplink RXQ is a default RXQ
 **
 ** \param[in]  pUplink  pointer to uplink structure
+** \param[in]  qIndex   queue index
 **
 ** \return: VMK_TRUE    If it is a default RXQ
 ** \return: VMK_FALSE   otherwise
@@ -653,6 +654,7 @@ static inline vmk_Bool sfvmk_isDefaultUplinkRxq(sfvmk_uplink_t *pUplink, vmk_uin
 /*! \brief Check if given uplink TXQ is a default TXQ
 **
 ** \param[in]  pUplink  pointer to uplink structure
+** \param[in]  qIndex   queue index
 **
 ** \return: VMK_TRUE    If it is a default TXQ
 ** \return: VMK_FALSE   otherwise
@@ -664,10 +666,12 @@ static inline vmk_Bool sfvmk_isDefaultUplinkTxq(sfvmk_uplink_t *pUplink, vmk_uin
 
 /*! \brief  The poll thread calls this callback function for polling packets.
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pEvq     pointer to event queue
+** \param[in]  budget   maximum number of packets to be
+**                      processed in each invocation
 **
-** \return: VMK_TRUE      <Completion is pending>
-**          VMK_FALSE      <No pending completion>
+** \return: VMK_TRUE  if completion is pending
+**          VMK_FALSE if no pending completion
 */
 static vmk_Bool
 sfvmk_netPollCB(void *pEvq, vmk_uint32 budget)

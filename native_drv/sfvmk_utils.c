@@ -8,9 +8,10 @@
 
 /*! \brief It creates a spin lock with specified name and lock rank.
 **
-** \param[in]  lockName  brief name for the spinlock
-** \param[in]  rank      lock rank)
-** \param[out] lock      lock pointer to create
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[in]  pLockName  pointer to brief name for the spinlock
+** \param[in]  rank       lock rank
+** \param[out] pLock      pointer to vmk_Lock
 **
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
@@ -126,7 +127,7 @@ failed_mempool_alloc:
 
 /*! \brief Free memory allocated from memPool
 **
-** \param[in]  va     virtual address of the mem needs to get freed
+** \param[in]  vAddr  virtual address of the mem needs to get freed
 ** \param[in]  size   size of the memory
 **
 ** \return: void
@@ -175,7 +176,7 @@ done:
 **
 ** \param[in]  dmaEngine  dma engine to be used
 ** \param[in]  size       size of the memory
-** \param[out] ioAddr     dma addressable memory
+** \param[out] pIoAddr    pointer to dma addressable memory
 **
 ** \return: kernel virtual address of the dmaable memory
 */

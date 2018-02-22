@@ -9,7 +9,7 @@
 /*! \brief Interrupt ack function for MSIX
 **
 ** \param[in] arg          Pointer to client data passed while registering the interrupt
-** \param[in] interCookie  Interrupt cookie
+** \param[in] intrCookie   Interrupt cookie
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -51,7 +51,7 @@ done:
 /*! \brief Interrupt ack function for Legacy interrupt
 **
 ** \param[in] arg          Pointer to client data passed while registering the interrupt
-** \param[in] interCookie  Interrupt cookie
+** \param[in] intrCookie   Interrupt cookie
 **
 ** \return: VMK_OK [success] error code [failure]
 */
@@ -97,7 +97,7 @@ done:
 /*! \brief ISR handler to service the MSIX or legacy interrupt.
 **
 ** \param[in] arg         Pointer to client data passed while registering the interrupt
-** \param[in] interCookie Interrupt cookie
+** \param[in] intrCookie  Interrupt cookie
 **
 ** \return: void
 */

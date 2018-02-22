@@ -45,7 +45,8 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 
 /*! \brief Routine for polling mcdi response.
 **
-** \param[in] pAdapter pointer to sfvmk_adapter_t
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
+** \param[in] timeoutUS timeout period in mirco seconds
 **
 ** \return: void
 */
@@ -105,8 +106,8 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
 
 /*! \brief Routine for sending mcdi cmd.
 **
-** \param[in] pAdapter pointer to sfvmk_adapter_t
-** \param[in] pEmrp    pointer to efx_mcdi_req_t
+** \param[in] arg    pointer to sfvmk_adapter_t
+** \param[in] pEmrp  pointer to efx_mcdi_req_t
 **
 ** \return: void
 */
@@ -150,8 +151,8 @@ done:
 
 /*! \brief Routine handling mcdi exceptions.
 **
-** \param[in] pAdapter pointer to sfvmk_adapter_t
-** \param[in]  mcdi exception
+** \param[in] arg  pointer to sfvmk_adapter_t
+** \param[in] eme  mcdi exception
 **
 ** \return: void
 */

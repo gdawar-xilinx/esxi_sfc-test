@@ -56,8 +56,6 @@ sfvmk_modInfoCleanup(void)
 /*! \brief This is the driver module entry point that gets invoked
 **         automatically when this module is loaded.
 **
-** \param  None
-**
 ** \return: 0 [success] or 1 [failure]
 **
 */
@@ -198,8 +196,6 @@ failed_mgmt_init:
 
 /*! \brief This is the  module exit point that gets invoked
 **         automatically when this module is unloaded.
-**
-** \param  None
 **
 ** \return: None
 **

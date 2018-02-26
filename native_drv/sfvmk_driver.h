@@ -16,6 +16,11 @@
 /* Default number of descriptors required for TXQs */
 #define SFVMK_NUM_TXQ_DESC 1024
 
+/* Offset in 256 bytes configuration address space */
+#define SFVMK_PCI_COMMAND             0x04
+/* Type of command */
+#define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 

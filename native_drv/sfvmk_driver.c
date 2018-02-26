@@ -535,6 +535,55 @@ sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
 
+/*! \brief  Routine to set bus mastering mode
+**
+** \param[in]  pAdapter Pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK on success or error code otherwise
+*/
+static VMK_ReturnStatus
+sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 cmd;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  status = vmk_PCIReadConfig(vmk_ModuleCurrentID,
+                             pAdapter->pciDevice,
+                             VMK_PCI_CONFIG_ACCESS_16,
+                             SFVMK_PCI_COMMAND, &cmd);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIReadConfig failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (!(cmd & SFVMK_PCI_COMMAND_BUS_MASTER)) {
+
+    cmd |= SFVMK_PCI_COMMAND_BUS_MASTER;
+    status = vmk_PCIWriteConfig(vmk_ModuleCurrentID,
+                                pAdapter->pciDevice,
+                                VMK_PCI_CONFIG_ACCESS_16,
+                                SFVMK_PCI_COMMAND, cmd);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIWriteConfig(%u) failed status: %s",
+                          cmd, vmk_StatusToString(status));
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -597,6 +646,13 @@ sfvmk_attachDevice(vmk_Device dev)
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mapBAR failed status: %s",
                         vmk_StatusToString(status));
     goto failed_map_bar;
+  }
+
+  status = sfvmk_setBusMaster(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setBusMaster failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_set_bus_master;
   }
 
   status = sfvmk_createLock(pAdapter, "nicLock",
@@ -788,6 +844,7 @@ failed_nic_create:
   sfvmk_destroyLock(pAdapter->nicLock.lock);
 
 failed_create_lock:
+failed_set_bus_master:
   sfvmk_unmapBAR(pAdapter);
 
 failed_map_bar:

@@ -560,7 +560,6 @@ sfvmk_attachDevice(vmk_Device dev)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_adapter_t *pAdapter = NULL;
-  efx_rc_t error;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -609,40 +608,42 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_lock;
   }
 
-  error = efx_nic_create(pAdapter->efxFamily,
-                         (efsys_identifier_t *)pAdapter,
-                         &pAdapter->bar,
-                         &pAdapter->nicLock,
-                         &pAdapter->pNic);
-  if (error != 0) {
+  status = efx_nic_create(pAdapter->efxFamily,
+                          (efsys_identifier_t *)pAdapter,
+                          &pAdapter->bar,
+                          &pAdapter->nicLock,
+                          &pAdapter->pNic);
+  if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_create failed status: %s",
-                        vmk_StatusToString(error));
+                        vmk_StatusToString(status));
     goto failed_nic_create;
   }
 
   /* Initialize MCDI to talk to the management controller. */
-  if ((error = sfvmk_mcdiInit(pAdapter)) != 0) {
+  status = sfvmk_mcdiInit(pAdapter);
+  if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mcdiInit failed status: %s",
 		        vmk_StatusToString(status));
     goto failed_mcdi_init;
   }
 
   /* Probe  NIC and build the configuration data area. */
-  if ((error = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED)) != 0) {
+  if ((status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED)) != 0) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
-                        vmk_StatusToString(error));
+                        vmk_StatusToString(status));
 
-    if ((error = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE)) != 0) {
+    if ((status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE)) != 0) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
-                          vmk_StatusToString(error));
+                          vmk_StatusToString(status));
       goto failed_nic_probe;
     }
   }
 
   /* Reset NIC. */
-  if ((error = efx_nic_reset(pAdapter->pNic)) != 0) {
+  status = efx_nic_reset(pAdapter->pNic);
+  if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed status: %s",
-                        vmk_StatusToString(error));
+                        vmk_StatusToString(status));
     goto failed_nic_reset;
   }
 

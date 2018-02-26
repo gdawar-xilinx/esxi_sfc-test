@@ -23,11 +23,13 @@ static boolean_t sfvmk_evException(void *arg, uint32_t code, uint32_t data);
 static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode);
 static boolean_t sfvmk_evRxqFlushDone(void *arg, uint32_t rxq_index);
 static boolean_t sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex);
+static boolean_t sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex);
 
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_exception = sfvmk_evException,
   .eec_link_change = sfvmk_evLinkChange,
   .eec_initialized = sfvmk_evInitialized,
+  .eec_txq_flush_done = sfvmk_evTxqFlushDone,
   .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
   .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
 };
@@ -253,6 +255,46 @@ static boolean_t
 sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 {
   return sfvmk_evRxqFlush(arg, rxqIndex, SFVMK_FLUSH_STATE_FAILED);
+}
+
+/*! \brief  Called when TXQ flush is done.
+**
+** \param[in] arg        Pointer to event queue
+** \param[in] txqIndex   TXQ index
+**
+** \return: VMK_FALSE success
+*/
+static boolean_t
+sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+  sfvmk_txq_t *pTxq = NULL;
+  sfvmk_adapter_t *pAdapter = NULL;
+
+  VMK_ASSERT_NOT_NULL(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  if (pAdapter->ppTxq != NULL)
+    pTxq = pAdapter->ppTxq[txqIndex];
+
+  if (pTxq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL TXQ ptr");
+    goto fail;
+  }
+
+  if (pTxq->evqIndex == pEvq->index) {
+    sfvmk_txqFlushDone(pTxq);
+  } else {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ");
+    goto fail;
+  }
+
+  return VMK_FALSE;
+
+fail:
+  return VMK_TRUE;
 }
 
 /*! \brief  Poll event from eventQ and process it. function should be called in thread

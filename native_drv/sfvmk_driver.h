@@ -121,6 +121,7 @@ typedef struct sfvmk_port_s {
 typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_UNINITIALIZED = 0,
   SFVMK_TXQ_STATE_INITIALIZED,
+  SFVMK_TXQ_STATE_STARTED
 } sfvmk_txqState_t;
 
 typedef struct sfvmk_txq_s {
@@ -133,6 +134,8 @@ typedef struct sfvmk_txq_s {
   vmk_uint32          ptrMask;
   efsys_mem_t         mem;
   sfvmk_txqState_t    state;
+  sfvmk_flushState_t  flushState;
+  efx_txq_t           *pCommonTxq;
 } sfvmk_txq_t;
 
 typedef enum sfvmk_rxqState_e {
@@ -315,6 +318,9 @@ VMK_ReturnStatus sfvmk_scheduleLinkUpdate(sfvmk_adapter_t *pAdapter);
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_txFini(sfvmk_adapter_t *pAdapter);
+void sfvmk_txStop(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_txStart(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_txqFlushDone(sfvmk_txq_t *pTxq);
 
 /* Functions for RXQ module handling */
 VMK_ReturnStatus sfvmk_rxInit(sfvmk_adapter_t *pAdapter);

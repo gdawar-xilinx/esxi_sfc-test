@@ -170,6 +170,8 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 }
 
 /*! \brief Uplink callback function to set the link status.
+**         success of this API enable vmkernel to call
+**         startIO uplink callback.
 **
 ** \param[in]  cookie    vmk_AddrCookie
 ** \param[in]  admnState linkstate.
@@ -181,9 +183,10 @@ static VMK_ReturnStatus
 sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState admnState)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  status = VMK_OK;
   /* TODO: Add implementation */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 

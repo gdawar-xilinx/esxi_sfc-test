@@ -1910,7 +1910,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "Dynamic RSS capability not registered");
   }
 
-  if (modParams.vxlanOffload) {
+  if (pAdapter->isTunnelEncapSupported) {
     /* Register capability for encap offload   */
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                    VMK_UPLINK_CAP_ENCAP_OFFLOAD,
@@ -2300,7 +2300,7 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
     goto failed_filter_db_init;
   }
 
-  if (modParams.vxlanOffload) {
+  if (pAdapter->isTunnelEncapSupported) {
     /* Tunnel reconfigure triggers reset, this flag
      * is being used to prevent resets in a loop */
     if (pAdapter->startIOTunnelReCfgReqd == VMK_TRUE) {

@@ -807,6 +807,7 @@ sfvmk_attachDevice(vmk_Device dev)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_adapter_t *pAdapter = NULL;
+  const efx_nic_cfg_t *pNicCfg = NULL;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -978,7 +979,17 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_rx_init;
   }
 
-  if (modParams.vxlanOffload) {
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto failed_nic_cfg_get;
+  }
+
+  pAdapter->isTunnelEncapSupported = ((pNicCfg->enc_tunnel_encapsulations_supported &&
+                                      modParams.vxlanOffload) ?
+                                      VMK_TRUE : VMK_FALSE);
+
+  if (pAdapter->isTunnelEncapSupported) {
     status = sfvmk_tunnelInit(pAdapter);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
@@ -1033,9 +1044,10 @@ failed_uplinkData_init:
   sfvmk_mutexDestroy(pAdapter->lock);
 
 failed_mutex_init:
-  if (modParams.vxlanOffload)
+  if (pAdapter->isTunnelEncapSupported)
     sfvmk_tunnelFini(pAdapter);
 
+failed_nic_cfg_get:
 failed_tunnel_init:
   sfvmk_rxFini(pAdapter);
 
@@ -1240,7 +1252,7 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_destroyHelper(pAdapter);
   sfvmk_uplinkDataFini(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);
-  if (modParams.vxlanOffload)
+  if (pAdapter->isTunnelEncapSupported)
     sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);

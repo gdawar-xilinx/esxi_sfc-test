@@ -543,6 +543,7 @@ typedef struct sfvmk_adapter_s {
 
   /* VxLAN UDP port number */
   vmk_uint16                 vxlanUdpPort;
+  vmk_Bool                   isTunnelEncapSupported;
   vmk_Bool                   startIOTunnelReCfgReqd;
 } sfvmk_adapter_t;
 

@@ -1138,16 +1138,9 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
     }
   }
 
-  /* RSSQs are formed just after the number of netQ supported by the adapter */
-  if (sfvmk_isRSSEnable(pAdapter))
-    qIndex = sfvmk_getRSSQStartIndex(pAdapter);
-  else
-    qIndex = pAdapter->defRxqIndex;
-
   status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
-                                          pAdapter->ppRxq[qIndex]->pCommonRxq,
-                                          sfvmk_isRSSEnable(pAdapter));
-
+                                          pAdapter->ppRxq[pAdapter->defRxqIndex]->pCommonRxq,
+                                          VMK_FALSE);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
                         vmk_StatusToString(status));

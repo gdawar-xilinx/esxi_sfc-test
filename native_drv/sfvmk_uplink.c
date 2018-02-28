@@ -2779,6 +2779,23 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
       status = VMK_FAILURE;
       goto done;
     }
+
+    vmk_MutexLock(pAdapter->lock);
+    efx_mac_filter_default_rxq_clear(pAdapter->pNic);
+
+    VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
+    VMK_ASSERT_NOT_NULL(pAdapter->ppRxq[queueIndex]);
+
+    status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
+                                            pAdapter->ppRxq[queueIndex]->pCommonRxq,
+                                            VMK_TRUE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
+                          vmk_StatusToString(status));
+      vmk_MutexUnlock(pAdapter->lock);
+      goto done;
+    }
+    vmk_MutexUnlock(pAdapter->lock);
   } else {
     /* Check if queue is free */
     for (queueIndex = queueStartIndex; queueIndex <= queueEndIndex; queueIndex++)

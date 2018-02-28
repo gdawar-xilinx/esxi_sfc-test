@@ -51,3 +51,4 @@ imported/efx_tunnel.c
 imported/efx_annote.h
 imported/medford2_impl.h
 imported/medford2_nic.c
+imported/mc_driver_pcol_strs.h

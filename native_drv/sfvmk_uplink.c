@@ -3584,6 +3584,7 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_uplink_t *pUplink;
+  sfvmk_rxq_t *pRxq = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
@@ -3608,6 +3609,26 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     status = VMK_FAILURE;
     goto done;
   }
+
+  vmk_MutexLock(pAdapter->lock);
+  if ((qIndex == sfvmk_getRSSQStartIndex(pAdapter)) && pAdapter->rssInit) {
+
+    efx_mac_filter_default_rxq_clear(pAdapter->pNic);
+
+    VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
+
+    pRxq = pAdapter->ppRxq[pAdapter->defRxqIndex];
+    VMK_ASSERT_NOT_NULL(pRxq);
+    status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
+                                            pRxq->pCommonRxq,
+                                            VMK_FALSE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
+                          vmk_StatusToString(status));
+    }
+    pAdapter->rssInit = VMK_FALSE;
+  }
+  vmk_MutexUnlock(pAdapter->lock);
 
   sfvmk_sharedAreaBeginWrite(pUplink);
   pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;

@@ -99,7 +99,7 @@ static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
   vmk_ByteCount maxSize = 0;
-  vmk_HeapAllocationDescriptor allocDesc[20];
+  vmk_HeapAllocationDescriptor allocDesc[21];
   VMK_ReturnStatus status;
 
   allocDesc[0].size = vmk_LogHeapAllocSize();
@@ -185,6 +185,17 @@ sfvmk_calcHeapSize(void)
   allocDesc[19].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
   allocDesc[19].alignment = 0;
   allocDesc[19].count = 1;
+
+  status = vmk_MgmtGetStaticHeapRequired((vmk_MgmtApiSignature *)&sfvmk_mgmtSig,
+                                         1, 0, 0, &allocDesc[20].size);
+  if (status != VMK_OK) {
+    allocDesc[20].size = 0;
+    vmk_WarningMessage("Failed to determine management heap size: status:%s",
+                       vmk_StatusToString(status));
+  }
+
+  allocDesc[20].alignment = 0;
+  allocDesc[20].count = 1;
 
   status = vmk_HeapDetermineMaxSize(allocDesc,
                                     sizeof(allocDesc) / sizeof(allocDesc[0]),

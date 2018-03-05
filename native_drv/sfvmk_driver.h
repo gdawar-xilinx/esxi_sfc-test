@@ -47,13 +47,13 @@
 #define	SFVMK_SW_EV_MAGIC(_sw_ev)     (SFVMK_MAGIC_RESERVED | (_sw_ev))
 #define SFVMK_SW_EV_RX_QREFILL        1
 
-/* Max number of filter supported by default RX queue.
+/* Max number of uplink filter supported by default RX queue.
+ * For encapsulation case, there are 2 HW filters per 1 uplink filter
  * HW supports total 8192 filters.
- * TODO: Using a smaller number of filters in driver as
- * supporting only single queue right now.
- * Needs to revisit during multiQ implementation.
  */
 #define SFVMK_MAX_FILTER              2048
+#define SFMK_MAX_HWF_PER_UPF          2
+
 #define SFVMK_MAX_ADAPTER             16
 #define SFVMK_MAX_FW_IMAGE_SIZE       1843200 /* 1.8 MB */
 
@@ -396,12 +396,16 @@ typedef struct sfvmk_rxq_s {
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 
-/* Data structure for filter database entry */
+/* Data structure for filter database entry
+** Note:
+**   For encapsulation case, more than 1 filter gets created per uplink filter
+*/
 typedef struct sfvmk_filterDBEntry_s {
   vmk_UplinkQueueFilterClass class;
   vmk_uint32                 key;
   vmk_uint32                 qID;
-  efx_filter_spec_t          spec;
+  vmk_uint8                  numHwFilter;
+  efx_filter_spec_t          spec[SFMK_MAX_HWF_PER_UPF];
 } sfvmk_filterDBEntry_t;
 
 typedef struct sfvmk_uplink_s {

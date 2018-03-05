@@ -33,6 +33,21 @@ typedef struct sfvmk_filterDBIterCtx_s {
   sfvmk_filterDBEntry_t   *pFdbEntry;
 } sfvmk_filterDBIterCtx_t;
 
+typedef struct sfvmk_filterEncapEntry_s {
+  uint16_t               etherType;
+  efx_tunnel_protocol_t  encapType;
+  uint32_t               innerFrameMatch;
+} sfvmk_filterEncapEntry_t;
+
+#define SFVMK_ENCAP_FILTER_ENTRY(ipv, encapType)           \
+  {EFX_ETHER_TYPE_##ipv, EFX_TUNNEL_PROTOCOL_##encapType,  \
+   EFX_FILTER_INNER_FRAME_MATCH_OTHER}
+
+static const sfvmk_filterEncapEntry_t sfvmk_filterEncapList[] = {
+  SFVMK_ENCAP_FILTER_ENTRY(IPV4, VXLAN),
+  SFVMK_ENCAP_FILTER_ENTRY(IPV6, VXLAN)
+};
+
 /*! \brief  Allocate a filter DB entry
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t
@@ -51,7 +66,7 @@ sfvmk_allocFilterRule(sfvmk_adapter_t *pAdapter)
     return NULL;
   }
 
-  memset(pFdbEntry, 0, sizeof(*pFdbEntry));
+  vmk_Memset(pFdbEntry, 0, sizeof(*pFdbEntry));
 
   return pFdbEntry;
 }
@@ -94,6 +109,7 @@ sfvmk_generateFilterKey(sfvmk_adapter_t *pAdapter)
 /*! \brief  Prepare a VLAN MAC filter rule
 **
 ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
+** \param[in]      pRxq       pointer to HW Rx Q for which filter is prepared
 ** \param[in]      mac        MAC address
 ** \param[in]      vlanID     vlan ID
 ** \param[in,out]  pFdbEntry  pointer to filter DB entry
@@ -103,11 +119,12 @@ sfvmk_generateFilterKey(sfvmk_adapter_t *pAdapter)
 */
 static VMK_ReturnStatus
 sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
+                            struct sfvmk_rxq_s *pRxq,
                             vmk_EthAddress mac,
                             vmk_VlanID vlanID,
                             sfvmk_filterDBEntry_t *pFdbEntry)
 {
-  VMK_ReturnStatus status = VMK_OK;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
                       "Create HWFilter %p: VLAN ID %u"
@@ -116,7 +133,9 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
                       mac[0], mac[1], mac[2],
                       mac[3], mac[4], mac[5]);
 
-  status = efx_filter_spec_set_eth_local(&pFdbEntry->spec,
+  efx_filter_spec_init_rx(&pFdbEntry->spec[0], EFX_FILTER_PRI_HINT, 0, pRxq->pCommonRxq);
+
+  status = efx_filter_spec_set_eth_local(&pFdbEntry->spec[0],
                                          vlanID,
                                          mac);
   if (status != VMK_OK) {
@@ -125,6 +144,7 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
                         vmk_StatusToString(status));
     return status;
   }
+  pFdbEntry->numHwFilter = 1;
 
   return status;
 }
@@ -132,6 +152,7 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
 /*! \brief  Prepare a VxLAN filter rule
  **
  ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
+ ** \param[in]		pRxq	   pointer to HW Rx Q for which filter is prepared
  ** \param[in]      innerMac   MAC address
  ** \param[in]      outerMac   MAC address
  ** \param[in]      vxlanID    vxlan ID
@@ -142,13 +163,20 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
  */
 static VMK_ReturnStatus
 sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
-                            vmk_EthAddress innerMac,
-                            vmk_EthAddress outerMac,
-                            vmk_VlanID vxlanID,
-                            sfvmk_filterDBEntry_t *pFdbEntry)
+                             struct sfvmk_rxq_s *pRxq,
+                             vmk_EthAddress innerMac,
+                             vmk_EthAddress outerMac,
+                             vmk_uint32 vxlanID,
+                             sfvmk_filterDBEntry_t *pFdbEntry)
 {
-  VMK_ReturnStatus status = VMK_OK;
+  VMK_ReturnStatus status = VMK_FAILURE;
   vmk_uint8 vni[EFX_VNI_OR_VSID_LEN];
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  vmk_uint32 i, hwFilterCount = 0;
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL)
+    goto end;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
                       "Create VXLAN Filter %p: VXLAN ID %u"
@@ -160,20 +188,57 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
                       outerMac[0], outerMac[1], outerMac[2],
                       outerMac[3], outerMac[4], outerMac[5]);
 
-  vni[0] = vxlanID & 0xFF;
+  /* VNI in big endian format */
+  vni[0] = (vxlanID >> 16) & 0xFF;
   vni[1] = (vxlanID >> 8) & 0xFF;
-  vni[2] = (vxlanID >> 16) & 0xFF;
+  vni[2] = vxlanID & 0xFF;
 
-  status = efx_filter_spec_set_vxlan_full(&pFdbEntry->spec,
-                                          vni,
-                                          innerMac,
-                                          outerMac);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Prepare VxLAN HW filter "
-                        "failed with error code %s",
-                        vmk_StatusToString(status));
+  EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterEncapList));
+
+  for (i = 0; i < EFX_ARRAY_SIZE(sfvmk_filterEncapList); i++) {
+
+    const sfvmk_filterEncapEntry_t *pEncapFilter = &sfvmk_filterEncapList[i];
+
+    if (pEncapFilter->etherType == EFX_ETHER_TYPE_IPV6) {
+      if (!(pNicCfg->enc_features & EFX_FEATURE_IPV6))
+        continue;
+    }
+
+    efx_filter_spec_init_rx(&pFdbEntry->spec[i],
+                            EFX_FILTER_PRI_HINT,
+                            0, pRxq->pCommonRxq);
+
+    status = efx_filter_spec_set_vxlan_full(&pFdbEntry->spec[i],
+                                            vni,
+                                            innerMac,
+                                            outerMac);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Prepare VxLAN HW filter for %d entry "
+                          "failed with error code %s",
+                          i, vmk_StatusToString(status));
+      goto end;
+    }
+
+    efx_filter_spec_set_ether_type(&pFdbEntry->spec[i], pEncapFilter->etherType);
+    status = efx_filter_spec_set_encap_type(&pFdbEntry->spec[i],
+                                            pEncapFilter->encapType,
+                                            pEncapFilter->innerFrameMatch);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Prepare VxLAN HW filter set encapType for %d entry "
+                          "failed with error code %s",
+                          i, vmk_StatusToString(status));
+      goto end;
+    }
+
+    hwFilterCount++;
   }
 
+  pFdbEntry->numHwFilter = hwFilterCount;
+  status = VMK_OK;
+
+end:
   return status;
 }
 
@@ -211,7 +276,6 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
   pFdbEntry->class = pFilter->class;
   pFdbEntry->qID = qidVal;
   pFdbEntry->key = filterKey;
-  efx_filter_spec_init_rx(&pFdbEntry->spec, 0, 0, pRxq->pCommonRxq);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
                       "HWFilter %p: Class %d, Filter ID %u, Queue ID %u",
@@ -219,12 +283,12 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
 
   switch (pFdbEntry->class) {
     case VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY:
-      status = sfvmk_prepareVMACFilterRule(pAdapter, pFilter->macFilterInfo->mac,
+      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq, pFilter->macFilterInfo->mac,
                                            EFX_FILTER_SPEC_VID_UNSPEC, pFdbEntry);
       break;
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC:
-      status = sfvmk_prepareVMACFilterRule(pAdapter, pFilter->vlanMacFilterInfo->mac,
+      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq, pFilter->vlanMacFilterInfo->mac,
                                            pFilter->vlanMacFilterInfo->vlanID, pFdbEntry);
       break;
 
@@ -236,11 +300,11 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
       if (modParams.vxlanOffload) {
-        status = sfvmk_prepareVXLANFilterRule(pAdapter,
-                                            pFilter->vxlanFilterInfo->innerMAC,
-                                            pFilter->vxlanFilterInfo->outerMAC,
-                                            pFilter->vxlanFilterInfo->vxlanID,
-                                            pFdbEntry);
+        status = sfvmk_prepareVXLANFilterRule(pAdapter, pRxq,
+                                              pFilter->vxlanFilterInfo->innerMAC,
+                                              pFilter->vxlanFilterInfo->outerMAC,
+                                              pFilter->vxlanFilterInfo->vxlanID,
+                                              pFdbEntry);
       }
       else {
         SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not enabled",
@@ -281,24 +345,32 @@ sfvmk_matchFilterDBHashIter(vmk_HashTable htbl,
                             vmk_AddrCookie data)
 {
   sfvmk_filterDBIterCtx_t *pIterCtx = data.ptr;
+  sfvmk_filterDBEntry_t *pMatchFdbEntry = pIterCtx->pFdbEntry;
   sfvmk_filterDBEntry_t *pStoredFdbEntry = (sfvmk_filterDBEntry_t *)value;
-  sfvmk_filterDBEntry_t *pNewFdbEntry = pIterCtx->pFdbEntry;
   vmk_HashKeyIteratorCmd returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
+  vmk_uint32 i;
 
-  if (!pStoredFdbEntry || !pNewFdbEntry) {
+  if (!pStoredFdbEntry || !pMatchFdbEntry) {
     returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
     goto done;
   }
 
-  if (pStoredFdbEntry->class != pNewFdbEntry->class) {
+  if (pStoredFdbEntry->class != pMatchFdbEntry->class) {
     returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
     goto done;
   }
 
-  if (memcmp(&pStoredFdbEntry->spec,
-             &pNewFdbEntry->spec, sizeof(pStoredFdbEntry->spec))) {
-    returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
-    goto done;
+  if (pStoredFdbEntry->numHwFilter != pMatchFdbEntry->numHwFilter) {
+      returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
+      goto done;
+  }
+
+  for (i = 0; i < pStoredFdbEntry->numHwFilter; i++) {
+    if (memcmp(&pStoredFdbEntry->spec[i],
+               &pMatchFdbEntry->spec[i], sizeof(pStoredFdbEntry->spec[0]))) {
+      returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
+      goto done;
+    }
   }
 
   returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
@@ -358,21 +430,35 @@ VMK_ReturnStatus
 sfvmk_insertFilterRule(sfvmk_adapter_t *pAdapter,
                        sfvmk_filterDBEntry_t *pFdbEntry)
 {
-  VMK_ReturnStatus status = VMK_OK;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 i;
 
   if (sfvmk_matchFilterRule(pAdapter, pFdbEntry) == VMK_TRUE) {
-    return VMK_EXISTS;
+    status = VMK_EXISTS;
+    goto done;
   }
 
-  status = efx_filter_insert(pAdapter->pNic, &pFdbEntry->spec);
-  if ((status != VMK_OK) && (status != VMK_EXISTS)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Insert of HW filter failed with error code %s",
-                        vmk_StatusToString(status));
-    return VMK_FAILURE;
+  for (i = 0; i < pFdbEntry->numHwFilter; i++) {
+    status = efx_filter_insert(pAdapter->pNic, &pFdbEntry->spec[i]);
+    if ((status != VMK_OK) && (status != VMK_EXISTS)) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Insert of HW filter failed for entry %d with error code %s",
+                          i, vmk_StatusToString(status));
+      status = VMK_FAILURE;
+      goto failed_insert;
+    }
   }
 
+  status = VMK_OK;
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
                       "Hw filter inserted successfully");
+  goto done;
+
+failed_insert:
+  while (i--)
+    efx_filter_remove(pAdapter->pNic, &pFdbEntry->spec[i]);
+
+done:
   return status;
 }
 
@@ -388,7 +474,8 @@ sfvmk_filterDBEntry_t *
 sfvmk_removeFilterRule(sfvmk_adapter_t *pAdapter, vmk_uint32 filterKey)
 {
   sfvmk_filterDBEntry_t *pFdbEntry;
-  VMK_ReturnStatus status;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 i;
 
   if (vmk_HashIsEmpty(pAdapter->filterDBHashTable)) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
@@ -412,11 +499,14 @@ sfvmk_removeFilterRule(sfvmk_adapter_t *pAdapter, vmk_uint32 filterKey)
     return NULL;
   }
 
-  status = efx_filter_remove(pAdapter->pNic, &pFdbEntry->spec);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Remove HW filter failed with error code %s",
-                        vmk_StatusToString(status));
-    return NULL;
+  for (i = 0; i < pFdbEntry->numHwFilter; i++) {
+    status = efx_filter_remove(pAdapter->pNic, &pFdbEntry->spec[i]);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "Remove HW filter failed for entry %d with error code %s",
+                          i, vmk_StatusToString(status));
+      return NULL;
+    }
   }
 
   return pFdbEntry;
@@ -461,7 +551,8 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_filterDBIterCtx_t iterCtx = {VMK_FALSE, NULL};
   sfvmk_filterDBEntry_t *pFdbEntry;
-  VMK_ReturnStatus status;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 i;
 
   while (!vmk_HashIsEmpty(pAdapter->filterDBHashTable)) {
 
@@ -486,10 +577,13 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
     pFdbEntry = iterCtx.pFdbEntry;
     iterCtx.pFdbEntry = NULL;
 
-    status = efx_filter_remove(pAdapter->pNic, &pFdbEntry->spec);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Remove HW filter failed with error code %s",
-                          vmk_StatusToString(status));
+    for (i = 0; i < pFdbEntry->numHwFilter; i++) {
+      status = efx_filter_remove(pAdapter->pNic, &pFdbEntry->spec[i]);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter,
+                            "Remove HW filter failed for entry %d with error code %s",
+                            i, vmk_StatusToString(status));
+      }
     }
 
     sfvmk_removeUplinkFilter(pAdapter, pFdbEntry->qID);

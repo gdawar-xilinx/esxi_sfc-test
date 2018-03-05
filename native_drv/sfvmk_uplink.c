@@ -954,8 +954,7 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
                          pAdapter->adapterStats[EFX_MAC_TX_EX_COL_PKTS] +
                          pAdapter->adapterStats[EFX_MAC_TX_LATE_COL_PKTS];
 
-  pNicStats->rxLengthErrors = pAdapter->adapterStats[EFX_MAC_RX_LE_64_PKTS] +
-                             pAdapter->adapterStats[EFX_MAC_RX_JABBER_PKTS];
+  pNicStats->rxLengthErrors = pAdapter->adapterStats[EFX_MAC_RX_JABBER_PKTS];
 
   pNicStats->rxOverflowErrors = pAdapter->adapterStats[EFX_MAC_RX_NODESC_DROP_CNT];
   pNicStats->rxCRCErrors = pAdapter->adapterStats[EFX_MAC_RX_FCS_ERRORS];

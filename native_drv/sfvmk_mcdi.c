@@ -178,6 +178,58 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MCDI);
 }
 
+/*! \brief Routine to post MCDI user request
+**
+** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
+** \param[in] pEmReq  mcdi command request
+**
+** \return: VMK_OK <success>,
+**       Below error codes will be returned in case of failure,
+**       VMK_BAD_PARAM:      Invalid input/output buffer
+**       VMK_NOT_SUPPORTED:  MCDI feature not supported
+**       VMK_NOT_READY:      A communication error has happened,
+**                           MCDI feature not yet initialized.
+**                           Retry after MC reboot.
+**       VMK_FAILURE:        Any other failure
+**
+*/
+int
+sfvmk_mcdiIOHandler(sfvmk_adapter_t *pAdapter,
+                    efx_mcdi_req_t *pEmReq)
+{
+  const efx_nic_cfg_t *pNCfg = efx_nic_cfg_get(pAdapter->pNic);
+  sfvmk_mcdi_t        *pMcdi = &pAdapter->mcdi;
+  VMK_ReturnStatus    status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_MCDI);
+
+  if (!(pNCfg->enc_features & EFX_FEATURE_MCDI)) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"MCDI feature is not supported");
+    status = VMK_NOT_SUPPORTED;
+    goto done;
+  }
+
+  if (pMcdi->state != SFVMK_MCDI_STATE_INITIALIZED) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"MCDI State is not Initialized");
+    status = VMK_NOT_READY;
+    goto done;
+  }
+
+  if (!pEmReq->emr_in_buf || !pEmReq->emr_out_buf) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"MCDI command buffer is NULL");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  sfvmk_mcdiExecute(pAdapter, pEmReq);
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MCDI);
+
+  return status;
+}
+
 /*! \brief Routine allocating resource for mcdi cmd handling and initializing
 **        mcdi module
 **

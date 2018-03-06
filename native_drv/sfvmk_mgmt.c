@@ -23,6 +23,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "efx_mcdi.h"
+#include "efx_regs_mcdi.h"
 #include "sfvmk_driver.h"
 #include "sfvmk_mgmt_interface.h"
 
@@ -85,6 +87,8 @@ sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
                         sfvmk_mcdiRequest_t  *pMgmtMcdi)
 {
   sfvmk_adapter_t *pAdapter = NULL;
+  efx_mcdi_req_t   emr;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   vmk_SemaLock(&sfvmk_modInfo.lock);
   if (!pDevIface) {
@@ -108,9 +112,31 @@ sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
     goto end;
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
-                      "Received MCDI request for interface %s",
-                      pDevIface->deviceName);
+  if (pMgmtMcdi->inlen > MCDI_CTL_SDU_LEN_MAX_V2 ||
+      pMgmtMcdi->outlen > MCDI_CTL_SDU_LEN_MAX_V2) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid Length");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  emr.emr_cmd = pMgmtMcdi->cmd;
+  emr.emr_in_buf = (vmk_uint8 *)pMgmtMcdi->payload;
+  emr.emr_in_length = pMgmtMcdi->inlen;
+
+  emr.emr_out_buf = (vmk_uint8 *)pMgmtMcdi->payload;
+  emr.emr_out_length = pMgmtMcdi->outlen;
+
+  status = sfvmk_mcdiIOHandler(pAdapter, &emr);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MCDI command failed %s",
+                        vmk_StatusToString(status));
+    pDevIface->status = status;
+    goto end;
+  }
+
+  pMgmtMcdi->host_errno = emr.emr_rc;
+  pMgmtMcdi->cmd = emr.emr_cmd;
+  pMgmtMcdi->outlen = emr.emr_out_length_used;
 
   pDevIface->status = VMK_OK;
 

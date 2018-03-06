@@ -17,6 +17,9 @@
  */
 #define SFVMK_MAX_FILTER 2048
 
+static VMK_ReturnStatus sfvmk_startIO(sfvmk_adapter_t *pAdapter);
+static VMK_ReturnStatus sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter);
+
 /****************************************************************************
  *               vmk_UplinkOps Handlers                                     *
  ****************************************************************************/
@@ -346,11 +349,38 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
 
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
-    status = VMK_BAD_PARAM;
-    goto failed_adapter_ptr;
+    return VMK_BAD_PARAM;
   }
 
   vmk_MutexLock(pAdapter->lock);
+  status = sfvmk_startIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Uplink Start IO failed with status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief start device IO operations. Assumes Adapter
+**         lock is already taken.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+static VMK_ReturnStatus
+sfvmk_startIO(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
     status = VMK_FAILURE;
@@ -428,9 +458,6 @@ failed_intr_start:
   efx_nic_fini(pAdapter->pNic);
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
-
-failed_adapter_ptr:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -453,11 +480,38 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
 
   if (pAdapter == NULL) {
     SFVMK_ERROR("NULL adapter ptr");
-    status = VMK_BAD_PARAM;
-    goto failed_adapter_ptr;
+    return VMK_BAD_PARAM;
   }
 
   vmk_MutexLock(pAdapter->lock);
+  status = sfvmk_quiesceIO(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Uplink Quiesce IO failed with status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  vmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief stop device IO operations. Assumes Adapter
+**         lock is already taken.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+static VMK_ReturnStatus
+sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
     status = VMK_FAILURE;
@@ -492,9 +546,6 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
   status = VMK_OK;
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
-
-failed_adapter_ptr:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

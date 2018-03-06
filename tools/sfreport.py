@@ -41,12 +41,10 @@ def execute(cmd):
     if err:
        print("ERROR:",err)
        print("Error while running command:",cmd)
-       return
+       return 1
     elif out:
        out = (out).decode('ascii')
        return out
-    else:
-       return 1
 
 def file_header(output_file,current_time,mode,sf_ver):
     output_file.write('<HTML><HEAD>')
@@ -176,8 +174,8 @@ def vmkernel_logs(output_file):
     output_file.write('<h1 id="VMkernel logs"style="font-size:26px;"> VMkernel logs: <br></H1>')
     dmesg_logs = execute('dmesg -c |grep sfvmk')
     lines = ('<p>')
-    if dmesg_logs == 1:
-       lines += 'No logs specific to sfvmk were found' 
+    if dmesg_logs == 1 or dmesg_logs == None:
+       lines += 'No logs specific to sfvmk were found'
        output_file.write('%s</p>'%lines)
        return
     dmesg = dmesg_logs.split('\n')
@@ -563,11 +561,15 @@ def interface_statistics(output_file,sfvmk_adapter_list,server,mode):
        priv_stats_dict = defaultdict(list)
        #output_file.write('<h1 style="font-size:18px;"> Private Statistics: <br></H1>')
        for interface in sfvmk_adapter_list:
+           private_stats_cmd = "vsish -e cat /net/pNics/"+ interface+"/stats"
+           private_stats_values = execute(private_stats_cmd)
+           if private_stats_values == 1:
+              priv_table = 'Private Statistics not available for: '+interface
+              output_file.write(priv_table)
+              return
            priv_table += '<td> %s </td>' % interface
            if interface_count == no_of_interfaces:
                priv_table += '</tr>'
-           private_stats_cmd = "vsish -e cat /net/pNics/"+ interface+"/stats"
-           private_stats_values = execute(private_stats_cmd)
            for line in private_stats_values.split('\n'):
                if not "device {" in line and line != "" and not "--" in line \
                   and not "}" in line:
@@ -675,7 +677,7 @@ def virtual_machine_info(output_file,server):
     for hdr in ('World ID','Name','Num Ports','Networks'):
         table += '<th>%s' % hdr + '</th>'
     vm_info = execute(vm_cmd)
-    if vm_info == 1:
+    if vm_info == 1 or vm_info == None:
        table = '<table id="Virtual Machine"style="font-size:26px;"><th>Virtual Machine Information:</th><table border="1">'
        table += "INFO:No Active Virtual Machines found.."
        output_file.write(table)
@@ -737,7 +739,7 @@ def vswitch_details(output_file,server):
     output_file.write('<h1 style="font-size:26px;">Distributed vSwitch Information: <br></H1>')
     dvs_cmd = "esxcli " + server + " network vswitch dvs vmware list"
     dvs_info = execute(dvs_cmd)
-    if dvs_info == 1:
+    if dvs_info == 1 or dvs_info == None:
        output_file.write("INFO:No Distributed vSwitches were found")
        return
     dvs_info = dvs_info.split('\n')
@@ -815,7 +817,7 @@ if __name__=="__main__":
        server = "--server " + server
     cmd = 'esxcli ' + server + ' network nic list |grep sfvmk'
     sf_adapters = execute(cmd)
-    if sf_adapters == 1:
+    if sf_adapters == 1 or sf_adapters == None:
        print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare NIC is NOT visible\n")
        sys.exit()
     if sf_adapters:

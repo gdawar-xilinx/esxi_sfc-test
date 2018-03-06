@@ -236,7 +236,7 @@ done:
 
 /*! \brief helper routine to log mcdi request.
 **
-** \param[in/out] pBuffer   processed message buffer
+** \param[in,out] pBuffer   processed message buffer
 ** \param[in]     pData     input message buffer
 ** \param[in]     dataSize  input message buffer size
 ** \param[in]     pfxsize   offset at which prefix finishes
@@ -296,6 +296,9 @@ sfvmk_mcdiLogger(void *pPriv, efx_log_msg_t type,
 
   pMcdi = &pAdapter->mcdi;
 
+  if (pMcdi->mcLogging == VMK_FALSE)
+    return;
+
   status = vmk_StringFormat(buffer, sizeof(buffer), &pfxsize,
                             "sfc %s %s MCDI RPC %s:",
                             pAdapter->pciDeviceName.string,
@@ -316,6 +319,42 @@ sfvmk_mcdiLogger(void *pPriv, efx_log_msg_t type,
     vmk_LogMessage(" %s\n", buffer);
   }
 
+}
+
+/*! \brief Routine to get MC Logging variable state
+**
+** \param[in] pAdapter pointer to sfvmk_adapter_t
+**
+** \return: MC Log control variable state
+*/
+vmk_Bool
+sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_mcdi_t    *pMcdi;
+
+  pMcdi = &pAdapter->mcdi;
+
+  return pMcdi->mcLogging;
+}
+
+/*! \brief Routine for setting MC Log variable state
+**         to true/false
+**
+** \param[in] pAdapter pointer to sfvmk_adapter_t
+** \param[in] state    MC Log control variable state
+**
+** \return: void
+*/
+void
+sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state)
+{
+  sfvmk_mcdi_t    *pMcdi;
+
+  pMcdi = &pAdapter->mcdi;
+
+  vmk_MutexLock(pMcdi->lock);
+  pMcdi->mcLogging = state;
+  vmk_MutexUnlock(pMcdi->lock);
 }
 #endif
 
@@ -380,6 +419,7 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
   pMcdi->transport.emt_exception = sfvmk_mcdiException;
 #if EFSYS_OPT_MCDI_LOGGING
   pMcdi->transport.emt_logger = sfvmk_mcdiLogger;
+  pMcdi->mcLogging = VMK_FALSE;
 #endif
 
   if ((status = efx_mcdi_init(pAdapter->pNic, &pMcdi->transport)) != 0) {

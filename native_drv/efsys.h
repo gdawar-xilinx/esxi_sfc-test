@@ -114,7 +114,7 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 #endif
 
 #define EFSYS_OPT_MCDI 1
-#define EFSYS_OPT_MCDI_LOGGING 0
+#define EFSYS_OPT_MCDI_LOGGING 1
 #define EFSYS_OPT_MCDI_PROXY_AUTH 0
 
 #define EFSYS_OPT_MAC_STATS 1

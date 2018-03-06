@@ -62,6 +62,10 @@ typedef struct sfvmk_mcdi_s {
   sfvmk_mcdiState_t     state;
   sfvmk_mcdiMode_t      mode;
   efx_mcdi_transport_t  transport;
+#if EFSYS_OPT_MCDI_LOGGING
+  /* Flag for enable/disable MCDI logging at run time */
+  vmk_Bool              mcLogging;
+#endif
 } sfvmk_mcdi_t;
 
 /* Intrrupt module state */
@@ -360,6 +364,10 @@ VMK_ReturnStatus sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter);
 int sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
                         efx_mcdi_req_t *pEmReq);
+#if EFSYS_OPT_MCDI_LOGGING
+vmk_Bool sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter);
+void sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state);
+#endif
 
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);

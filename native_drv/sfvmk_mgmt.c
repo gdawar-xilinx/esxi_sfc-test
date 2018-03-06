@@ -144,3 +144,84 @@ end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
   return VMK_OK;
 }
+
+/*! \brief  A Mgmt callback routine to control dynamic
+ **         logging of MC Logs
+ **
+ ** \param[in]  pCookies    Pointer to cookie
+ ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pMcdiLog   Pointer to MCDI log structure
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Invalid payload size or input param
+ **     VMK_NO_ACCESS:      MC Log disabled. Not allowed to perform
+ **                         get/set operation.
+ **     VMK_FAILURE:        For any other errors.
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
+                        vmk_MgmtEnvelope *pEnvelope,
+                        sfvmk_mgmtDevInfo_t *pDevIface,
+                        sfvmk_mcdiLogging_t *pMcdiLog)
+{
+  sfvmk_adapter_t *pAdapter = NULL;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pMcdiLog) {
+    SFVMK_ERROR("pMcdiLog: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+#if EFSYS_OPT_MCDI_LOGGING
+  switch (pMcdiLog->mcLoggingOp) {
+    case SFVMK_MGMT_DEV_OPS_GET:
+      pMcdiLog->state = sfvmk_getMCLogging(pAdapter);
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
+                          "%s: Get MC Log Status (%s)", pDevIface->deviceName,
+                          pMcdiLog->state ? "Enabled" : "Disabled");
+      break;
+
+    case SFVMK_MGMT_DEV_OPS_SET:
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
+                          "%s: Set MC Log Status (%s)", pDevIface->deviceName,
+                          pMcdiLog->state ? "Enable" : "Disable");
+
+      sfvmk_setMCLogging(pAdapter, pMcdiLog->state);
+      break;
+
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+#else
+  pDevIface->status = VMK_NOT_SUPPORTED;
+#endif
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

@@ -42,11 +42,13 @@
  ** Note: These identifiers cannot be changed or renumbered,
  ** so new callback IDs must go at the end (before SFVMK_CB_MAX).
  **
- ** SFVMK_CB_MCDI_REQUEST:     For invoking MCDI callback
+ ** SFVMK_CB_MCDI_REQUEST:        For invoking MCDI callback
+ ** SFVMK_CB_MC_LOGGING_REQUEST:  For controlling MC Logging dynamically
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST = (VMK_MGMT_RESERVED_CALLBACKS + 1),
+  SFVMK_CB_MC_LOGGING_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -76,6 +78,19 @@ typedef struct sfvmk_mgmtDevInfo_s {
   vmk_uint32  status;
   char  deviceName[SFVMK_DEV_NAME_LEN];
 } __attribute__((__packed__)) sfvmk_mgmtDevInfo_t;
+
+/*! \brief General commands to perform Get/Set operations
+ **
+ **  SFVMK_MGMT_DEV_OPS_GET: Generic command to Get data
+ **
+ **  SFVMK_MGMT_DEV_OPS_SET: Generic command to Set device param
+ **
+ */
+typedef enum sfvmk_mgmtDevOps_e {
+  SFVMK_MGMT_DEV_OPS_GET = 1,
+  SFVMK_MGMT_DEV_OPS_SET,
+  SFVMK_MGMT_DEV_OPS_INVALID
+}sfvmk_mgmtDevOps_t;
 
 /*
  * The maximum payload length is 0x400 (MCDI_CTL_SDU_LEN_MAX_V2) - uint32
@@ -122,6 +137,17 @@ typedef struct sfvmk_mcdiRequest_s {
   vmk_uint32  payload[SFVMK_MCDI_MAX_PAYLOAD_ARRAY];
 } __attribute__((__packed__)) sfvmk_mcdiRequest_t;
 
+/*! \brief struct sfvmk_mcdiLogging_s for controlling
+ **        MC Logging dynamically
+ **
+ **  mcLoggingOp[in]  Command types to Get/Set MC Log state
+ **  state[in/out]    MC Log state (True/False)
+ */
+typedef struct sfvmk_mcdiLogging_s {
+  sfvmk_mgmtDevOps_t  mcLoggingOp;
+  vmk_Bool            state;
+} __attribute__((__packed__)) sfvmk_mcdiLogging_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -154,6 +180,11 @@ VMK_ReturnStatus sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_mcdiRequest_t *pMgmtMCDI);
 
+VMK_ReturnStatus sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
+                                             vmk_MgmtEnvelope *pEnvelope,
+                                             sfvmk_mgmtDevInfo_t *pDevIface,
+                                             sfvmk_mcdiLogging_t *pMcdiLog);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -161,6 +192,7 @@ VMK_ReturnStatus sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
  **
  */
 #define sfvmk_mgmtMcdiCallback NULL
+#define sfvmk_mgmtMCLoggingCallback NULL
 #endif
 
 #endif

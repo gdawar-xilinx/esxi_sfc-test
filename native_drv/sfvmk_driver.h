@@ -21,6 +21,10 @@
 /* Type of command */
 #define SFVMK_PCI_COMMAND_BUS_MASTER  0x04
 
+#define	SFVMK_MAGIC_RESERVED	      0x8000
+#define	SFVMK_SW_EV_MAGIC(_sw_ev)     (SFVMK_MAGIC_RESERVED | (_sw_ev))
+#define SFVMK_SW_EV_RX_QREFILL        1
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -34,7 +38,6 @@ extern void             sfvmk_driverUnregister(void);
 typedef enum sfvmk_spinlockRank_e {
   SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
   SFVMK_SPINLOCK_RANK_UPLINK_LOCK,
-  SFVMK_SPINLOCK_RANK_RXQ_LOCK,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
   SFVMK_SPINLOCK_RANK_BAR_LOCK
@@ -102,6 +105,7 @@ typedef struct sfvmk_evq_s {
   sfvmk_evqState_t        state;
   vmk_Bool                exception;
   vmk_uint32              readPtr;
+  vmk_uint32              rxDone;
 } sfvmk_evq_t;
 
 typedef enum sfvmk_flushState_e {
@@ -143,6 +147,14 @@ typedef struct sfvmk_txq_s {
   efx_txq_t           *pCommonTxq;
 } sfvmk_txq_t;
 
+/* Descriptor for each buffer */
+typedef struct sfvmk_rxSwDesc_s {
+  vmk_int32      flags;
+  vmk_int32      size;
+  vmk_PktHandle  *pPkt;
+  vmk_IOA        ioAddr;
+} sfvmk_rxSwDesc_t;
+
 typedef enum sfvmk_rxqState_e {
   SFVMK_RXQ_STATE_UNINITIALIZED = 0,
   SFVMK_RXQ_STATE_INITIALIZED,
@@ -150,14 +162,23 @@ typedef enum sfvmk_rxqState_e {
 } sfvmk_rxqState_t;
 
 typedef struct sfvmk_rxq_s {
-  efsys_mem_t         mem;
-  vmk_uint32          index;
-  vmk_uint32          numDesc;
-  vmk_uint32          ptrMask;
-  efx_rxq_t           *pCommonRxq;
+  struct sfvmk_adapter_s  *pAdapter;
+  efsys_mem_t             mem;
+  vmk_uint32              index;
+  vmk_uint32              numDesc;
+  vmk_uint32              ptrMask;
+  efx_rxq_t               *pCommonRxq;
   /* Following fields are protected by associated EVQ's spinlock */
-  sfvmk_rxqState_t    state;
-  sfvmk_flushState_t  flushState;
+  sfvmk_rxqState_t        state;
+  sfvmk_flushState_t      flushState;
+  /* Variables for managing queue */
+  vmk_uint32              added;
+  vmk_uint32              pushed;
+  vmk_uint32              pending;
+  vmk_uint32              completed;
+  vmk_uint32              refillThreshold;
+  vmk_uint32              refillDelay;
+  sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 
 typedef struct sfvmk_uplink_s {
@@ -185,6 +206,21 @@ typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_STARTED,
   SFVMK_ADAPTER_NSTATES
 } sfvmk_adapterState_t;
+
+typedef enum sfvmk_pktCompCtxType_e {
+  SFVMK_PKT_COMPLETION_NETPOLL,
+  SFVMK_PKT_COMPLETION_OTHERS,
+  SFVMK_PKT_COMPLETION_MAX,
+} sfvmk_pktCompCtxType_t;
+
+typedef struct sfvmk_pktCompCtx_s {
+  sfvmk_pktCompCtxType_t type;
+  vmk_NetPoll            netPoll;
+} sfvmk_pktCompCtx_t;
+
+typedef struct sfvmk_pktOps_s {
+  void (*pktRelease)(sfvmk_pktCompCtx_t *pCompCtx, vmk_PktHandle *pPkt);
+} sfvmk_pktOps_t;
 
 /* Adapter structure */
 typedef struct sfvmk_adapter_s {
@@ -248,6 +284,11 @@ typedef struct sfvmk_adapter_s {
   sfvmk_rxq_t                **ppRxq;
   vmk_uint32                 numRxqsAllocated;
   vmk_uint32                 defRxqIndex;
+  size_t                     rxPrefixSize;
+  size_t                     rxBufferSize;
+  size_t                     rxBufferStartAlignment;
+  /* Max frame size that should be accepted */
+  size_t                     rxMaxFrameSize;
   vmk_Bool                   enableRSS;
 
   sfvmk_port_t               port;
@@ -259,6 +300,16 @@ typedef struct sfvmk_adapter_s {
   /* Handle for helper world queue */
   vmk_Helper                 helper;
 } sfvmk_adapter_t;
+
+extern const sfvmk_pktOps_t sfvmk_packetOps[];
+/* Release pkt in different context by using different release functions */
+static inline void sfvmk_pktRelease(sfvmk_adapter_t *pAdapter,
+                                    sfvmk_pktCompCtx_t *pCompCtx,
+                                    vmk_PktHandle *pPkt)
+{
+  if (pCompCtx->type < SFVMK_PKT_COMPLETION_MAX)
+    sfvmk_packetOps[pCompCtx->type].pktRelease(pCompCtx, pPkt);
+}
 
 /* Functions for interrupt handling */
 VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
@@ -333,6 +384,8 @@ void sfvmk_rxFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_rxStop(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_rxStart(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_setRxqFlushState(sfvmk_rxq_t *pRxq, sfvmk_flushState_t flushState);
+void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
+void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx);
 
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);

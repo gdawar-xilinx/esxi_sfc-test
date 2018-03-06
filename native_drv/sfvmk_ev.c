@@ -17,15 +17,26 @@
  * is added and performance tuning is done */
 #define SFVMK_MODERATION_USEC         30
 
+/* Number of RX desc processed per batch */
+#define SFVMK_RX_BATCH                128
+/* Number of events processed per batch */
+#define SFVMK_EV_BATCH                16384
+
 /* Call back functions which needs to be registered with common EVQ module */
 static boolean_t sfvmk_evInitialized(void *arg);
 static boolean_t sfvmk_evException(void *arg, uint32_t code, uint32_t data);
 static boolean_t sfvmk_evLinkChange(void *arg, efx_link_mode_t linkMode);
 static boolean_t sfvmk_evRxqFlushDone(void *arg, uint32_t rxq_index);
 static boolean_t sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex);
+void sfvmk_evqComplete(sfvmk_evq_t *pEvq);
 static boolean_t sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex);
+static boolean_t sfvmk_evSoftware(void *arg, uint16_t magic);
+static boolean_t sfvmk_evRX(void *arg, uint32_t label, uint32_t id,
+                            uint32_t size, uint16_t flags);
 
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
+  .eec_rx = sfvmk_evRX,
+  .eec_software	= sfvmk_evSoftware,
   .eec_exception = sfvmk_evException,
   .eec_link_change = sfvmk_evLinkChange,
   .eec_initialized = sfvmk_evInitialized,
@@ -33,6 +44,93 @@ static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
   .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
 };
+
+/*! \brief Called when a RX event received on eventQ
+**
+** \param[in] arg      Ptr to event queue
+** \param[in] label    Queue label
+** \param[in] id       Last RX desc id to process.
+** \param[in] size     Pkt size
+** \param[in] flags    Pkt metadeta info
+**
+** \return: VMK_FALSE  In a single interrupt if number of RX events processed
+**                     is less than SFVMK_EV_BATCH
+** \return: VMK_True   Failure
+*/
+static boolean_t
+sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+  sfvmk_adapter_t *pAdapter = NULL;
+  sfvmk_rxq_t *pRxq = NULL;
+  vmk_uint32 stop;
+  vmk_uint32 delta;
+  sfvmk_rxSwDesc_t *pRxDesc = NULL;
+  const efx_nic_cfg_t *pNicCfg;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
+
+  VMK_ASSERT_NOT_NULL(pEvq);
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
+
+  pAdapter = pEvq->pAdapter;
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  if (pEvq->exception) {
+    goto fail;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL nic cfg ptr");
+    goto fail;
+  }
+
+  /* Get corresponding RXQ */
+  VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
+  pRxq = pAdapter->ppRxq[pEvq->index];
+
+  VMK_ASSERT_NOT_NULL(pRxq);
+
+  if (VMK_UNLIKELY(pRxq->state != SFVMK_RXQ_STATE_STARTED)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] is not yet started", pRxq->index);
+    goto fail;
+  }
+
+  stop = (id + 1) & pRxq->ptrMask;
+  id = pRxq->pending & pRxq->ptrMask;
+  delta = (stop >= id) ? (stop - id) : (pRxq->numDesc - id + stop);
+  pRxq->pending += delta;
+
+  if ((delta == 0) || (delta > pNicCfg->enc_rx_batch_max)) {
+    pEvq->exception = B_TRUE;
+    SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] completion out of order", pRxq->index);
+    sfvmk_scheduleReset(pAdapter);
+    goto fail;
+  }
+
+  /* Update RX desc */
+  for (; id != stop; id = (id + 1) & pRxq->ptrMask) {
+    pRxDesc = &pRxq->pQueue[id];
+    pRxDesc->flags = flags;
+    pRxDesc->size = (uint16_t)size;
+  }
+
+  pEvq->rxDone++;
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_DBG,
+                      "pending %u, completed %u", pRxq->pending, pRxq->completed);
+
+  if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
+    sfvmk_evqComplete(pEvq);
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
+  return (pEvq->rxDone >= SFVMK_EV_BATCH);
+
+fail:
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
+  return VMK_TRUE;
+}
 
 /*! \brief Gets called when initilized event comes for an eventQ.
 **
@@ -297,6 +395,43 @@ fail:
   return VMK_TRUE;
 }
 
+/*! \brief Gets called when a SW event comes
+**
+** \param[in] arg     Pointer to event queue
+** \param[in] magic   Magic number to ideintify sw events
+**
+** \return: VMK_FALSE Success
+** \return: VMK_True  Failure
+*/
+static boolean_t
+sfvmk_evSoftware(void *arg, uint16_t magic)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;;
+  sfvmk_adapter_t *pAdapter;
+  sfvmk_rxq_t *pRxq;
+  sfvmk_pktCompCtx_t compCtx = {
+    .type = SFVMK_PKT_COMPLETION_NETPOLL,
+  };
+
+  VMK_ASSERT_NOT_NULL(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
+
+  pRxq = pAdapter->ppRxq[pEvq->index];
+  VMK_ASSERT_NOT_NULL(pRxq);
+
+  magic &= ~SFVMK_MAGIC_RESERVED;
+
+  if (magic == SFVMK_SW_EV_RX_QREFILL) {
+    compCtx.netPoll = pEvq->netPoll;
+    sfvmk_rxqFill(pRxq, &compCtx);
+  }
+
+  return VMK_FALSE;
+}
+
 /*! \brief  Poll event from eventQ and process it. function should be called in thread
 **          context only.
 **
@@ -328,6 +463,10 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 
   /* Poll the queue */
   efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
+  pEvq->rxDone = 0;
+
+  /* Perform any pending completion processing */
+  sfvmk_evqComplete(pEvq);
 
   /* Re-prime the event queue for interrupts */
   status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
@@ -342,6 +481,40 @@ done:
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return status;
+}
+
+/*! \brief   Perform any pending completion processing
+**
+** \param[in] pEvq     ptr to event queue
+**
+** \return: void
+*/
+void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
+{
+  sfvmk_adapter_t *pAdapter = NULL;
+  sfvmk_rxq_t *pRxq = NULL;
+  sfvmk_pktCompCtx_t compCtx = {
+    .type = SFVMK_PKT_COMPLETION_NETPOLL,
+  };
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
+
+  VMK_ASSERT_NOT_NULL(pEvq);
+
+  pAdapter = pEvq->pAdapter;
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
+  pRxq = pAdapter->ppRxq[pEvq->index];
+
+  /* Call RX module's fn to process RX data */
+  if (pRxq->pending != pRxq->completed) {
+    compCtx.netPoll = pEvq->netPoll;
+    sfvmk_rxqComplete(pRxq, &compCtx);
+  }
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
+  return;
 }
 
 /*! \brief    Create common code EVQ and wait for initilize event from the fw.

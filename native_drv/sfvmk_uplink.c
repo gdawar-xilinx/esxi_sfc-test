@@ -78,6 +78,20 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
   pAdapter->uplink.handle = uplinkHandle;
   pAdapter->uplink.name = vmk_UplinkNameGet(uplinkHandle);
 
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+  status = vmk_HashKeyInsert(sfvmk_modInfo.vmkDevHashTable,
+                             pAdapter->uplink.name.string,
+                             (vmk_HashValue) pAdapter);
+  if (status != VMK_OK) {
+    vmk_SemaUnlock(&sfvmk_modInfo.lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Hash Key Insertion failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "%s associated",  pAdapter->uplink.name.string);
 
@@ -115,6 +129,20 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
     status = VMK_FAILURE;
     goto done;
   }
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+  status = vmk_HashKeyDelete(sfvmk_modInfo.vmkDevHashTable,
+                             pAdapter->uplink.name.string,
+                             NULL);
+  if (status != VMK_OK) {
+    vmk_SemaUnlock(&sfvmk_modInfo.lock);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Hash key deletion failed status: %s",
+                        vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
 
   pAdapter->uplink.handle = NULL;
   status = VMK_OK;

@@ -149,7 +149,7 @@ typedef struct sfvmk_mcdiRequest_s {
  ** error, it does not indicate the semantic success or failure of the operation
  **
  */
-int sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
+VMK_ReturnStatus sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
                         vmk_MgmtEnvelope *pEnvelope,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_mcdiRequest_t *pMgmtMCDI);

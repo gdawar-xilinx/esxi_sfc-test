@@ -33,6 +33,8 @@ typedef struct sfvmk_modInfo_s {
    vmk_DumpFileHandle dumpFile;
    vmk_ListLinks      adapterList;
    vmk_MgmtHandle     mgmtHandle;
+   vmk_HashTable      vmkDevHashTable;
+   vmk_Semaphore      lock;
 } sfvmk_modInfo_t;
 
 extern sfvmk_modInfo_t sfvmk_modInfo;

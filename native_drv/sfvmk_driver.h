@@ -25,6 +25,9 @@
 #define	SFVMK_SW_EV_MAGIC(_sw_ev)     (SFVMK_MAGIC_RESERVED | (_sw_ev))
 #define SFVMK_SW_EV_RX_QREFILL        1
 
+/* Maximum numbers of ports supported currently */
+#define SFVMK_MAX_ADAPTER             16
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 

@@ -26,27 +26,95 @@
 #include "sfvmk_driver.h"
 #include "sfvmk_mgmt_interface.h"
 
+/*! \brief  Get adapter pointer based on hash.
+**          This function assumes that module level
+**          semaphore is already taken
+**
+** \param[in] pMgmtParm pointer to managment param
+**
+** \return: pointer to sfvmk_adapter_t <success>  NULL <failure>
+*/
+static sfvmk_adapter_t *
+sfvmk_mgmtFindAdapter(sfvmk_mgmtDevInfo_t *pMgmtParm)
+{
+  sfvmk_adapter_t *pAdapter;
+  VMK_ReturnStatus status;
+
+  vmk_SemaAssertIsLocked(&sfvmk_modInfo.lock);
+
+  status = vmk_HashKeyFind(sfvmk_modInfo.vmkDevHashTable,
+                           pMgmtParm->deviceName,
+                           (vmk_HashValue *)&pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("%s: Find vmkDevice failed with status: %s",
+                pMgmtParm->deviceName, vmk_StatusToString(status));
+    goto end;
+  }
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("%s: No match found for vmkDevice", pMgmtParm->deviceName);
+    pMgmtParm->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  return pAdapter;
+
+end:
+  return NULL;
+}
+
 /*! \brief  A Mgmt callback routine to post MCDI commands
  **
  ** \param[in]  pCookies    Pointer to cookie
  ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
- ** \param[in,out]  pDevIface   Pointer to device interface structure
- ** \param[in,out]  pMgmtMcdi   Pointer to MCDI cmd struct
+ ** \param[in/out]  pDevIface   Pointer to device interface structure
+ ** \param[in/out]  pMgmtMcdi   Pointer to MCDI cmd struct
  **
- ** \return: VMK_OK  [success]
+ ** \return: VMK_OK  <success>
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Invalid payload size or input param
+ **     VMK_FAILURE:        Any other failure
  **
  */
-int
+VMK_ReturnStatus
 sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
                         vmk_MgmtEnvelope     *pEnvelope,
                         sfvmk_mgmtDevInfo_t  *pDevIface,
                         sfvmk_mcdiRequest_t  *pMgmtMcdi)
 {
-  VMK_ReturnStatus status;
+  sfvmk_adapter_t *pAdapter = NULL;
 
-  status = VMK_FAILURE;
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
 
-  SFVMK_ERROR("MCDI callback failed with error: %s", vmk_StatusToString(status));
-  return status;
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pMgmtMcdi) {
+    SFVMK_ERROR("pMgmtMcdi: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
+                      "Received MCDI request for interface %s",
+                      pDevIface->deviceName);
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
 }
-

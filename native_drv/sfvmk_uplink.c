@@ -1437,3 +1437,19 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
 
+/*! \brief Fuction to submit driver reset request.
+**
+** \param[in] pAdapter pointer to sfvmk_adapter_t
+**
+** \return: void
+**
+*/
+void
+sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
+{
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+  /* TODO: Add implementation */
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  VMK_ASSERT_BUG(0);
+}
+

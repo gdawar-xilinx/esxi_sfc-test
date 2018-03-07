@@ -416,6 +416,6 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
   vmk_SpinlockUnlock(pUplink->shareDataLock);
 }
 
-void sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
 #endif /* __SFVMK_DRIVER_H__ */

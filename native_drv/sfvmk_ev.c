@@ -67,6 +67,7 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   vmk_uint32 delta;
   sfvmk_rxSwDesc_t *pRxDesc = NULL;
   const efx_nic_cfg_t *pNicCfg;
+  VMK_ReturnStatus status;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
 
@@ -106,7 +107,11 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   if ((delta == 0) || (delta > pNicCfg->enc_rx_batch_max)) {
     pEvq->exception = B_TRUE;
     SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] completion out of order", pRxq->index);
-    sfvmk_scheduleReset(pAdapter);
+    if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
+                          vmk_StatusToString(status));
+    }
+
     goto fail;
   }
 
@@ -180,6 +185,7 @@ static boolean_t
 sfvmk_evException(void *arg, uint32_t code, uint32_t data)
 {
   sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+  VMK_ReturnStatus status;
 
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
@@ -211,7 +217,10 @@ sfvmk_evException(void *arg, uint32_t code, uint32_t data)
 
 
   if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
-    sfvmk_scheduleReset(pEvq->pAdapter);
+    if ((status = sfvmk_scheduleReset(pEvq->pAdapter)) != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "sfvmk_scheduleReset failed with error %s",
+                          vmk_StatusToString(status));
+    }
   }
 
   return VMK_FALSE;

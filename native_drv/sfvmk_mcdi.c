@@ -20,11 +20,16 @@
 static void
 sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 {
+  VMK_ReturnStatus status;
+
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_MCDI);
 
   SFVMK_ADAPTER_ERROR(pAdapter, "MC_TIMEOUT");
 
-  sfvmk_scheduleReset(pAdapter);
+  if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
+                        vmk_StatusToString(status));
+  }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MCDI);
 }
@@ -102,6 +107,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)arg;
   vmk_uint32 timeoutUS;
+  VMK_ReturnStatus status;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_MCDI);
 
@@ -128,7 +134,10 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
   /* Check if driver reset required */
   if ((pEmrp->emr_rc == EIO) && (pAdapter->mcdi.mode == SFVMK_MCDI_MODE_POLL)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Reboot detected, schedule the reset helper");
-    sfvmk_scheduleReset(pAdapter);
+    if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
+                          vmk_StatusToString(status));
+    }
   }
 
 done:
@@ -146,6 +155,7 @@ static void
 sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)arg;
+  VMK_ReturnStatus status;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_MCDI);
 
@@ -158,7 +168,10 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
                       ? "REBOOT" : (eme == EFX_MCDI_EXCEPTION_MC_BADASSERT)
                       ? "BADASSERT" : "UNKNOWN");
 
-  sfvmk_scheduleReset(pAdapter);
+  if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
+                        vmk_StatusToString(status));
+  }
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MCDI);

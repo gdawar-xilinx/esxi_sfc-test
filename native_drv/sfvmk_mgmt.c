@@ -34,7 +34,7 @@
 **
 ** \param[in] pMgmtParm pointer to managment param
 **
-** \return: pointer to sfvmk_adapter_t <success>  NULL <failure>
+** \return: pointer to sfvmk_adapter_t [success]  NULL [failure]
 */
 static sfvmk_adapter_t *
 sfvmk_mgmtFindAdapter(sfvmk_mgmtDevInfo_t *pMgmtParm)
@@ -69,10 +69,10 @@ end:
  **
  ** \param[in]  pCookies    Pointer to cookie
  ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
- ** \param[in/out]  pDevIface   Pointer to device interface structure
- ** \param[in/out]  pMgmtMcdi   Pointer to MCDI cmd struct
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pMgmtMcdi   Pointer to MCDI cmd struct
  **
- ** \return: VMK_OK  <success>
+ ** \return: VMK_OK  [success]
  **     Below error values are filled in the status field of
  **     sfvmk_mgmtDevInfo_t.
  **     VMK_NOT_FOUND:      In case of dev not found

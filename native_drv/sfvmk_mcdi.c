@@ -182,7 +182,7 @@ done:
 ** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
 ** \param[in] pEmReq  mcdi command request
 **
-** \return: VMK_OK <success>,
+** \return: VMK_OK [success],
 **       Below error codes will be returned in case of failure,
 **       VMK_BAD_PARAM:      Invalid input/output buffer
 **       VMK_NOT_SUPPORTED:  MCDI feature not supported

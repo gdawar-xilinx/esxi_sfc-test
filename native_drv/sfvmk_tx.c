@@ -480,6 +480,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   vmk_SpinlockLock(pTxq->lock);
 
+  pTxq->hwVlanTci = 0;
   pTxq->numDesc = pAdapter->numTxqBuffDesc;
   pTxq->ptrMask = pTxq->numDesc - 1;
 

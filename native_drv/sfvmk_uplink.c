@@ -624,7 +624,8 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     }
 
     if (pAdapter->ppTxq[qid]->blocked) {
-      VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, qid));
+      VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, qid),
+                 "Txq index = %u", qid);
       vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
 
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
@@ -1959,23 +1960,30 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
   queueData = sfvmk_getUplinkTxSharedQueueData(&pAdapter->uplink);
 
-  if (queueData[qIndex].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
-    queueData[qIndex].state = qState;
-  }
+  if (queueData[qIndex].state != qState) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "qIndex %u, state %u to %u", qIndex,
+                        queueData[qIndex].state, qState);
 
-  sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+    sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+    if (queueData[qIndex].flags &
+        (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+      queueData[qIndex].state = qState;
+    }
+    sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
 
-  if (queueData[qIndex].flags & (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
-    if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
-      vmk_UplinkQueueStop(pAdapter->uplink.handle, queueData[qIndex].qid);
-    }
-    else {
-      vmk_UplinkQueueStart(pAdapter->uplink.handle, queueData[qIndex].qid);
-    }
-  }
+    if (queueData[qIndex].flags &
+        (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+      if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+        vmk_UplinkQueueStop(pAdapter->uplink.handle, queueData[qIndex].qid);
+      }
+      else {
+        vmk_UplinkQueueStart(pAdapter->uplink.handle, queueData[qIndex].qid);
+      }
+     }
+   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }

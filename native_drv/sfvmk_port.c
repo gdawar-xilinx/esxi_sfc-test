@@ -237,6 +237,9 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
   vmk_UplinkSharedQueueInfo *pQueueInfo = NULL;
   efx_link_mode_t linkMode;
   vmk_uint32 index = 0;
+  vmk_UplinkQueueState state = VMK_UPLINK_QUEUE_STATE_STOPPED;
+  vmk_Bool blocked = VMK_TRUE;
+  sfvmk_txqStats_t idx = SFVMK_TXQ_QUEUE_BLOCKED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
@@ -293,10 +296,23 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
 
   pQueueInfo = &pAdapter->uplink.queueInfo;
 
-  for (index = 0; index < pQueueInfo->maxTxQueues; index++)
-    sfvmk_updateQueueStatus(pAdapter, pSharedData->link.state?
-                            VMK_UPLINK_QUEUE_STATE_STARTED:
-                            VMK_UPLINK_QUEUE_STATE_STOPPED, index);
+  if (pSharedData->link.state == VMK_LINK_STATE_UP) {
+    state = VMK_UPLINK_QUEUE_STATE_STARTED;
+    idx = SFVMK_TXQ_QUEUE_UNBLOCKED;
+    blocked = VMK_FALSE;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "state %u blocked %u", state, blocked);
+
+  for (index = 0; index < pQueueInfo->maxTxQueues; index++) {
+    VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
+    vmk_SpinlockLock(pAdapter->ppTxq[index]->lock);
+    pAdapter->ppTxq[index]->blocked = blocked;
+    sfvmk_updateQueueStatus(pAdapter, state, index);
+    vmk_AtomicInc64(&pAdapter->ppTxq[index]->stats[idx]);
+    vmk_SpinlockUnlock(pAdapter->ppTxq[index]->lock);
+  }
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
 }

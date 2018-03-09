@@ -679,8 +679,8 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
 
   /* Reaped must be in sync with blocked */
   sfvmk_txqReap(pTxq);
-  sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
   pTxq->blocked = VMK_FALSE;
+  sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
   vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_UNBLOCKED]);
 
 done:
@@ -1783,6 +1783,8 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   vmk_CPUMemFenceWrite();
   sfvmk_txqReap(pTxq);
   if (pTxq->added - pTxq->reaped + nTotalDesc > EFX_TXQ_LIMIT(pTxq->numDesc)) {
+    VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, pTxq->index) == VMK_FALSE,
+               "Txq index = %u", pTxq->index);
     pTxq->blocked = VMK_TRUE;
     sfvmk_updateQueueStatus(pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED,
                             pTxq->index);
@@ -1792,9 +1794,9 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     status = VMK_BUSY;
     vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_BLOCKED]);
     goto done;
-  } else {
-    pTxq->blocked = VMK_FALSE;
   }
+
+  VMK_ASSERT_EQ(pTxq->blocked, VMK_FALSE);
 
   xmitInfo.pOrigPkt = NULL;
   xmitInfo.pXmitPkt = pkt;

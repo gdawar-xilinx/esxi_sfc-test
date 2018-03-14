@@ -27,8 +27,9 @@
 #include "sfvmk_driver.h"
 
 /* Wait time  for common TXQ to stop */
-#define SFVMK_TXQ_STOP_POLL_TIME_USEC         VMK_USEC_PER_MSEC
-#define SFVMK_TXQ_STOP_POLL_COUNT             200
+#define SFVMK_TXQ_STOP_POLL_TIME_USEC   VMK_USEC_PER_MSEC
+#define SFVMK_TXQ_STOP_TIME_OUT_USEC    (200 * SFVMK_TXQ_STOP_POLL_TIME_USEC)
+
 #define SFVMK_TXQ_UNBLOCK_LEVEL(n)            (EFX_TXQ_LIMIT(n) / 4)
 /* Number of desc needed for each SG */
 #define SFVMK_TXD_NEEDED(sgSize, maxBufSize)  EFX_DIV_ROUND_UP(sgSize, maxBufSize)
@@ -285,121 +286,157 @@ sfvmk_txFini(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
 }
 
-/*! \brief Flush and destroy common code TXQ.
+/*! \brief  Wait for flush and destroy common code TXQ.
 **
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
-** \param[in]  qIndex      TXQ index
 **
 ** \return: void
 */
 static void
-sfvmk_txqStop(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+sfvmk_txFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_txq_t *pTxq = NULL;
   sfvmk_evq_t *pEvq = NULL;
-  vmk_uint32 count;
-  VMK_ReturnStatus status;
+  vmk_uint64 timeout, currentTime;
+  vmk_uint32 qIndex;
+  VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_pktCompCtx_t compCtx = {
     .type = SFVMK_PKT_COMPLETION_OTHERS,
   };
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
+  VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
+  
+  sfvmk_getTime(&currentTime);
+  timeout = currentTime + SFVMK_TXQ_STOP_TIME_OUT_USEC;
 
-  if (qIndex >= pAdapter->numTxqsAllocated) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ index %u", qIndex);
-    goto done;
-  }
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated; qIndex++) {
 
-  if (pAdapter->ppTxq != NULL)
     pTxq = pAdapter->ppTxq[qIndex];
+    if (pTxq == NULL) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NULL TXQ ptr for TXQ[%u]", qIndex);
+      goto done;
+    }
 
-  VMK_ASSERT_NOT_NULL(pTxq);
+    vmk_SpinlockLock(pTxq->lock);
 
-  if (pAdapter->ppEvq != NULL)
-    pEvq = pAdapter->ppEvq[qIndex];
-
-  VMK_ASSERT_NOT_NULL(pEvq);
-
-  vmk_SpinlockLock(pTxq->lock);
-
-  VMK_ASSERT_EQ(pTxq->state, SFVMK_TXQ_STATE_STARTED);
-
-  pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
-
-  if (pTxq->flushState == SFVMK_FLUSH_STATE_DONE) {
-    vmk_SpinlockUnlock(pTxq->lock);
-    goto done;
-  }
-  pTxq->flushState = SFVMK_FLUSH_STATE_PENDING;
-
-  vmk_SpinlockUnlock(pTxq->lock);
-
-  /* Flush the transmit queue. */
-  status = efx_tx_qflush(pTxq->pCommonTxq);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tx_qflush failed status: %s",
-                        vmk_StatusToString(status));
-  } else {
-    count = 0;
-    do {
-      status = vmk_WorldSleep(SFVMK_TXQ_STOP_POLL_TIME_USEC);
-      if (status != VMK_OK) {
-        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
-                            vmk_StatusToString(status));
-        break;
-      }
-
-      vmk_SpinlockLock(pTxq->lock);
+    while (currentTime < timeout) {
+      /* Check to see if the flush event has been processed */
       if (pTxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
-        vmk_SpinlockUnlock(pTxq->lock);
         break;
       }
       vmk_SpinlockUnlock(pTxq->lock);
 
-    } while (++count < SFVMK_TXQ_STOP_POLL_COUNT);
+      status = vmk_WorldSleep(SFVMK_TXQ_STOP_POLL_TIME_USEC);
+      if ((status != VMK_OK) && (status != VMK_WAIT_INTERRUPTED)) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                            vmk_StatusToString(status));
+        vmk_SpinlockLock(pTxq->lock);
+        break;
+      }
+
+      sfvmk_getTime(&currentTime);
+      vmk_SpinlockLock(pTxq->lock);
+    }
+    if (pTxq->flushState != SFVMK_FLUSH_STATE_DONE) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "TXQ[%u] flush timeout", qIndex);
+      pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
+    }
+
+    pTxq->blocked = VMK_FALSE;
+    pTxq->pending = pTxq->added;
+
+    pEvq = pAdapter->ppEvq[qIndex];
+    VMK_ASSERT_NOT_NULL(pEvq);
+
+    sfvmk_txqComplete(pTxq, pEvq, &compCtx);
+    if(pTxq->completed != pTxq->added)
+      SFVMK_ADAPTER_ERROR(pAdapter, "pTxq->completed != pTxq->added");
+
+    pTxq->added = 0;
+    pTxq->pending = 0;
+    pTxq->completed = 0;
+    pTxq->reaped = 0;
+
+    sfvmk_memPoolFree((vmk_VA)pTxq->pPendDesc, sizeof(efx_desc_t) *
+                      pTxq->numDesc);
+    pTxq->pPendDesc = NULL;
+    sfvmk_memPoolFree((vmk_VA)pTxq->pTxMap, sizeof(sfvmk_txMapping_t) *
+                      pTxq->numDesc);
+    pTxq->pTxMap = NULL;
+    vmk_SpinlockUnlock(pTxq->lock);
+
+    /* Destroy the common code transmit queue. */
+    efx_tx_qdestroy(pTxq->pCommonTxq);
+
+    pTxq->pCommonTxq = NULL;
+
+    sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
+                           pTxq->mem.pEsmBase,
+                           pTxq->mem.ioElem.ioAddr,
+                           pTxq->mem.ioElem.length);
   }
-
-  vmk_SpinlockLock(pTxq->lock);
-  if (pTxq->flushState != SFVMK_FLUSH_STATE_DONE) {
-    /* Flush timeout */
-    pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
-  }
-
-  pTxq->blocked = VMK_FALSE;
-  pTxq->pending = pTxq->added;
-
-  sfvmk_txqComplete(pTxq, pEvq, &compCtx);
-  if(pTxq->completed != pTxq->added)
-    SFVMK_ADAPTER_ERROR(pAdapter, "pTxq->completed != pTxq->added");
-
-  pTxq->added = 0;
-  pTxq->pending = 0;
-  pTxq->completed = 0;
-  pTxq->reaped = 0;
-
-  sfvmk_memPoolFree((vmk_VA)pTxq->pPendDesc, sizeof(efx_desc_t) *
-                    pTxq->numDesc);
-  pTxq->pPendDesc = NULL;
-  sfvmk_memPoolFree((vmk_VA)pTxq->pTxMap, sizeof(sfvmk_txMapping_t) *
-                    pTxq->numDesc);
-  pTxq->pTxMap = NULL;
-  vmk_SpinlockUnlock(pTxq->lock);
-
-  /* Destroy the common code transmit queue. */
-  efx_tx_qdestroy(pTxq->pCommonTxq);
-  pTxq->pCommonTxq = NULL;
-
-  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
-                         pTxq->mem.pEsmBase,
-                         pTxq->mem.ioElem.ioAddr,
-                         pTxq->mem.ioElem.length);
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", qIndex);
-
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
 }
+
+/*! \brief  Flush common code TXQs.
+**
+** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+static void sfvmk_txFlush(sfvmk_adapter_t *pAdapter)
+{
+  sfvmk_txq_t *pTxq = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 qIndex;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
+
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated; qIndex++) {
+
+    pTxq = pAdapter->ppTxq[qIndex];
+    if (pTxq == NULL) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NULL TXQ ptr for TXQ[%u]", qIndex);
+      goto done;
+    }
+
+    vmk_SpinlockLock(pTxq->lock);
+
+    if (pTxq->state != SFVMK_TXQ_STATE_STARTED) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "TXQ is not yet started");
+      vmk_SpinlockUnlock(pTxq->lock);
+      continue;
+    }
+
+    pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
+    pTxq->flushState = SFVMK_FLUSH_STATE_PENDING;
+    vmk_SpinlockUnlock(pTxq->lock);
+
+    /* Flush the transmit queue */
+    status = efx_tx_qflush(pTxq->pCommonTxq);
+    if (status != VMK_OK) {
+      vmk_SpinlockLock(pTxq->lock);
+      if (status == VMK_EALREADY)
+        pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
+      else
+        pTxq->flushState = SFVMK_FLUSH_STATE_FAILED;
+      vmk_SpinlockUnlock(pTxq->lock);
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+}
+
 
 /*! \brief Flush and destroy all common code TXQs.
 **
@@ -411,15 +448,13 @@ done:
 void
 sfvmk_txStop(sfvmk_adapter_t *pAdapter)
 {
-  vmk_uint32 qIndex;
-
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  qIndex = pAdapter->numTxqsAllocated;
-  while (qIndex--)
-    sfvmk_txqStop(pAdapter, qIndex);
+  /* Stop transmit queue(s) */
+  sfvmk_txFlush(pAdapter);
+  sfvmk_txFlushWaitAndDestroy(pAdapter);
 
   /* Tear down the transmit module */
   efx_tx_fini(pAdapter->pNic);
@@ -614,8 +649,9 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
 
 
 failed_txq_start:
-  while (qIndex)
-    sfvmk_txqStop(pAdapter, --qIndex);
+  /* Stop transmit queue(s) */
+  sfvmk_txFlush(pAdapter);
+  sfvmk_txFlushWaitAndDestroy(pAdapter);
 
   efx_tx_fini(pAdapter->pNic);
 

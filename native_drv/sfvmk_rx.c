@@ -255,8 +255,8 @@ sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
   pAdapter->numRxqsAllocated = MIN(pAdapter->numEvqsAllocated,
                                    pAdapter->numRxqsAllotted);
 
-  if (pAdapter->numRxqsAllocated > pAdapter->numNetQs)
-    pAdapter->numRSSQs = pAdapter->numRxqsAllocated - pAdapter->numNetQs;
+  if (pAdapter->numRxqsAllocated > sfvmk_getRSSQStartIndex(pAdapter))
+    pAdapter->numRSSQs = pAdapter->numRxqsAllocated - sfvmk_getRSSQStartIndex(pAdapter);
 
   rxqArraySize = sizeof(sfvmk_rxq_t *) * pAdapter->numRxqsAllocated;
 

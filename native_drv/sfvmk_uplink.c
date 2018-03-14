@@ -338,9 +338,8 @@ sfvmk_associateRSSNetPoll(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  /* NetPoll has already been associated for leading RSSQ */
-  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
-  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+  qStartIndex = sfvmk_getRSSQStartIndex(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs;
 
   VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
 
@@ -385,8 +384,8 @@ sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
-  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+  qStartIndex = sfvmk_getRSSQStartIndex(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs;
 
   VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
 
@@ -1902,7 +1901,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                                                VMK_UPLINK_QUEUE_FEAT_RSS_DYN,
                                                (void *)&sfvmkRssDynOps);
     if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_UplinkQueueRegisterFeatureOps failed status: %s",
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_UplinkQueueRegisterFeatureOps for Dynamic RSS failed status: %s",
                           vmk_StatusToString(status));
     }
   } else {
@@ -2668,9 +2667,8 @@ sfvmk_createNetPollForRSSQs(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID service
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  /* NetPoll has already been created for leading RSSQ */
-  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
-  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+  qStartIndex = sfvmk_getRSSQStartIndex(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs;
 
   VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
 
@@ -2719,9 +2717,8 @@ sfvmk_destroyNetPollForRSSQs(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  /* NetPoll has already been destroy for leading RSSQ */
-  qStartIndex = sfvmk_getNumUplinkRxq(pAdapter);
-  qEndIndex = qStartIndex + pAdapter->numRSSQs - 1;
+  qStartIndex = sfvmk_getRSSQStartIndex(pAdapter);
+  qEndIndex = qStartIndex + pAdapter->numRSSQs;
 
   VMK_ASSERT_NOT_NULL(pAdapter->ppEvq);
 
@@ -2778,14 +2775,20 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
+  /* Check if queue is free */
+  for (queueIndex = queueStartIndex; queueIndex <= queueEndIndex; queueIndex++)
+    if (sfvmk_isQueueFree(&pAdapter->uplink, queueIndex))
+      break;
+
+  if (queueIndex > queueEndIndex) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "All Qs are in use");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
   if (feat & (VMK_UPLINK_QUEUE_FEAT_RSS |
               VMK_UPLINK_QUEUE_FEAT_RSS_DYN)) {
-    queueIndex = sfvmk_getRSSQStartIndex(pAdapter);
-    if (!sfvmk_isQueueFree(&pAdapter->uplink, queueIndex)) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "RSS leading Q is in use");
-      status = VMK_FAILURE;
-      goto done;
-    }
+    vmk_uint32 hwQueueIndex = sfvmk_getRSSQStartIndex(pAdapter);
 
     vmk_MutexLock(pAdapter->lock);
     efx_mac_filter_default_rxq_clear(pAdapter->pNic);
@@ -2794,7 +2797,7 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
     VMK_ASSERT_NOT_NULL(pAdapter->ppRxq[queueIndex]);
 
     status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
-                                            pAdapter->ppRxq[queueIndex]->pCommonRxq,
+                                            pAdapter->ppRxq[hwQueueIndex]->pCommonRxq,
                                             VMK_TRUE);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
@@ -2803,17 +2806,8 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
       goto done;
     }
     vmk_MutexUnlock(pAdapter->lock);
-  } else {
-    /* Check if queue is free */
-    for (queueIndex = queueStartIndex; queueIndex <= queueEndIndex; queueIndex++)
-      if (sfvmk_isQueueFree(&pAdapter->uplink, queueIndex))
-        break;
 
-    if (queueIndex > queueEndIndex) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "All Qs are in use");
-      status = VMK_FAILURE;
-      goto done;
-    }
+    pAdapter->uplink.rssUplinkQueue = queueIndex;
   }
 
   /* Make uplink queue */
@@ -2975,15 +2969,9 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
       pQueueData->maxFilters = SFVMK_MAX_FILTER;
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
     } else {
-      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR;
-      /* Dynamic netqueue mandates that it can pick any queue(s) to form RSS
-       * queue group. RSS is supported only on the last netqueue hence dynamic
-       * feature is disabled when RSS is enable */
-      if (!sfvmk_isRSSEnable(pAdapter))
-        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
-
-      if (queueIndex == sfvmk_getRSSQStartIndex(pAdapter))
-        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
+      pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR |
+                                      VMK_UPLINK_QUEUE_FEAT_DYNAMIC |
+                                      VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
 
       pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }
@@ -3176,8 +3164,8 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
 
   /* Update max TX and RX queue
-   * For base RSSQ one uplink netQ is added
-   * HWQs are sum of netQs and num of RSSQs
+   * For base RSSQ one uplink Q is added
+   * HWQs are sum of netQs + one uplink Q for RSS and num of RSSQs
    */
   if (sfvmk_isRSSEnable(pAdapter)) {
     pQueueInfo->maxTxQueues =  pAdapter->numNetQs + 1;
@@ -3339,6 +3327,8 @@ sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter)
   }
 
   sfvmk_updateSupportedCap(pAdapter, EFX_PHY_CAP_DEFAULT);
+
+  pAdapter->uplink.rssUplinkQueue = pAdapter->defRxqIndex;
 
   /* Initialize shared data area */
   pSharedData = &pAdapter->uplink.sharedData;
@@ -3635,7 +3625,7 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   }
 
   vmk_MutexLock(pAdapter->lock);
-  if ((qIndex == sfvmk_getRSSQStartIndex(pAdapter)) && pAdapter->rssInit) {
+  if ((qIndex == pAdapter->uplink.rssUplinkQueue) && pAdapter->rssInit) {
 
     efx_mac_filter_default_rxq_clear(pAdapter->pNic);
 
@@ -3651,6 +3641,8 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
                           vmk_StatusToString(status));
     }
     pAdapter->rssInit = VMK_FALSE;
+    /* Uplink RSS queue will never be on default RxQ Index */
+    pAdapter->uplink.rssUplinkQueue = pAdapter->defRxqIndex;
   }
   vmk_MutexUnlock(pAdapter->lock);
 

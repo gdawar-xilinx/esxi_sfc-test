@@ -63,8 +63,8 @@
 /* Max number of RSSQ supported */
 #define SFVMK_MAX_RSSQ_COUNT          4
 
-/* 20 EVQs, 16 for NetQ and 4 for RSS */
-#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + SFVMK_MAX_RSSQ_COUNT
+/* 21 EVQs, 16 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
+#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
 #define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ
@@ -415,6 +415,8 @@ typedef struct sfvmk_uplink_s {
   /* Currently advertised modes (speed/duplex/media) */
   vmk_UplinkAdvertisedMode   advertisedModes[EFX_PHY_CAP_NTYPES];
   vmk_uint32                 numAdvertisedModes;
+  /* Uplink Q allocated for RSS */
+  vmk_uint32                 rssUplinkQueue;
   /* Uplink registration data. */
   vmk_UplinkRegData          regData;
   /* Data shared between uplink layer and NIC driver. */
@@ -696,7 +698,7 @@ static inline vmk_Bool sfvmk_isRSSEnable(sfvmk_adapter_t *pAdapter)
   return (pAdapter->numRSSQs > 0) ;
 }
 
-/*! \brief Get RSS start queue index
+/*! \brief Get RSS start queue index in the HW Queue structures
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t structure
 **
@@ -705,7 +707,8 @@ static inline vmk_Bool sfvmk_isRSSEnable(sfvmk_adapter_t *pAdapter)
 static inline vmk_uint32 sfvmk_getRSSQStartIndex(sfvmk_adapter_t *pAdapter)
 {
   VMK_ASSERT_NOT_NULL(pAdapter);
-  return pAdapter->numNetQs;
+  /* +1 is for the uplink Q corresponding to RSS */
+  return pAdapter->numNetQs + 1;
 }
 
 /*! \brief Get maximum Rx hardware queue number

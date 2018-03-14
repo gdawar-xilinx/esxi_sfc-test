@@ -453,8 +453,46 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   pAdapter->numNetQs = modParams.netQCount;
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
-  limits.edl_max_evq_count = MIN((modParams.netQCount + modParams.rssQCount),
-                                 MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count));
+  /* Max number of event q = netQCount +  (rssQCount + 1)
+   * There is one to one mapping between uplink queues and hardware queues
+   * a) for rss there are rssQCount hw queues per hardware queue
+   * b) also all the rss hardware queues need to be contiguous
+   * to allow any uplink queue to support RSSQ and still support (a) and (b)
+   * rssQCount RSSQ's are created at the end of hardware queues in addition
+   * to one HW queue corresponding to the uplink RSS queue
+   *
+   * As of now, Hw queue corresponding to the uplink RSS queue is used
+   * for transmitting pkts on RSS Q.
+   *
+   *         ___________________                _____________________
+   *         |                 |                |                   |
+   *         |                 | One to One     |                   |
+   *         |                 | mapping betwn  |                   |
+   *         | Uplink Qs       | Uplink Q index |  Hardware Qs      |
+   *         |                 | & Hw Q index   | (EvQ, TxQ, RxQ)   |
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         | Uplink Q for RSS| <--------->    | HW Q for RSS (used|for Tx only)
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         -------------------                | - - - - - - - - - | <-- end of 1 to 1 correspondance
+   *                                            |   RSS Q #1        |
+   *                                            |   RSS Q #2        |
+   *                                            |                   |
+   *                                            |                   |
+   *                                            |                   |
+   *                                            |   RSS Q #rssQCount|
+   *                                            ---------------------
+   *
+   *
+   *
+   * In the corner case of RSS queue being created on the last uplink queue
+   * one hardware queue can be saved but currently this case is not optimized
+   */
+  limits.edl_max_evq_count = MIN((modParams.netQCount +
+                                 (modParams.rssQCount ? (modParams.rssQCount + 1) : 0)),
+                                  MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count));
   pAdapter->numEvqsDesired = limits.edl_max_evq_count;
 
   limits.edl_min_rxq_count = limits.edl_min_evq_count;

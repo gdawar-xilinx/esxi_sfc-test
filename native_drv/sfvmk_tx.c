@@ -681,7 +681,6 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
   sfvmk_txqReap(pTxq);
   pTxq->blocked = VMK_FALSE;
   sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
-  vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_UNBLOCKED]);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
@@ -1792,7 +1791,6 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
                         "not enough desc entries in txq[%u], stopping the queue",
                         pTxq->index);
     status = VMK_BUSY;
-    vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_QUEUE_BLOCKED]);
     goto done;
   }
 

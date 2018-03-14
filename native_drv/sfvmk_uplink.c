@@ -1956,6 +1956,7 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
                              vmk_UplinkQueueState qState, vmk_uint32 qIndex)
 {
   vmk_UplinkSharedQueueData *queueData;
+  sfvmk_txqStats_t idx = SFVMK_TXQ_QUEUE_BLOCKED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -1977,10 +1978,13 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
         (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
       if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
         vmk_UplinkQueueStop(pAdapter->uplink.handle, queueData[qIndex].qid);
+        idx = SFVMK_TXQ_QUEUE_BLOCKED;
       }
       else {
         vmk_UplinkQueueStart(pAdapter->uplink.handle, queueData[qIndex].qid);
+        idx = SFVMK_TXQ_QUEUE_UNBLOCKED;
       }
+      vmk_AtomicInc64(&pAdapter->ppTxq[qIndex]->stats[idx]);
      }
    }
 

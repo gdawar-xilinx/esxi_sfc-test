@@ -1072,6 +1072,9 @@ sfvmk_attachDevice(vmk_Device dev)
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
+  /* Initialize startIO completion event */
+  pAdapter->startIO_compl_event = &pAdapter->startIO_compl_event;
+
   goto done;
 
 failed_create_helper:

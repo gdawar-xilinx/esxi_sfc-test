@@ -2327,6 +2327,10 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
 
   pAdapter->state = SFVMK_ADAPTER_STATE_STARTED;
 
+  /* Send startIO completion event to any world waiting for this event */
+  if (pAdapter->startIO_compl_event) {
+    vmk_WorldWakeup((vmk_WorldEventID) pAdapter->startIO_compl_event);
+  }
   status = VMK_OK;
   goto done;
 
@@ -4908,6 +4912,13 @@ static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
 
     /* Apply MC reset to exit offline mode */
     efx_mcdi_reboot(pAdapter->pNic);
+
+    /* Wait for completion of startIO */
+    vmk_WorldWait((vmk_WorldEventID) &pAdapter->startIO_compl_event,
+                  VMK_LOCK_INVALID,
+                  3*SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC,
+                  "sfvmk_mc_reboot_wait");
+
     status = VMK_OK;
   }
 

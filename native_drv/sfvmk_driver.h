@@ -551,6 +551,9 @@ typedef struct sfvmk_adapter_s {
   vmk_uint16                 vxlanUdpPort;
   vmk_Bool                   isTunnelEncapSupported;
   vmk_Bool                   startIOTunnelReCfgReqd;
+
+  /* Event for startIO completion */
+  vmk_WorldEventID           startIO_compl_event;
 } sfvmk_adapter_t;
 
 extern const sfvmk_pktOps_t sfvmk_packetOps[];

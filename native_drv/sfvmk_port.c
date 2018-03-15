@@ -288,9 +288,11 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
                       pSharedData->link.speed,
                       pSharedData->link.duplex);
 
-  /* TODO: This should not be called if admin link status is down.
-   * Check will be added along with admin link status capability in uplink.
-   * Right now it is safe to call this always as by default admin link status is up */
+  /* This API should not be called if admin link status is down but NIC's
+   * operational link is up. It is safe to call without checking admin link
+   * status as by default admin link status is up and whenever admin link
+   * status is down NIC's operation link is also goes down.
+   */
   vmk_UplinkUpdateLinkState(pAdapter->uplink.handle, &pAdapter->uplink.sharedData.link);
 
   pQueueInfo = &pAdapter->uplink.queueInfo;

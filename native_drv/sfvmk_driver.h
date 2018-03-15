@@ -63,6 +63,9 @@
 /* Max number of RSSQ supported */
 #define SFVMK_MAX_RSSQ_COUNT          4
 
+/* Wait time for StartIO on MC Reboot */
+#define SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC    300
+
 /* 21 EVQs, 16 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
 #define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ

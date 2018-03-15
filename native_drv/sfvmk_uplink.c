@@ -4318,7 +4318,7 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     }
 
     /* Sleep for 100 milliseconds */
-    status = sfvmk_worldSleep(SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC);
+    status = sfvmk_worldSleep(SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
                           vmk_StatusToString(status));

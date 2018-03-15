@@ -1073,7 +1073,7 @@ sfvmk_attachDevice(vmk_Device dev)
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
   /* Initialize startIO completion event */
-  pAdapter->startIO_compl_event = &pAdapter->startIO_compl_event;
+  pAdapter->startIO_compl_event = (vmk_WorldEventID)&pAdapter->startIO_compl_event;
 
   goto done;
 

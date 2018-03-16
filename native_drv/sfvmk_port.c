@@ -218,8 +218,10 @@ void sfvmk_macLinkUpdateHelper(vmk_AddrCookie data)
     SFVMK_ERROR("NULL adapter ptr");
     goto done;
   }
-  /* TODO Adapter lock will come over here */
+
+  vmk_MutexLock(pAdapter->lock);
   sfvmk_macLinkUpdate(pAdapter);
+  vmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

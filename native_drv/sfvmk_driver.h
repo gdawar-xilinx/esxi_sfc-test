@@ -109,7 +109,7 @@ typedef struct sfvmk_mcdi_s {
   efx_mcdi_transport_t  transport;
 #if EFSYS_OPT_MCDI_LOGGING
   /* Flag for enable/disable MCDI logging at run time */
-  vmk_Bool                   mcLogging;
+  vmk_Bool              mcLogging;
 #endif
 } sfvmk_mcdi_t;
 

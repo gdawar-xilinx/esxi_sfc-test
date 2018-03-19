@@ -261,13 +261,13 @@ done:
 ** \param[in]     pfxsize   offset at which prefix finishes
 ** \param[in]     position  position to start writing
 **
-** \return: number of bytes written
+** \return: the index till which logs have been written
 */
 static size_t
-sfvmk_mcdiDoLog(char *pBuffer, void *pData, size_t dataSize,
+sfvmk_mcdiDoLog(char *pBuffer, const void *pData, size_t dataSize,
                 size_t pfxsize, size_t position)
 {
-  uint32_t *pWords = pData;
+  const uint32_t *pWords = pData;
   vmk_ByteCount bytesCopied;
   VMK_ReturnStatus status = VMK_OK;
   size_t i;
@@ -288,7 +288,7 @@ sfvmk_mcdiDoLog(char *pBuffer, void *pData, size_t dataSize,
     pWords++;
     position += 2 * sizeof(uint32_t) + 1;
   }
-  return (position);
+  return position;
 }
 
 /*! \brief Routine handling mcdi logging request.
@@ -315,9 +315,8 @@ sfvmk_mcdiLogger(void *pPriv, efx_log_msg_t type,
 
   pMcdi = &pAdapter->mcdi;
 
-  if (pMcdi->mcLogging == VMK_FALSE) {
+  if (pMcdi->mcLogging == VMK_FALSE)
     return;
-  }
 
   status = vmk_StringFormat(buffer, sizeof(buffer), &pfxsize,
                             "sfc %s %s MCDI RPC %s:",
@@ -351,15 +350,11 @@ vmk_Bool
 sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter)
 {
   sfvmk_mcdi_t    *pMcdi;
-  vmk_Bool        state;
 
   pMcdi = &pAdapter->mcdi;
 
-  vmk_MutexLock(pMcdi->lock);
-  state = pMcdi->mcLogging;
-  vmk_MutexUnlock(pMcdi->lock)
+  return pMcdi->mcLogging;
 
-  return state;
 }
 
 /*! \brief Routine for setting MC Log variable state

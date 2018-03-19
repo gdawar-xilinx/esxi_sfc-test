@@ -66,7 +66,7 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
       .parmTypes[1] = VMK_MGMT_PARMTYPE_INOUT,
       .parmSizes[1] = sizeof(sfvmk_mcdiLogging_t),
 
-      .callbackId = SFVMK_CB_MC_LOGGING
+      .callbackId = SFVMK_CB_MC_LOGGING_REQUEST
   },
 
   {

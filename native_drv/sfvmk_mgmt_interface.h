@@ -43,7 +43,7 @@
  ** so new callback IDs must go at the end (before SFVMK_CB_MAX).
  **
  ** SFVMK_CB_MCDI_REQUEST:             For invoking MCDI callback
- ** SFVMK_CB_MC_LOGGING:               For controlling MC Logging dynamically
+ ** SFVMK_CB_MC_LOGGING_REQUEST:       For controlling MC Logging dynamically
  ** SFVMK_CB_PCI_INFO_GET:             Get PCI BDF and device information
  ** SFVMK_CB_VPD_REQUEST:              Get or Set VPD information
  ** SFVMK_CB_LINK_STATUS_GET:          Get the link state
@@ -56,7 +56,7 @@
  */
 typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MCDI_REQUEST = (VMK_MGMT_RESERVED_CALLBACKS + 1),
-  SFVMK_CB_MC_LOGGING,
+  SFVMK_CB_MC_LOGGING_REQUEST,
   SFVMK_CB_PCI_INFO_GET,
   SFVMK_CB_VPD_REQUEST,
   SFVMK_CB_LINK_STATUS_GET,

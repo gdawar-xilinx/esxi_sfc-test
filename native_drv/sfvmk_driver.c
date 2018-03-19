@@ -1083,6 +1083,7 @@ failed_set_drvdata:
 
 failed_uplinkData_init:
   sfvmk_mutexDestroy(pAdapter->lock);
+  pAdapter->lock = NULL;
 
 failed_mutex_init:
   if (pAdapter->isTunnelEncapSupported)
@@ -1293,6 +1294,8 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_destroyHelper(pAdapter);
   sfvmk_uplinkDataFini(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);
+  pAdapter->lock = NULL;
+
   if (pAdapter->isTunnelEncapSupported)
     sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);

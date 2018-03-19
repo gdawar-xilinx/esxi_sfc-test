@@ -326,7 +326,7 @@ sfvmk_mutexInit(const char *pLockName, vmk_Mutex *pMutex)
   lockProps.domain = VMK_LOCKDOMAIN_INVALID;
   lockProps.rank = VMK_MUTEX_UNRANKED;
   status = vmk_MutexCreate(&lockProps, pMutex);
-  if (VMK_UNLIKELY(status != VMK_OK)) {
+  if (status != VMK_OK) {
     SFVMK_ERROR("Failed to create mutex (%s)", vmk_StatusToString(status));
   }
 
@@ -341,7 +341,7 @@ sfvmk_mutexInit(const char *pLockName, vmk_Mutex *pMutex)
 */
 void sfvmk_mutexDestroy(vmk_Mutex mutex)
 {
-  if(mutex)
+  if (mutex != NULL)
     vmk_MutexDestroy(mutex);
 }
 

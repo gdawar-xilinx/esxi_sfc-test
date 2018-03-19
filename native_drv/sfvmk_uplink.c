@@ -43,7 +43,7 @@ typedef enum sfvmk_selfTest_e {
                             SFVMK_SELFTEST_REG | \
                             SFVMK_SELFTEST_MEM)
 
-/* Wait time for StartIO on Reset */
+/* Wait time for NIC to come up with full functional mode on Reset */
 #define SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC    (100 * VMK_USEC_PER_MSEC)
 
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter);
@@ -4349,6 +4349,8 @@ sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  vmk_HelperRequestPropsInit(&props);
 
   /* Create a request and submit */
   props.requestMayBlock = VMK_FALSE;

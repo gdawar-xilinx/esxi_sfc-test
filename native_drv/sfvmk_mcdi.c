@@ -240,7 +240,7 @@ sfvmk_mcdiIOHandler(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
-  sfvmk_mcdiExecute((void *)pAdapter, pEmReq);
+  sfvmk_mcdiExecute(pAdapter, pEmReq);
   status = VMK_OK;
 
 done:

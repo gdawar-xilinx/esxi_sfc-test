@@ -421,4 +421,7 @@ static inline void sfvmk_sharedAreaEndWrite(sfvmk_uplink_t *pUplink)
 
 VMK_ReturnStatus sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter);
 
+vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter);
+vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter);
+
 #endif /* __SFVMK_DRIVER_H__ */

@@ -112,6 +112,7 @@ sfvmk_generateFilterKey(sfvmk_adapter_t *pAdapter)
 ** \param[in]      pRxq       pointer to HW Rx Q for which filter is prepared
 ** \param[in]      mac        MAC address
 ** \param[in]      vlanID     vlan ID
+** \param[in]      flags      filter flags
 ** \param[in,out]  pFdbEntry  pointer to filter DB entry
 **
 ** \return: VMK_OK if success, error number if failed
@@ -122,6 +123,7 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
                             struct sfvmk_rxq_s *pRxq,
                             vmk_EthAddress mac,
                             vmk_VlanID vlanID,
+                            efx_filter_flags_t flags,
                             sfvmk_filterDBEntry_t *pFdbEntry)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -133,7 +135,7 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
                       mac[0], mac[1], mac[2],
                       mac[3], mac[4], mac[5]);
 
-  efx_filter_spec_init_rx(&pFdbEntry->spec[0], EFX_FILTER_PRI_HINT, 0, pRxq->pCommonRxq);
+  efx_filter_spec_init_rx(&pFdbEntry->spec[0], EFX_FILTER_PRI_HINT, flags, pRxq->pCommonRxq);
 
   status = efx_filter_spec_set_eth_local(&pFdbEntry->spec[0],
                                          vlanID,
@@ -151,12 +153,11 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
 
 /*! \brief  Prepare a VxLAN filter rule
  **
- ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
- ** \param[in]		pRxq	   pointer to HW Rx Q for which filter is prepared
- ** \param[in]      innerMac   MAC address
- ** \param[in]      outerMac   MAC address
- ** \param[in]      vxlanID    vxlan ID
- ** \param[in,out]  pFdbEntry  pointer to filter DB entry
+ ** \param[in]      pAdapter          pointer to sfvmk_adapter_t
+ ** \param[in]      pRxq	      pointer to HW Rx Q for which filter is prepared
+ ** \param[in]      pVxlanFilterInfo  pointer to vmk_UplinkQueueVXLANFilterInfo
+ ** \param[in]      flags             filter flags
+ ** \param[in,out]  pFdbEntry         pointer to filter DB entry
  **
  ** \return: VMK_OK if success, error number if failed
  **
@@ -164,9 +165,8 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
 static VMK_ReturnStatus
 sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
                              struct sfvmk_rxq_s *pRxq,
-                             vmk_EthAddress innerMac,
-                             vmk_EthAddress outerMac,
-                             vmk_uint32 vxlanID,
+                             vmk_UplinkQueueVXLANFilterInfo *pVxlanFilterInfo,
+                             efx_filter_flags_t flags,
                              sfvmk_filterDBEntry_t *pFdbEntry)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -182,16 +182,18 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
                       "Create VXLAN Filter %p: VXLAN ID %u"
                       " %02x:%02x:%02x:%02x:%02x:%02x"
                       " %02x:%02x:%02x:%02x:%02x:%02x",
-                      pFdbEntry, vxlanID,
-                      innerMac[0], innerMac[1], innerMac[2],
-                      innerMac[3], innerMac[4], innerMac[5],
-                      outerMac[0], outerMac[1], outerMac[2],
-                      outerMac[3], outerMac[4], outerMac[5]);
+                      pFdbEntry, pVxlanFilterInfo->vxlanID,
+                      pVxlanFilterInfo->innerMAC[0], pVxlanFilterInfo->innerMAC[1],
+                      pVxlanFilterInfo->innerMAC[2], pVxlanFilterInfo->innerMAC[3],
+                      pVxlanFilterInfo->innerMAC[4], pVxlanFilterInfo->innerMAC[5],
+                      pVxlanFilterInfo->outerMAC[0], pVxlanFilterInfo->outerMAC[1],
+                      pVxlanFilterInfo->outerMAC[2], pVxlanFilterInfo->outerMAC[3],
+                      pVxlanFilterInfo->outerMAC[4], pVxlanFilterInfo->outerMAC[5]);
 
   /* VNI in big endian format */
-  vni[0] = (vxlanID >> 16) & 0xFF;
-  vni[1] = (vxlanID >> 8) & 0xFF;
-  vni[2] = vxlanID & 0xFF;
+  vni[0] = (pVxlanFilterInfo->vxlanID >> 16) & 0xFF;
+  vni[1] = (pVxlanFilterInfo->vxlanID >> 8) & 0xFF;
+  vni[2] = pVxlanFilterInfo->vxlanID & 0xFF;
 
   EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterEncapList));
 
@@ -206,12 +208,12 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
 
     efx_filter_spec_init_rx(&pFdbEntry->spec[i],
                             EFX_FILTER_PRI_HINT,
-                            0, pRxq->pCommonRxq);
+                            flags, pRxq->pCommonRxq);
 
     status = efx_filter_spec_set_vxlan_full(&pFdbEntry->spec[i],
                                             vni,
-                                            innerMac,
-                                            outerMac);
+                                            pVxlanFilterInfo->innerMAC,
+                                            pVxlanFilterInfo->outerMAC);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter,
                           "Prepare VxLAN HW filter for %d entry "
@@ -247,8 +249,9 @@ end:
 ** \param[in]      pAdapter   pointer to sfvmk_adapter_t
 ** \param[in]      pFilter    pointer to uplink filter info
 ** \param[in,out]  pFdbEntry  pointer to filter DB entry
-** \param[in]      qidVal     queue ID value.
-** \param[in]      filterKey  filter key value.
+** \param[in]      filterKey  filter key value
+** \param[in]      qidVal     queue ID value
+** \param[in]      flags      filter flags
 **
 ** \return: VMK_OK if success, error number if failed
 **
@@ -257,7 +260,8 @@ VMK_ReturnStatus
 sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
                        vmk_UplinkQueueFilter *pFilter,
                        sfvmk_filterDBEntry_t *pFdbEntry,
-                       vmk_uint32 filterKey, vmk_uint32 qidVal)
+                       vmk_uint32 filterKey, vmk_uint32 qidVal,
+                       efx_filter_flags_t flags)
 {
   struct sfvmk_rxq_s *pRxq;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -283,13 +287,17 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
 
   switch (pFdbEntry->class) {
     case VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY:
-      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq, pFilter->macFilterInfo->mac,
-                                           EFX_FILTER_SPEC_VID_UNSPEC, pFdbEntry);
+      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq,
+                                           pFilter->macFilterInfo->mac,
+                                           EFX_FILTER_SPEC_VID_UNSPEC,
+                                           flags, pFdbEntry);
       break;
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC:
-      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq, pFilter->vlanMacFilterInfo->mac,
-                                           pFilter->vlanMacFilterInfo->vlanID, pFdbEntry);
+      status = sfvmk_prepareVMACFilterRule(pAdapter, pRxq,
+                                           pFilter->vlanMacFilterInfo->mac,
+                                           pFilter->vlanMacFilterInfo->vlanID,
+                                           flags, pFdbEntry);
       break;
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VLAN_ONLY:
@@ -301,10 +309,8 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
       if (modParams.vxlanOffload) {
         status = sfvmk_prepareVXLANFilterRule(pAdapter, pRxq,
-                                              pFilter->vxlanFilterInfo->innerMAC,
-                                              pFilter->vxlanFilterInfo->outerMAC,
-                                              pFilter->vxlanFilterInfo->vxlanID,
-                                              pFdbEntry);
+                                              pFilter->vxlanFilterInfo,
+                                              flags, pFdbEntry);
       }
       else {
         SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not enabled",

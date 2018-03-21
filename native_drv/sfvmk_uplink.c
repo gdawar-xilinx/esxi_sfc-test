@@ -4017,7 +4017,10 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   vmk_UplinkSharedQueueInfo *pQueueInfo;
   vmk_UplinkSharedQueueData *pQueueData;
   vmk_uint32 qidVal = vmk_UplinkQueueIDVal(qid);
+  vmk_uint32 hwQid = 0;
   vmk_uint32 filterKey;
+  efx_filter_flags_t hwFilterFlag = 0;
+
   VMK_ReturnStatus status = VMK_OK;
 
   if (!pAdapter) {
@@ -4054,8 +4057,24 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
 
   filterKey = sfvmk_generateFilterKey(pAdapter);
 
-  status = sfvmk_prepareFilterRule(pAdapter, pFilter,
-                                   pFdbEntry, filterKey, qidVal);
+  /* Find corresponding hardware qid
+   * if Uplink Q corresponds to RSS, get the base RSS HW Q
+   * else it is one to one mapping
+   * TX HW Q is always at same index as uplink q
+   * Therefore for RSS, TX and RX hardware queues are at diff index
+   * Note: when rss q is not allocated, rssUplinkQueue = 0,
+   *       the code assumes that the filters will never be
+   *       created on 0th uplink Q
+   */
+  if (qidVal == pAdapter->uplink.rssUplinkQueue) {
+    hwQid = sfvmk_getRSSQStartIndex(pAdapter);
+    hwFilterFlag = EFX_FILTER_FLAG_RX_RSS;
+  } else {
+    hwQid = qidVal;
+  }
+
+  status = sfvmk_prepareFilterRule(pAdapter, pFilter, pFdbEntry,
+                                   filterKey, hwQid, hwFilterFlag);
   if (status != VMK_OK) {
     vmk_LogMessage("Failed to prepare filter rule with error %s",
                    vmk_StatusToString(status));

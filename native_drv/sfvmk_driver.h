@@ -760,7 +760,8 @@ sfvmk_filterDBEntry_t * sfvmk_allocFilterRule(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
                                          vmk_UplinkQueueFilter *pFilter,
                                          sfvmk_filterDBEntry_t *pFdbEntry,
-                                         vmk_uint32 filterKey, vmk_uint32 qidVal);
+                                         vmk_uint32 filterKey, vmk_uint32 qidVal,
+                                         efx_filter_flags_t flags);
 VMK_ReturnStatus sfvmk_insertFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdbEntry);
 sfvmk_filterDBEntry_t * sfvmk_removeFilterRule(sfvmk_adapter_t *pAdapter, vmk_uint32 filterKey);
 void sfvmk_freeFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdbEntry);

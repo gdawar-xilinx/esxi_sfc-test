@@ -129,12 +129,17 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
 {
   vmk_uint8 qsfpData[QSFP_A0_LOW_PAGE_SIZE + QSFP_A0_HIGH_PAGE_SIZE];
   vmk_uint8 *pQsfpHighPageData;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   /* Read low and high both pages */
-  efx_phy_module_get_info(pAdapter->pNic,
-                          SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_QSFP_BASE, 0,
-                          (QSFP_A0_LOW_PAGE_SIZE + QSFP_A0_HIGH_PAGE_SIZE - 1),
-                          &qsfpData[0]);
+  status = efx_phy_module_get_info(pAdapter->pNic,
+                                   SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_QSFP_BASE,
+                                   0,
+                                   (QSFP_A0_LOW_PAGE_SIZE + QSFP_A0_HIGH_PAGE_SIZE - 1),
+                                   &qsfpData[0]);
+  if (status != VMK_OK) {
+    return VMK_UPLINK_CABLE_TYPE_OTHER;
+  }
 
   pQsfpHighPageData = qsfpData + QSFP_A0_HIGH_PAGE_SIZE;
 
@@ -205,10 +210,16 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
 vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter)
 {
   vmk_uint8 sfpData[SFP_MODULE_PAGE_0_SIZE];
+  VMK_ReturnStatus status = VMK_FAILURE;
 
-  efx_phy_module_get_info(pAdapter->pNic,
-    SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_SFP_BASE, 0,
-    SFP_MODULE_PAGE_0_SIZE, &sfpData[0]);
+  status = efx_phy_module_get_info(pAdapter->pNic,
+                                   SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_SFP_BASE,
+                                   0,
+                                   SFP_MODULE_PAGE_0_SIZE,
+                                   &sfpData[0]);
+  if (status != VMK_OK) {
+    return VMK_UPLINK_CABLE_TYPE_OTHER;
+  }
 
   if (sfpData[SFP_A0_IDENTIFIER] != SFP_A0_IDENTIFIER_SFP)
     return VMK_UPLINK_CABLE_TYPE_OTHER;

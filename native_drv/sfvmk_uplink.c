@@ -4431,6 +4431,7 @@ sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evqModerate failed status: %s",
                           vmk_StatusToString(status));
+      vmk_MutexUnlock(pAdapter->lock);
       goto done;
     }
   }

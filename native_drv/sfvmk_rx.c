@@ -951,7 +951,7 @@ static void sfvmk_rxFlush(sfvmk_adapter_t *pAdapter)
       continue;
     }
 
-    pRxq->state = SFVMK_RXQ_STATE_INITIALIZED;
+    pRxq->state = SFVMK_RXQ_STATE_STOPPING;
     pRxq->flushState = SFVMK_FLUSH_STATE_PENDING;
     vmk_SpinlockUnlock(pEvq->lock);
 
@@ -1017,6 +1017,13 @@ sfvmk_rxFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     }
 
     vmk_SpinlockLock(pEvq->lock);
+
+    if (pRxq->state != SFVMK_RXQ_STATE_STOPPING) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] is not in stopping state", qIndex);
+      vmk_SpinlockUnlock(pEvq->lock);
+      continue;
+    }
+
     while (currentTime < timeout) {
       /* Check to see if the flush event has been processed */
       if (pRxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
@@ -1050,6 +1057,7 @@ sfvmk_rxFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     pRxq->pushed = 0;
     pRxq->pending = 0;
     pRxq->completed = 0;
+    pRxq->state = SFVMK_RXQ_STATE_INITIALIZED;
     vmk_SpinlockUnlock(pEvq->lock);
 
     /* Release DMA memory. */

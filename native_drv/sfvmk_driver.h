@@ -197,7 +197,8 @@ typedef enum sfvmk_txqType_e {
 typedef enum sfvmk_txqState_e {
   SFVMK_TXQ_STATE_UNINITIALIZED = 0,
   SFVMK_TXQ_STATE_INITIALIZED,
-  SFVMK_TXQ_STATE_STARTED
+  SFVMK_TXQ_STATE_STARTED,
+  SFVMK_TXQ_STATE_STOPPING
 } sfvmk_txqState_t;
 
 /* Tx Queue statistics */
@@ -375,7 +376,8 @@ static const char * const pSfvmkRxqStatsName[] = {
 typedef enum sfvmk_rxqState_e {
   SFVMK_RXQ_STATE_UNINITIALIZED = 0,
   SFVMK_RXQ_STATE_INITIALIZED,
-  SFVMK_RXQ_STATE_STARTED
+  SFVMK_RXQ_STATE_STARTED,
+  SFVMK_RXQ_STATE_STOPPING
 } sfvmk_rxqState_t;
 
 typedef struct sfvmk_rxq_s {

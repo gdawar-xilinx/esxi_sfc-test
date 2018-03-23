@@ -323,6 +323,12 @@ sfvmk_txFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
 
     vmk_SpinlockLock(pTxq->lock);
 
+    if (pTxq->state != SFVMK_TXQ_STATE_STOPPING) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "TXQ[%u] is not in stopping state", qIndex);
+      vmk_SpinlockUnlock(pTxq->lock);
+      continue;
+    }
+
     while (currentTime < timeout) {
       /* Check to see if the flush event has been processed */
       if (pTxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
@@ -360,6 +366,8 @@ sfvmk_txFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     pTxq->pending = 0;
     pTxq->completed = 0;
     pTxq->reaped = 0;
+
+    pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
 
     sfvmk_memPoolFree((vmk_VA)pTxq->pPendDesc, sizeof(efx_desc_t) *
                       pTxq->numDesc);
@@ -417,7 +425,7 @@ static void sfvmk_txFlush(sfvmk_adapter_t *pAdapter)
       continue;
     }
 
-    pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
+    pTxq->state = SFVMK_TXQ_STATE_STOPPING;
     pTxq->flushState = SFVMK_FLUSH_STATE_PENDING;
     vmk_SpinlockUnlock(pTxq->lock);
 

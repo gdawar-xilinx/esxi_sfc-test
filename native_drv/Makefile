@@ -75,13 +75,14 @@ FILE            = export.files-common
 IMPORTED_FILES  = $(shell cat ${FILE})
 MAKEFILE_LIST   = $(IMPORTED_FILES)
 
-all: vib
+all: doc vib
 
 imported/%:
 	@wget -q -O $@ $(V5_URL)/src/driver/common/$(@F)
 	@chmod a-w $@
 
 doc:
+	@$(RM) -rf $(DOXYGEN_TARGET)
 	@mkdir $(DOXYGEN_TARGET)
 	@cd $(DOXYGEN_TARGET)
 	@doxygen $(ESXI_DOXY_CFG)
@@ -111,7 +112,12 @@ clean_imported:
 	@$(RM) -rf $(IMPORTED_CODE)
 	@echo Done.
 
-clean_targets:
+clean_doxygen:
+	@echo Cleaning out doxygen files ...
+	@$(RM) -rf $(DOXYGEN_TARGET)
+	@echo Done.
+
+clean_targets: clean_doxygen
 	@echo Cleaning out build directories ...
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.

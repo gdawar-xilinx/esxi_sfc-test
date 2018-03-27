@@ -671,7 +671,6 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   VMK_ASSERT_NOT_NULL(pRxq);
 
   if (pRxq->state != SFVMK_RXQ_STATE_STARTED) {
-    SFVMK_ERROR("RXQ[%u] is not yet started", pRxq->index);
     goto done;
   }
 

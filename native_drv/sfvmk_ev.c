@@ -205,11 +205,6 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   VMK_ASSERT_NOT_NULL(pTxq);
 
   vmk_SpinlockLock(pTxq->lock);
-  VMK_ASSERT_EQ(pEvq->index, pTxq->evqIndex);
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "id: %u txq_index %u for evqIndex: %u, state:%u",
-                      id, pTxq->evqIndex, pEvq->index, pTxq->state);
 
   if (VMK_UNLIKELY(pTxq->state != SFVMK_TXQ_STATE_STARTED)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ state[%d]", pTxq->state);
@@ -223,12 +218,7 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   delta = (stop >= id) ? (stop - id) : (pTxq->numDesc - id + stop);
   pTxq->pending += delta;
 
-  /* this is executed with pEvq->lock held within sfvmk_evqPoll */
   pEvq->txDone++;
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "id: %u stop: %u delta:%u pending: %u, completed: %u",
-                      id, stop, delta, pTxq->pending, pTxq->completed);
 
   if (pTxq->pending - pTxq->completed >= SFVMK_TX_BATCH) {
     compCtx.netPoll = pEvq->netPoll;
@@ -244,7 +234,7 @@ done:
   return status;
 }
 
-/*! \brief Gets called when initilized event comes for an eventQ.
+/*! \brief Gets called when initialized event comes for an eventQ.
 **
 ** \param[in] arg        Pointer to eventQ
 **
@@ -479,7 +469,7 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 static boolean_t
 sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
 {
-  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;;
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
   sfvmk_txq_t *pTxq = NULL;
   sfvmk_adapter_t *pAdapter = NULL;
 
@@ -493,11 +483,16 @@ sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
 
   VMK_ASSERT_NOT_NULL(pTxq);
 
-  if (pTxq->evqIndex == pEvq->index) {
+  if (pTxq->index == pEvq->index)
     sfvmk_txqFlushDone(pTxq);
-  }
+  else
+    goto fail;
 
   return VMK_FALSE;
+
+fail:
+  return VMK_TRUE;
+
 }
 
 /*! \brief Gets called when a SW event comes
@@ -567,13 +562,13 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
   }
 
   pEvq->rxDone = 0;
+  pEvq->txDone = 0;
+
   /* Poll the queue */
   efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
 
   /* Perform any pending completion processing */
   sfvmk_evqComplete(pEvq);
-
-  pEvq->txDone = 0;
 
   /* Re-prime the event queue for interrupts */
   status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
@@ -626,7 +621,6 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
 
   vmk_SpinlockLock(pTxq->lock);
   if (VMK_UNLIKELY(pTxq->state != SFVMK_TXQ_STATE_STARTED)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ state[%d]", pTxq->state);
     goto done;
   }
   if (pTxq->pending != pTxq->completed) {

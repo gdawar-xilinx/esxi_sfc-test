@@ -562,11 +562,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  if (pAdapter == NULL) {
-    SFVMK_ERROR("NULL adapter ptr");
-    vmk_PktListReleaseAllPkts(pktList);
-    goto done;
-  }
+  VMK_ASSERT_NOT_NULL(pAdapter);
 
   maxRxQueues = pAdapter->uplink.queueInfo.maxRxQueues;
   maxTxQueues = pAdapter->uplink.queueInfo.maxTxQueues;
@@ -592,10 +588,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 
   /* Cross over the rx queues in shared queue data structure */
   qid -= txqStartIndex;
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "RxQ: %d, TxQ: %d, qid: %d",
-                      maxRxQueues, maxTxQueues, qid);
 
   if ((pAdapter->ppTxq == NULL) || (pAdapter->ppTxq[qid] == NULL)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NULL ppTxq ptr, qid: %d", qid);
@@ -3694,8 +3686,7 @@ sfvmk_quiesceUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
   }
 
   if (!sfvmk_isUplinkQStarted(pUplink, qIndex)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not yet started", qIndex);
-    status = VMK_FAILURE;
+    status = VMK_EALREADY;
     goto done;
   }
 
@@ -3754,7 +3745,7 @@ sfvmk_quiesceQueue(vmk_AddrCookie cookie,
       break;
     case VMK_UPLINK_QUEUE_TYPE_TX:
       status = sfvmk_quiesceUplinkTxq(pAdapter, qid);
-      if (status != VMK_OK) {
+      if ((status != VMK_OK)  && (status != VMK_EALREADY)){
         SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceUplinkTxq(%u) failed status: %s",
                             qIndex, vmk_StatusToString(status));
       }

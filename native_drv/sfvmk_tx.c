@@ -62,15 +62,12 @@ sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 ** \param[in]  txqIndex TX queue index
-** \param[in]  type     TX queue type
-** \param[in]  evqIndex associated event queue index
 **
 ** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus
-sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
-              sfvmk_txqType_t type, vmk_uint32 evqIndex)
+sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex)
 {
   sfvmk_txq_t *pTxq = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -78,11 +75,8 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX, "qIndex[%u]", txqIndex);
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  if ((txqIndex >= pAdapter->numTxqsAllocated) ||
-      (evqIndex >= pAdapter->numEvqsAllocated) ||
-      (pAdapter->ppEvq[evqIndex] == NULL)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid arguments TXQ = %u, EVQ = %u pEvq = %p",
-                        txqIndex, evqIndex, pAdapter->ppEvq[evqIndex]);
+  if (txqIndex >= pAdapter->numTxqsAllocated) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ index: %u", txqIndex);
     status = VMK_BAD_PARAM;
     goto done;
   }
@@ -112,16 +106,10 @@ sfvmk_txqInit(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex,
     goto failed_create_lock;
   }
 
-  pTxq->type = type;
-  pTxq->evqIndex = evqIndex;
   pTxq->index = txqIndex;
   pTxq->hwVlanTci = 0;
   pTxq->state = SFVMK_TXQ_STATE_INITIALIZED;
   pAdapter->ppTxq[txqIndex] = pTxq;
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_INFO,
-                      "TXQ[%u] is initialized associated EVQ index is %u",
-                      txqIndex, evqIndex);
 
   goto done;
 
@@ -182,7 +170,6 @@ VMK_ReturnStatus
 sfvmk_txInit(sfvmk_adapter_t *pAdapter)
 {
   vmk_uint32            qIndex;
-  vmk_uint32            evqIndex = 0;
   vmk_uint32            txqArraySize = 0;
   const efx_nic_cfg_t   *pCfg = NULL;
   VMK_ReturnStatus      status = VMK_FAILURE;
@@ -221,17 +208,15 @@ sfvmk_txInit(sfvmk_adapter_t *pAdapter)
   }
   vmk_Memset(pAdapter->ppTxq, 0, txqArraySize);
 
-  /* Initialize all transmit queues as capable of performing CSO & FATSO
-   * on incoming packets. Queues will be started (TBD) with call to
-   * efx_tx_qcreate with flags parameter including EFX_TXQ_FATSOV2, if HW
-   * supports FATSOv2. Then, whether checksum offload is required will be
-   * determined on per packet basis and if required, checksum offload option
-   * descriptor will be created at run time if it doesn't exist on that queue.
+  /* Initialize all transmit queues with same processing capabilities (CSO/TSO)
+   * on incoming packets. Queues will be started with call to efx_tx_qcreate 
+   * with flags parameter including EFX_TXQ_FATSOV2, if HW supports FATSOv2. 
+   * Then, whether checksum offload is required will be determined on per 
+   * packet basis and if required, checksum offload option descriptor will
+   * be created at run time if it doesn't exist on that queue.
    */
-  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated;
-       qIndex++, evqIndex++) {
-    status = sfvmk_txqInit(pAdapter, qIndex, SFVMK_TXQ_TYPE_IP_TCP_UDP_CKSUM,
-                           evqIndex);
+  for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated; qIndex++) {
+    status = sfvmk_txqInit(pAdapter, qIndex);
     if (status) {
       SFVMK_ADAPTER_ERROR(pAdapter,"sfvmk_txqInit(%u) failed status: %s",
                           qIndex, vmk_StatusToString(status));
@@ -505,7 +490,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   VMK_ASSERT_NOT_NULL(pTxq);
 
   if (pAdapter->ppEvq != NULL)
-    pEvq = pAdapter->ppEvq[pTxq->evqIndex];
+    pEvq = pAdapter->ppEvq[pTxq->index];
   VMK_ASSERT_NOT_NULL(pEvq);
 
   VMK_ASSERT_EQ(pTxq->state, SFVMK_TXQ_STATE_INITIALIZED);
@@ -539,11 +524,9 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     flags |= EFX_TXQ_FATSOV2;
 
   /* Create the common code transmit queue. */
-  status = efx_tx_qcreate(pAdapter->pNic, qIndex,
-                          pTxq->type, &pTxq->mem,
+  status = efx_tx_qcreate(pAdapter->pNic, qIndex, 0, &pTxq->mem,
                           pAdapter->numTxqBuffDesc, 0, flags,
-                          pEvq->pCommonEvq,
-                          &pTxq->pCommonTxq, &descIndex);
+                          pEvq->pCommonEvq, &pTxq->pCommonTxq, &descIndex);
   if (status != VMK_OK) {
     if((status != VMK_NO_SPACE) || (~flags & EFX_TXQ_FATSOV2)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_tx_qcreate(%u) failed status: %s",
@@ -555,11 +538,9 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     flags &= ~EFX_TXQ_FATSOV2;
     pAdapter->isTsoFwAssisted = VMK_FALSE;
 
-    status = efx_tx_qcreate(pAdapter->pNic, qIndex,
-                            pTxq->type, &pTxq->mem,
+    status = efx_tx_qcreate(pAdapter->pNic, qIndex, 0, &pTxq->mem,
                             pAdapter->numTxqBuffDesc, 0, flags,
-                            pEvq->pCommonEvq,
-                            &pTxq->pCommonTxq, &descIndex);
+                            pEvq->pCommonEvq, &pTxq->pCommonTxq, &descIndex);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_tx_qcreate(%u) failed status: %s",
                           qIndex, vmk_StatusToString(status));
@@ -761,16 +742,7 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
     id = completed++ & pTxq->ptrMask;
     pTxMap = &pTxq->pTxMap[id];
 
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                        "completed: %u, pending: %u, id: %u, txMap: %p, "
-                        "pXmitPkt: %p",
-                        completed, pTxq->pending, id, pTxMap,
-                        pTxMap->pXmitPkt);
-
     if (pTxMap->sgElem.ioAddr != 0) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                          "Unmapping frag at addr: %lx", pTxMap->sgElem.ioAddr);
-
       vmk_DMAUnmapElem(pAdapter->dmaEngine, VMK_DMA_DIRECTION_FROM_MEMORY, &pTxMap->sgElem);
     }
 
@@ -784,6 +756,10 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
 
     vmk_Memset(pTxMap, 0, sizeof(sfvmk_txMapping_t));
   }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                      "Processed completions from id: %u to %u",
+                      pTxq->completed, pTxq->pending);
 
   pTxq->completed = completed;
 
@@ -873,19 +849,13 @@ sfvmk_createDmaDesc(sfvmk_txq_t *pTxq,
               vmk_Bool eop,
               vmk_uint32 *pId)
 {
-  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
   efx_desc_t *desc;
 
   VMK_ASSERT(ioa && len);
-  VMK_ASSERT(len <= pAdapter->txDmaDescMaxSize);
 
   desc = &pTxq->pPendDesc[pTxq->nPendDesc ++];
   efx_tx_qdesc_dma_create(pTxq->pCommonTxq, ioa, len, eop, desc);
   *pId = (*pId + 1) & pTxq->ptrMask;
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "Created DMA desc[%d]: addr = 0x%lx, len = %d, eop = %d",
-                      pTxq->nPendDesc - 1, ioa, len, eop);
 }
 
 /*! \brief process transmission of non-TSO packet
@@ -975,11 +945,6 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
         pTxMap[id].pXmitPkt = pXmitPkt;
      }
 
-     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                         "TxMap[%d]: xmitpkt=%p, ioAddr=0x%lx, length=%d",
-                         id, pTxMap[id].pXmitPkt, pTxMap[id].sgElem.ioAddr,
-                         pTxMap[id].sgElem.length);
-
      sfvmk_createDmaDesc(pTxq, mappedAddr.ioAddr, mappedAddr.length, eop, &id);
   }
 
@@ -989,7 +954,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   vmk_AtomicAdd64(&pTxq->stats[SFVMK_TXQ_BYTES], pktLen);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "non-TSO desc done: %d desc created, next startID = %d",
+                      "non-TSO %u descriptors created, next startID = %u",
                       descCount, id);
 
   status = VMK_OK;
@@ -1003,6 +968,7 @@ fail_map:
      if (pTxMap[j].sgElem.ioAddr) {
        vmk_DMAUnmapElem(pTxq->pAdapter->dmaEngine,
                         VMK_DMA_DIRECTION_FROM_MEMORY, &pTxMap[j].sgElem);
+       vmk_Memset(&pTxMap[j], 0, sizeof(sfvmk_txMapping_t));
      }
   }
 
@@ -1556,7 +1522,7 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
       }
 
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                          "txMap[%u]: pXmitPkt=%p, pOrigPkt=%p, ioAddr=0x%lx"
+                          "txMap[%u]: pXmitPkt=%p, pOrigPkt=%p, ioAddr=0x%lx "
                           "length=%u",id, pTxMap[id].pXmitPkt, pTxMap[id].pOrigPkt,
                           pTxMap[id].sgElem.ioAddr, pTxMap[id].sgElem.length);
 
@@ -1819,8 +1785,6 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   nTotalDesc = sfvmk_txDmaDescEstimate(pTxq, pkt, &xmitInfo);
 
   pushed = pTxq->added;
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
-                      "index: %u, pushed: %u", pTxq->index, pushed);
 
   /* Check if need to stop the queue */
   vmk_CPUMemFenceWrite();

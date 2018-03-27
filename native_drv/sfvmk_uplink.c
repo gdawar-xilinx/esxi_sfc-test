@@ -4938,7 +4938,7 @@ static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
     /* Wait for completion of startIO */
     vmk_WorldWait((vmk_WorldEventID) &pAdapter->startIO_compl_event,
                   VMK_LOCK_INVALID,
-                  3*SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC,
+                  SFVMK_MC_REBOOT_TIME_OUT_MSEC,
                   "sfvmk_mc_reboot_wait");
 
     status = VMK_OK;

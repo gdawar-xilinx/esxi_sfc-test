@@ -66,6 +66,11 @@
 /* Wait time for StartIO on MC Reboot */
 #define SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC    300
 
+/* Wait time for MC Reboot to complete. Value set higher
+ * than max MCDI timeout value for worst case scenarios
+ */
+#define SFVMK_MC_REBOOT_TIME_OUT_MSEC               11000
+
 /* 21 EVQs, 16 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
 #define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ

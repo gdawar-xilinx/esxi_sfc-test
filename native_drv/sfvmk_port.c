@@ -803,63 +803,73 @@ sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
     if ((supportedCaps & (1U << cap)) == 0)
       continue;
 
-    /* Only SFP and QSFP modules are supported */
-    pSupportedModes[index].media = VMK_LINK_MEDIA_UNKNOWN;
-
     switch (cap) {
       case EFX_PHY_CAP_10HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_10FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_100HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_100FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_1000HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_1000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_10000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
         break;
 
       case EFX_PHY_CAP_25000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        /* TODO Will change when a proper link media type is provided by vmware */
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
         break;
 
       case EFX_PHY_CAP_40000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
         break;
 
       case EFX_PHY_CAP_50000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        /* TODO Will change when a proper link media type is provided by vmware */
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
         break;
 
       case EFX_PHY_CAP_100000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
         break;
 
       default:

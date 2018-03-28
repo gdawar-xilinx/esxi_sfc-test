@@ -12,7 +12,7 @@ import re
 import sys
 import optparse
 from threading import Timer
-from collections import defaultdict
+from collections import defaultdict,OrderedDict
 from operator import itemgetter
 
 # sfreport version to be incremented for any changes made before releases:
@@ -564,7 +564,7 @@ def interface_statistics(output_file,sfvmk_adapter_list,server,mode):
        priv_table = '<table><th>Private Statistics:</th></tr><table border="1">'
        priv_table += '<th>Interface_name</th>'
 
-       priv_stats_dict = defaultdict(list)
+       priv_stats_dict = OrderedDict()
        #output_file.write('<h1 style="font-size:18px;"> Private Statistics: <br></H1>')
        for interface in sfvmk_adapter_list:
            private_stats_cmd = "vsish -e cat /net/pNics/"+ interface+"/stats"
@@ -593,7 +593,7 @@ def interface_statistics(output_file,sfvmk_adapter_list,server,mode):
                    else:
                        priv_stats_dict[param_name].append(param_value)
            interface_count += 1
-       priv_stats_dict = sorted(priv_stats_dict.items())
+       priv_stats_dict = priv_stats_dict.items()
        for key, values in priv_stats_dict:
            priv_table += '<th align=left>%s</th>' % key
            for value in values:

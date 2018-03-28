@@ -67,7 +67,9 @@ def system_summary(output_file,server,mode):
     system_values = []
     if mode == "esxi":
        system_summary_header = ['OS Name','Version','Architecture','Kernel Command Line','Distribution',\
-                                'System Name','System Manufacturer','System Model','Processor',\
+                                'System Name','System Manufacturer','System Model','Processor','CPU Packages',\
+                                'CPU Cores', 'CPU Threads','Hyperthreading Active','Hyperthreading Supported',\
+                                'Hyperthreading Enabled','HV Support','HV Replay Capable','HV Replay Disabled Reasons',\
                                 'BIOS Version/Date','Total Physical Memory','Available Physical Memory',\
                                 'Total Virtual Memory','Available Virtual Memory','Page File Space']
        system_values.append(execute("uname -o"))  # OS Name
@@ -95,6 +97,10 @@ def system_summary(output_file,server,mode):
           system_values.append(processor_version)
        except Exception:
           system_values.append("not updated")
+       cpu_info = execute("esxcli hardware cpu global get")
+       for line in cpu_info.splitlines():
+           lhs, rhs = line.split(':')
+           system_values.append(rhs)
        # Capture the logs specific to BIOS
        bios_info = execute("smbiosDump | grep -A4  'BIOS Info'")
        try:

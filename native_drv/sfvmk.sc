@@ -130,7 +130,7 @@ sfvmk_vib_def = {
              ],
       "conflicts":
              [
-                 {'name': 'net-sfc'}
+#                 {'name': 'FirstConflict'}
              ],
 
        "maintenance-mode": {'on-remove':True, 'on-install':'True'},

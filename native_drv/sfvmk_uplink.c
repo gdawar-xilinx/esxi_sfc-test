@@ -1359,9 +1359,7 @@ sfvmk_uplinkCapEnable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
    * esxcli network nic cso set -e 1 -n <vmnicX> */
   if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) ||
      (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
-    vmk_VersionedAtomicBeginWrite(&pAdapter->isRxCsumLock);
     pAdapter->isRxCsumEnabled = VMK_TRUE;
-    vmk_VersionedAtomicEndWrite(&pAdapter->isRxCsumLock);
   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1391,9 +1389,7 @@ sfvmk_uplinkCapDisable(vmk_AddrCookie cookie, vmk_UplinkCap uplinkCap)
    * esxcli network nic cso set -e 0 -n <vmnicX> */
   if((VMK_UPLINK_CAP_IPV4_CSO == uplinkCap) ||
      (VMK_UPLINK_CAP_IPV6_CSO == uplinkCap)) {
-    vmk_VersionedAtomicBeginWrite(&pAdapter->isRxCsumLock);
     pAdapter->isRxCsumEnabled = VMK_FALSE;
-    vmk_VersionedAtomicEndWrite(&pAdapter->isRxCsumLock);
   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

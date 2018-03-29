@@ -497,7 +497,6 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   VMK_ReturnStatus status;
   vmk_VA pFrameVa;
   vmk_Bool isRxCsumEnabled = VMK_FALSE;
-  vmk_uint32 sharedReadLockVer;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
 
@@ -584,10 +583,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       goto discard_pkt;
     }
 
-    do {
-      sharedReadLockVer = vmk_VersionedAtomicBeginTryRead(&pAdapter->isRxCsumLock);
-      isRxCsumEnabled = pAdapter->isRxCsumEnabled;
-    } while (!vmk_VersionedAtomicEndTryRead(&pAdapter->isRxCsumLock, sharedReadLockVer));
+    isRxCsumEnabled = pAdapter->isRxCsumEnabled;
 
     /* Clear the CKSUM flags if Rx CSUM validation is disabled */
     switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {

@@ -551,9 +551,6 @@ typedef struct sfvmk_adapter_s {
   /* MAC stats copy */
   efsys_stat_t               adapterStats[EFX_MAC_NSTATS];
 
-  /* isRxCsumLock synchronizes access to isRxCsumEnabled in
-   * netpoll and uplink contexts */
-  vmk_VersionedAtomic        isRxCsumLock;
   vmk_Bool                   isRxCsumEnabled;
   vmk_Bool                   isTsoFwAssisted;
 

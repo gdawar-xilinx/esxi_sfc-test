@@ -254,7 +254,7 @@ init_module(void)
   vmk_NameCopy(&logProps.name, &sfvmk_modInfo.driverName);
   logProps.module = vmk_ModuleCurrentID;
   logProps.heap = sfvmk_modInfo.heapID;
-  logProps.defaultLevel = 0;
+  logProps.defaultLevel = SFVMK_LOG_LEVEL_DEFAULT;
   logProps.throttle = NULL;
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logID);

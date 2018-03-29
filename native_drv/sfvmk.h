@@ -81,19 +81,32 @@ typedef enum sfvmk_debugMask_e {
 } sfvmk_debugMask_t;
 
 typedef enum sfvmk_logLevel_e {
-  SFVMK_LOG_LEVEL_ERROR = 1,
-  SFVMK_LOG_LEVEL_WARN,
-  SFVMK_LOG_LEVEL_INFO,
+  SFVMK_LOG_LEVEL_INFO = 1,
   SFVMK_LOG_LEVEL_DBG,
   SFVMK_LOG_LEVEL_FUNCTION,
+  SFVMK_LOG_LEVEL_IO,
 } sfvmk_logLevel_t;
 
 #define SFVMK_DEBUG_ALL (sfvmk_debugMask_t)(-1)
+
+#ifdef VMX86_DEBUG
+#define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_DBG
+#else
+#define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_INFO
+#endif
+
+#ifdef VMX86_DEBUG
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
                              SFVMK_DEBUG_UPLINK |                            \
                              SFVMK_DEBUG_EVQ    |                            \
                              SFVMK_DEBUG_TX     |                            \
+                             SFVMK_DEBUG_RX     |                            \
                              SFVMK_DEBUG_HW)
+#else
+#define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
+                             SFVMK_DEBUG_UPLINK |                            \
+                             SFVMK_DEBUG_HW)
+#endif
 
 #define SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ...)                   \
   do {                                                                       \

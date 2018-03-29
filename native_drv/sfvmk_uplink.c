@@ -207,6 +207,24 @@ static VMK_ReturnStatus sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
                                                      vmk_UplinkQueueID qid,
                                                      vmk_UplinkCoalesceParams *pParams);
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+static vmk_UplinkMultiQueueOps sfvmkQueueOps = {
+   .queueOps = {
+      .queueAlloc             = sfvmk_allocQueue,
+      .queueAllocWithAttr     = sfvmk_allocQueueWithAttr,
+      .queueFree              = sfvmk_freeQueue,
+      .queueQuiesce           = sfvmk_quiesceQueue,
+      .queueStart             = sfvmk_startQueue,
+      .queueApplyFilter       = sfvmk_applyQueueFilter,
+      .queueRemoveFilter      = sfvmk_removeQueueFilter,
+      .queueGetStats          = sfvmk_getQueueStats,
+      .queueToggleFeature     = sfvmk_toggleQueueFeature,
+      .queueSetPriority       = sfvmk_setQueueTxPriority,
+      .queueSetCoalesceParams = sfvmk_setQueueCoalesceParams,
+   },
+   .queueSetCount = NULL,
+};
+#else
 static vmk_UplinkQueueOps sfvmkQueueOps = {
    .queueAlloc             = sfvmk_allocQueue,
    .queueAllocWithAttr     = sfvmk_allocQueueWithAttr,
@@ -220,6 +238,7 @@ static vmk_UplinkQueueOps sfvmkQueueOps = {
    .queueSetPriority       = sfvmk_setQueueTxPriority,
    .queueSetCoalesceParams = sfvmk_setQueueCoalesceParams,
 };
+#endif
 
 /****************************************************************************
 *              vmk_UplinkRingParamsOps Handler                              *
@@ -283,10 +302,21 @@ const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
 static VMK_ReturnStatus sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie,
                                               vmk_uint16 portNumNBO);
 
-const static vmk_UplinkEncapOffloadOps sfvmk_encapOffloadOps = {
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
+static vmk_UplinkVXLANOffloadParams sfvmk_vxlanOffloadOps = {
+   .vxlanPortUpdate = sfvmk_vxlanPortUpdate,
+   .flags           = (VMK_UPLINK_VXLAN_FLAG_INNER_IPV4_CSO |
+                       VMK_UPLINK_VXLAN_FLAG_INNER_IPV4_TSO |
+                       VMK_UPLINK_VXLAN_FLAG_INNER_IPV6_CSO |
+                       VMK_UPLINK_VXLAN_FLAG_INNER_IPV6_TSO |
+                       VMK_UPLINK_VXLAN_FLAG_OUTER_UDP_CSO)
+};
+#else
+static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
+
   .vxlanPortUpdate = sfvmk_vxlanPortUpdate,
 };
-
+#endif
 
 /****************************************************************************
  *               vmk_UplinkAdvertisedModesOps Handlers                      *
@@ -795,6 +825,17 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
     goto done;
   }
 
+  if (pAdapter->uplink.sharedData.mtu == mtu) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "New MTU is same as the old: %u, nothing to do", mtu);
+    status = VMK_OK;
+    goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "MTU update from %u to %u",
+                      pAdapter->uplink.sharedData.mtu, mtu);
+
   /* Not checking MTU validity as it is done by vmkernel itself */
 
   vmk_MutexLock(pAdapter->lock);
@@ -802,10 +843,6 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
   sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
   pAdapter->uplink.sharedData.mtu = mtu;
   sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
-
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "MTU update from %u to %u",
-                      pAdapter->uplink.sharedData.mtu, mtu);
 
   /* Reset adapter to apply MTU changes if it is started, otherwise
    * MTU would be applied later when adapter is started */
@@ -1902,9 +1939,12 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (pAdapter->isTunnelEncapSupported) {
     /* Register capability for encap offload   */
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
+                                   VMK_UPLINK_CAP_VXLAN_OFFLOAD,
+#else
                                    VMK_UPLINK_CAP_ENCAP_OFFLOAD,
-                                   (vmk_UplinkEncapOffloadOps *)
-                                   &sfvmk_encapOffloadOps);
+#endif
+                                   &sfvmk_vxlanOffloadOps);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter,
                           "VMK_UPLINK_CAP_ENCAP_OFFLOAD register failed status: %s",
@@ -4024,8 +4064,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   vmk_MutexLock(pAdapter->lock);
 
   if (qidVal == 0) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Apply filters not allowed on default queue ID %d", qidVal);
+    /* Do not commit filters to default queue */
     goto done;
   }
 

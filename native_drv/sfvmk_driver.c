@@ -592,7 +592,6 @@ sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
   vmk_NameFormat(&props.name, "%s-helper",
                  vmk_NameToString(&sfvmk_modInfo.driverName));
   props.heap = sfvmk_modInfo.heapID;
-  props.useIrqSpinlock = VMK_TRUE;
   props.preallocRequests = VMK_FALSE;
   props.blockingSubmit = VMK_FALSE;
   props.maxRequests = 8;

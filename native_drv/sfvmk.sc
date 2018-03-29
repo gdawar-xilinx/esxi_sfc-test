@@ -10,6 +10,9 @@
 # identification section
 #
 
+from devkitUtilities import IsDevKit
+inbox = not IsDevKit()
+
 driver_name    = "sfvmk"
 driver_ver     = "0.2.0.24"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
@@ -22,10 +25,15 @@ sfvmk_identification = {
    "description"     : "Networking driver for Solarflare XtremeScale SFC9xxx Ethernet Controller",
    "version"         : driver_ver,
    "license"         : VMK_MODULE_LICENSE_BSD,
-   "vendor"          : "Solarflare",
-   "vendor_code"     : "SFC",
-   "vendor_email"    : "support@solarflare.com",
+   "vendor"          : "VMware" if inbox else "Solarflare",
+   "vendor_code"     : "VMW" if inbox else "SFC",
+   "vendor_email"    : "support@vmware.com" if inbox else "support@solarflare.com",
 }
+
+# Version bump is inbox driver only.
+if inbox:
+   sfvmk_identification['version_bump'] = 1
+
 #
 # Build the Driver Module
 #

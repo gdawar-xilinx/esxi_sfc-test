@@ -100,7 +100,6 @@ vib:	imported_code
 	       BUILDTYPE=$(BUILDTYPE) \
 	       BUILD_NUMBER=$(BUILD_NUMBER) \
 	       ESX_SIGN_BINARIES=0 \
-	       SKIP_BIG_BROTHER=1 \
 	       VIBPATH=$(VIBTOOLS) \
 	       BUILDROOT=$(SCONS_TARGET) \
 	       VIRTUAL_GOBUILD=$(VIRTUAL_GOBUILD) \

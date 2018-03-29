@@ -4120,7 +4120,7 @@ sfvmk_getQueueStats(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+  /* This API is not invoked in ESXi 6.5 */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -4146,7 +4146,7 @@ sfvmk_toggleQueueFeature(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+  /* Not Supported */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -4170,7 +4170,7 @@ sfvmk_setQueueTxPriority(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+  /* Not Supported */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
@@ -4194,7 +4194,7 @@ sfvmk_setQueueCoalesceParams(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
+  /* Not Supported */
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

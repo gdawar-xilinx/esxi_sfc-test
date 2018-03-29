@@ -1352,7 +1352,6 @@ done:
 static VMK_ReturnStatus
 sfvmk_quiesceDevice(vmk_Device dev)
 {
-  /* TODO: functinality will be added along with startDevice implementation */
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;

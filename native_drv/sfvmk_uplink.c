@@ -631,7 +631,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   if (pAdapter->ppTxq[qid]->state != SFVMK_TXQ_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "TXQ state[%d] not yet started",
                         pAdapter->ppTxq[qid]->state);
-    vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_INVALID_QUEUE_STATE]);
+    pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_INVALID_QUEUE_STATE]++;
     vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
     goto release_all_pkts;
   }
@@ -652,7 +652,7 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                           "Queue blocked, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
-      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]);
+      pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]++;
       status = VMK_BUSY;
       goto done;
     }
@@ -663,18 +663,18 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                           "Queue full, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
-      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]);
+      pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]++;
       goto done;
     } else if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_transmitPkt failed status %s",
                           vmk_StatusToString(status));
       sfvmk_pktRelease(pAdapter, &compCtx, pkt);
       vmk_AtomicInc64(&pAdapter->txDrops);
-      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]);
+      pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]++;
       continue;
     }
 
-    vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_PKTS]);
+    pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_PKTS]++;
   }
 
   vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
@@ -686,7 +686,7 @@ release_all_pkts:
     sfvmk_pktRelease(pAdapter, &compCtx, pkt);
     vmk_AtomicInc64(&pAdapter->txDrops);
     if (queueIdentified)
-      vmk_AtomicInc64(&pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]);
+      pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_DISCARD]++;
   }
 
 done:
@@ -1040,11 +1040,11 @@ sfvmk_fillTxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
                             &offset, "TxQ[%u]: %s %lu %s %lu %s %lu\n",
                             qIndex,
                             pSfvmkTxqStatsName[SFVMK_TXQ_PKTS],
-                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_PKTS]),
+                            pTxq->stats[SFVMK_TXQ_PKTS],
                             pSfvmkTxqStatsName[SFVMK_TXQ_BYTES],
-                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_BYTES]),
+                            pTxq->stats[SFVMK_TXQ_BYTES],
                             pSfvmkTxqStatsName[SFVMK_TXQ_DISCARD],
-                            vmk_AtomicRead64(&pTxq->stats[SFVMK_TXQ_DISCARD]));
+                            pTxq->stats[SFVMK_TXQ_DISCARD]);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
@@ -1087,11 +1087,11 @@ sfvmk_fillRxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
                             &offset, "RxQ[%u]: %s %lu %s %lu %s %lu\n",
                             qIndex,
                             pSfvmkRxqStatsName[SFVMK_RXQ_PKTS],
-                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_PKTS]),
+                            pRxq->stats[SFVMK_RXQ_PKTS],
                             pSfvmkRxqStatsName[SFVMK_RXQ_BYTES],
-                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_BYTES]),
+                            pRxq->stats[SFVMK_RXQ_BYTES],
                             pSfvmkRxqStatsName[SFVMK_RXQ_DISCARD],
-                            vmk_AtomicRead64(&pRxq->stats[SFVMK_RXQ_DISCARD]));
+                            pRxq->stats[SFVMK_RXQ_DISCARD]);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
@@ -2014,9 +2014,9 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
         vmk_UplinkQueueStart(pAdapter->uplink.handle, queueData[qIndex].qid);
         idx = SFVMK_TXQ_QUEUE_UNBLOCKED;
       }
-      vmk_AtomicInc64(&pAdapter->ppTxq[qIndex]->stats[idx]);
-     }
-   }
+      pAdapter->ppTxq[qIndex]->stats[idx]++;
+    }
+  }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }

@@ -314,7 +314,7 @@ typedef struct sfvmk_txq_s {
   vmk_uint32              reaped;
   vmk_uint32              completed;
 
-  vmk_atomic64            stats[SFVMK_TXQ_MAX_STATS];
+  vmk_uint64              stats[SFVMK_TXQ_MAX_STATS];
 
   /* The last VLAN TCI seen on the queue if FW-assisted tagging is used */
   vmk_uint16              hwVlanTci;
@@ -392,7 +392,7 @@ typedef struct sfvmk_rxq_s {
   vmk_uint32              completed;
   vmk_uint32              refillThreshold;
   vmk_uint32              refillDelay;
-  vmk_atomic64            stats[SFVMK_RXQ_MAX_STATS];
+  vmk_uint64              stats[SFVMK_RXQ_MAX_STATS];
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 

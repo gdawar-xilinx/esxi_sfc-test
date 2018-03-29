@@ -897,7 +897,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   for (i = 0; i < numElems && pktLenLeft > 0; i ++) {
      pSgElem = vmk_PktSgElemGet(pXmitPkt, i);
      if (pSgElem == NULL) {
-       vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_SG_ELEM_GET_FAILED]);
+       pTxq->stats[SFVMK_TXQ_SG_ELEM_GET_FAILED]++;
        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktSgElemGet returned NULL");
        status = VMK_FAILURE;
        goto fail_map;
@@ -905,7 +905,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
 
      elemLength = pSgElem->length;
      if (elemLength > pAdapter->txDmaDescMaxSize) {
-       vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_SG_ELEM_TOO_LONG]);
+       pTxq->stats[SFVMK_TXQ_SG_ELEM_TOO_LONG]++;
        SFVMK_ADAPTER_ERROR(pAdapter, "ElemLength[%u] exceeded max allowed",
                            elemLength);
        status = VMK_FAILURE;
@@ -928,7 +928,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
         SFVMK_ADAPTER_ERROR(pAdapter,"Failed to map elem %lx size %u: %s",
                             pSgElem->addr, elemLength,
                             vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
-        vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]);
+        pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]++;
         goto fail_map;
      }
 
@@ -951,7 +951,7 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   *pTxMapId = id;
   descCount = pTxq->nPendDesc - nPendDescOri;
 
-  vmk_AtomicAdd64(&pTxq->stats[SFVMK_TXQ_BYTES], pktLen);
+  pTxq->stats[SFVMK_TXQ_BYTES] += pktLen;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
                       "non-TSO %u descriptors created, next startID = %u",
@@ -1337,7 +1337,7 @@ sfvmk_hwTsoFixPkt(sfvmk_txq_t *pTxq,
    * contents beyond that will be referring to buffers shared with pOrigPkt */
   status = vmk_PktPartialCopy(pOrigPkt, copyBytes, &pXmitPkt);
   if (status != VMK_OK) {
-    vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_PARTIAL_COPY_FAILED]);
+    pTxq->stats[SFVMK_TXQ_PARTIAL_COPY_FAILED]++;
     SFVMK_ADAPTER_ERROR(pAdapter, "Partial copy[%p] failed[%s], numBytes: %u",
                         pOrigPkt, vmk_StatusToString(status), copyBytes);
     goto done;
@@ -1470,7 +1470,7 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
       SFVMK_ADAPTER_ERROR(pAdapter,"Failed to map pkt %p size %u: %s",
                           pXmitPkt, pktLen,
                           vmk_DMAMapErrorReasonToString(dmaMapErr.reason));
-      vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]);
+      pTxq->stats[SFVMK_TXQ_DMA_MAP_ERROR]++;
       goto fail_map;
     }
 
@@ -1534,7 +1534,7 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
   descCount = pTxq->nPendDesc - nPendDescOri;
   VMK_ASSERT(descCount <= pXmitInfo->dmaDescsEst + EFX_TX_FATSOV2_OPT_NDESCS);
 
-  vmk_AtomicAdd64(&pTxq->stats[SFVMK_TXQ_BYTES], pktLen);
+  pTxq->stats[SFVMK_TXQ_BYTES] += pktLen;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
                       "FATSO done: created %u desc, next startID = %u",
@@ -1705,7 +1705,7 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    /* Post the pSgElemment list. */
    status = sfvmk_txqListPost(pTxq);
    if (status != VMK_OK) {
-     vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_DESC_POST_FAILED]);
+     pTxq->stats[SFVMK_TXQ_DESC_POST_FAILED]++;
      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] post failed: %s",
                          pXmitInfo->pXmitPkt, vmk_StatusToString(status));
    }
@@ -1812,7 +1812,7 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     status = sfvmk_fillXmitInfo(pTxq, pkt, &xmitInfo);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "failed to parse xmit pkt info");
-      vmk_AtomicInc64(&pTxq->stats[SFVMK_TXQ_TSO_PARSING_FAILED]);
+      pTxq->stats[SFVMK_TXQ_TSO_PARSING_FAILED]++;
       goto done;
     }
 

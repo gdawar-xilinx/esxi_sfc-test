@@ -187,6 +187,21 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
       .parmSizes[1] =  sizeof(sfvmk_imgUpdate_t),
 
       .callbackId = SFVMK_CB_IMG_UPDATE
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtHWQStatsCallback,
+      .synchronous = 1,
+      .numParms = 2,
+
+      .parmTypes[0] = VMK_MGMT_PARMTYPE_INOUT,
+      .parmSizes[0] = sizeof(sfvmk_mgmtDevInfo_t),
+
+      .parmTypes[1] = VMK_MGMT_PARMTYPE_INOUT,
+      .parmSizes[1] = sizeof(sfvmk_hwQueueStats_t),
+
+      .callbackId = SFVMK_CB_HW_QUEUE_STATS_GET
   }
 
 };

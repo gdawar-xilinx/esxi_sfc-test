@@ -72,7 +72,7 @@
 #define SFVMK_MC_REBOOT_TIME_OUT_MSEC               11000
 
 /* 21 EVQs, 16 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
-#define SFVMK_MAX_EVQ                 SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT
+#define SFVMK_MAX_EVQ                 (SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT)
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ
 #define SFVMK_MAX_RXQ                 SFVMK_MAX_EVQ
@@ -219,7 +219,7 @@ typedef enum sfvmk_txqStats_e {
 } sfvmk_txqStats_t;
 
 static const char * const pSfvmkTxqStatsName[] = {
-  "tx_pkts",
+  "tx_packets",
   "tx_bytes",
   "tx_invalid_queue_state",
   "tx_queue_busy",
@@ -354,7 +354,7 @@ typedef enum sfvmk_rxqStats_e {
 } sfvmk_rxqStats_t;
 
 static const char * const pSfvmkRxqStatsName[] = {
-  "rx_pkts",
+  "rx_packets",
   "rx_bytes",
   "rx_invalid_desc",
   "rx_invalid_pkt_buffer",
@@ -397,6 +397,12 @@ typedef struct sfvmk_rxq_s {
   vmk_uint64              stats[SFVMK_RXQ_MAX_STATS];
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
+
+/* Estimate hardware queues stats length */
+#define SFVMK_HWQ_STATS_ENTRY_LEN  52
+#define SFVMK_HWQ_STATS_BUFFER_SZ ((SFVMK_MAX_TXQ * SFVMK_TXQ_MAX_STATS) + \
+                                   (SFVMK_MAX_RXQ * SFVMK_RXQ_MAX_STATS)) * \
+                                    SFVMK_HWQ_STATS_ENTRY_LEN
 
 /* Data structure for filter database entry
 ** Note:
@@ -765,6 +771,7 @@ void sfvmk_freeFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdb
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal);
+vmk_uint32 sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter, char *pStart, const char *pEnd);
 
 /* Functions for VPD read/write request handling */
 VMK_ReturnStatus sfvmk_vpdGetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,

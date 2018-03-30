@@ -915,3 +915,115 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback routine to get HW queue stats
+ **
+ ** \param[in]      pCookies       Pointer to cookie
+ ** \param[in]      pEnvelope      Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface      Pointer to device interface structure
+ ** \param[in,out]  pHwQueueStats  Pointer to hw queue stats buffer
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Unknown option or NULL input param
+ **     VMK_NO_MEMORY:      Memory Allocation failed
+ **     VMK_NO_SPACE:       Not enough space available in user buffer
+ **     VMK_WRITE_ERROR:    Copy to user buffer failed
+ **     VMK_FAILURE:        Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
+                           vmk_MgmtEnvelope *pEnvelope,
+                           sfvmk_mgmtDevInfo_t *pDevIface,
+                           sfvmk_hwQueueStats_t *pHwQueueStats)
+{
+  sfvmk_adapter_t   *pAdapter = NULL;
+  const char        *pEnd;
+  char              *pStatsBuffer = NULL;
+  vmk_uint32        bytesCopied = 0;
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pHwQueueStats) {
+    SFVMK_ERROR("pHwQueueStats: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  if (pHwQueueStats->subCmd == SFVMK_MGMT_STATS_GET_SIZE) {
+    /* Set size of the hardware queue stats buffer as requested
+     * by user before allocating memory and requesting the hardware
+     * queue stats data */
+    pHwQueueStats->size = SFVMK_HWQ_STATS_BUFFER_SZ;
+    pDevIface->status = VMK_OK;
+    goto end;
+  } else if (pHwQueueStats->subCmd != SFVMK_MGMT_STATS_GET) {
+    SFVMK_ERROR("Invalid sub command");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (!pHwQueueStats->statsBuffer) {
+    SFVMK_ERROR("statsBuffer: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (pHwQueueStats->size < SFVMK_HWQ_STATS_BUFFER_SZ) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is not sufficient");
+    pDevIface->status = VMK_NO_SPACE;
+    goto freemem;
+  }
+
+  pStatsBuffer = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, SFVMK_HWQ_STATS_BUFFER_SZ);
+  if (pStatsBuffer == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Queue stats memory allocation failed");
+    status = VMK_NO_MEMORY;
+    goto end;
+  }
+
+  vmk_Memset(pStatsBuffer, 0, SFVMK_HWQ_STATS_BUFFER_SZ);
+  pEnd = pStatsBuffer + SFVMK_HWQ_STATS_BUFFER_SZ;
+
+  bytesCopied = sfvmk_requestQueueStats(pAdapter, pStatsBuffer, pEnd);
+  if (bytesCopied == 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_requestQueueStats failed");
+    goto freemem;
+  }
+
+  if ((status = vmk_CopyToUser((vmk_VA)pHwQueueStats->statsBuffer, (vmk_VA)pStatsBuffer,
+                                SFVMK_HWQ_STATS_BUFFER_SZ)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Copy to user failed with error: %s",
+                        vmk_StatusToString(status));
+    pDevIface->status = VMK_WRITE_ERROR;
+    goto freemem;
+  }
+
+  pHwQueueStats->size = bytesCopied;
+  pDevIface->status = VMK_OK;
+
+freemem:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pStatsBuffer);
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

@@ -52,6 +52,7 @@
  ** SFVMK_CB_INTR_MODERATION_REQUEST:  Change Interrupt Moderation settings
  ** SFVMK_CB_NVRAM_REQUEST:            NVRAM operations callback
  ** SFVMK_CB_IMG_UPDATE:               Perform Image Update
+ ** SFVMK_CB_HW_QUEUE_STATS_GET:       Get Rx/Tx hardware queue stats
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -65,6 +66,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_INTR_MODERATION_REQUEST,
   SFVMK_CB_NVRAM_REQUEST,
   SFVMK_CB_IMG_UPDATE,
+  SFVMK_CB_HW_QUEUE_STATS_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -419,6 +421,34 @@ typedef struct sfvmk_imgUpdate_s{
   vmk_uint32          size;
 } __attribute__((__packed__)) sfvmk_imgUpdate_t;
 
+/*! \brief Sub command type for HW queue stats
+ **
+ **  SFVMK_MGMT_STATS_GET_SIZE: Sub command to request size of the HW queue stats
+ **
+ **  SFVMK_MGMT_STATS_GET_SIZE: Sub command to request HW queue stats
+ **
+ */
+typedef enum sfvmk_mgmtStatsOps_e {
+  SFVMK_MGMT_STATS_GET_SIZE = 1,
+  SFVMK_MGMT_STATS_GET,
+  SFVMK_MGMT_STATS_INVALID
+} sfvmk_mgmtStatsOps_t;
+
+/*! \brief struct sfvmk_hwQueueStats_s to get
+ **        hardware queues stats
+ **
+ ** statsBuffer[out]   Pointer to Buffer Containing
+ **                    stats
+ **
+ ** size[in,out]       size of the buffer allocated
+ **                    from user
+ **
+ */
+typedef struct sfvmk_hwQueueStats_s{
+  sfvmk_mgmtStatsOps_t subCmd;
+  vmk_uint64           statsBuffer;
+  vmk_uint32           size;
+} __attribute__((__packed__)) sfvmk_hwQueueStats_t;
 
 #ifdef VMKERNEL
 /*!
@@ -497,6 +527,11 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
                                              sfvmk_mgmtDevInfo_t *pDevIface,
                                              sfvmk_imgUpdate_t *pImgUpdate);
 
+VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
+                                            vmk_MgmtEnvelope *pEnvelope,
+                                            sfvmk_mgmtDevInfo_t *pDevIface,
+                                            sfvmk_hwQueueStats_t *pUserStatsBuffer);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -513,6 +548,7 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtIntrModeration NULL
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtImgUpdateCallback NULL
+#define sfvmk_mgmtHWQStatsCallback NULL
 #endif
 
 #endif

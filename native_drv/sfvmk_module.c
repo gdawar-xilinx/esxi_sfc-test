@@ -99,7 +99,7 @@ static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
   vmk_ByteCount maxSize = 0;
-  vmk_HeapAllocationDescriptor allocDesc[21];
+  vmk_HeapAllocationDescriptor allocDesc[22];
   VMK_ReturnStatus status;
 
   allocDesc[0].size = vmk_LogHeapAllocSize();
@@ -196,6 +196,10 @@ sfvmk_calcHeapSize(void)
 
   allocDesc[20].alignment = 0;
   allocDesc[20].count = 1;
+
+  allocDesc[21].size = SFVMK_HWQ_STATS_BUFFER_SZ;
+  allocDesc[21].alignment = 0;
+  allocDesc[21].count = 1;
 
   status = vmk_HeapDetermineMaxSize(allocDesc,
                                     sizeof(allocDesc) / sizeof(allocDesc[0]),

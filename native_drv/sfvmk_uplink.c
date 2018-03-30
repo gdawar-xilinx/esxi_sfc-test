@@ -5346,3 +5346,157 @@ done:
 
   return status;
 }
+
+/*! \brief Fill the buffer with a Rx/Tx queue stats
+**         lock is already taken.
+**
+** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
+** \param[out] ppCurr      Pointer to current position in stats buffer
+** \param[in]  pEnd        Pointer to end position of stats buffer
+** \param[in]  qIndex      Queue Index
+** \param[in]  isRxQueue   VMK_TRUE if called for a rx queue
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
+*/
+static VMK_ReturnStatus
+sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
+                          const char *pEnd, vmk_uint16 qIndex, vmk_Bool isRxQueue)
+{
+  char *pHdr = NULL;
+  char **ppStatsName = NULL;
+  vmk_uint64 *pStatsVal = NULL;
+  vmk_ByteCount offset = 0;
+  vmk_uint32 i, statsCounts = 0;
+  vmk_uint32 maxStats;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (isRxQueue) {
+    pStatsVal = &pAdapter->ppRxq[qIndex]->stats;
+    ppStatsName = (char **)pSfvmkRxqStatsName;
+    pHdr = "RxQ[%u]:\n";
+    maxStats = SFVMK_RXQ_MAX_STATS;
+  } else {
+    pStatsVal = &pAdapter->ppTxq[qIndex]->stats;
+    ppStatsName = (char **)pSfvmkTxqStatsName;
+    pHdr = "TxQ[%u]:\n";
+    maxStats = SFVMK_TXQ_MAX_STATS;
+  }
+
+  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset, pHdr, qIndex);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  *ppCurr += offset;
+
+  for (i = 0; i < maxStats; i++ ) {
+    status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
+                              &offset, " %-30s %-22lu",
+                              ppStatsName[i],
+                              pStatsVal[i]);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+    *ppCurr += offset;
+    statsCounts++;
+
+    if ((statsCounts <= 1) && (i != (maxStats - 1)))
+      continue;
+
+    status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset, "\n");
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+    *ppCurr += offset;
+    statsCounts = 0;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+
+/*! \brief Fill the buffer with per Rx/Tx queue stats
+**
+** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
+** \param[out] pStart    Pointer to starting position in stats buffer
+** \param[in]  pEnd      Pointer to end position of stats buffer
+**
+** \return: Number of bytes written [success] 0 [failure]
+*/
+vmk_uint32
+sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter,
+                         char            *pStart,
+                         const char      *pEnd)
+{
+  vmk_uint16 maxRxQueues;
+  vmk_uint16 maxTxQueues;
+  vmk_uint16 qIndex;
+  vmk_ByteCount offset = 0;
+  char *pCurr = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  vmk_MutexLock(pAdapter->lock);
+  pCurr = pStart;
+  maxRxQueues = sfvmk_getMaxRxHardwareQueues(pAdapter);
+  maxTxQueues = sfvmk_getMaxTxHardwareQueues(pAdapter);
+
+  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
+                            &offset, "  -- Per Hardware Queue Statistics\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pCurr += offset;
+
+  for (qIndex = 0; qIndex < maxRxQueues; qIndex++) {
+    status = sfvmk_requestAllQueueStats(pAdapter, &pCurr, pEnd, qIndex, VMK_TRUE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillRxQueueStats failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+  status = vmk_StringFormat(pCurr, (pEnd - pCurr), &offset, "\n");
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  pCurr += offset;
+
+  for (qIndex = 0; qIndex < maxTxQueues; qIndex++) {
+    status = sfvmk_requestAllQueueStats(pAdapter, &pCurr, pEnd, qIndex, VMK_FALSE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillTxQueueStats failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+
+done:
+  vmk_MutexUnlock(pAdapter->lock);
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return (pCurr - pStart);
+}
+

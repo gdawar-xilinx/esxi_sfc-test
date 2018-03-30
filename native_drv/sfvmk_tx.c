@@ -695,8 +695,6 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
 {
   struct sfvmk_adapter_s *pAdapter = pTxq->pAdapter;
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
-
   if (VMK_UNLIKELY(pTxq->state != SFVMK_TXQ_STATE_STARTED)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ state[%d]", pTxq->state);
     goto done;
@@ -708,7 +706,7 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
   sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+  return;
 }
 
 /*! \brief called when a tx completion event comes from the fw.
@@ -724,8 +722,6 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
 {
   unsigned int completed;
   struct sfvmk_adapter_s *pAdapter = pTxq->pAdapter;
-
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   if (VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE) &&
      (pEvq != pAdapter->ppEvq[0])) {
@@ -775,7 +771,7 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
   }
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+  return;
 }
 
 /*! \brief Estimate the number of tx descriptors required for this packet

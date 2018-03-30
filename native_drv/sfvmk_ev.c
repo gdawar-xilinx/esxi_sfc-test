@@ -93,8 +93,6 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   const efx_nic_cfg_t *pNicCfg;
   VMK_ReturnStatus status;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
-
   VMK_ASSERT_NOT_NULL(pEvq);
 
   vmk_SpinlockAssertHeldByWorld(pEvq->lock);
@@ -153,11 +151,9 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
     sfvmk_evqComplete(pEvq);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return (pEvq->rxDone >= pEvq->rxBudget);
 
 fail:
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return VMK_TRUE;
 }
 
@@ -183,7 +179,6 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
     .type = SFVMK_PKT_COMPLETION_NETPOLL,
   };
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
   pEvq = (sfvmk_evq_t *)arg;
   VMK_ASSERT_NOT_NULL(pEvq);
 
@@ -229,8 +224,6 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   status = (pEvq->txDone >= SFVMK_EV_BATCH);
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ, "txDone[%u]",
-                                pEvq->txDone);
   return status;
 }
 
@@ -545,8 +538,6 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
-
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
     status = VMK_BAD_PARAM;
@@ -581,7 +572,6 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 done:
   vmk_SpinlockUnlock(pEvq->lock);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return status;
 }
 
@@ -599,8 +589,6 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
   sfvmk_pktCompCtx_t compCtx = {
     .type = SFVMK_PKT_COMPLETION_NETPOLL,
   };
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
 
   VMK_ASSERT_NOT_NULL(pEvq);
 
@@ -631,7 +619,6 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
 done:
   vmk_SpinlockUnlock(pTxq->lock);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return;
 }
 

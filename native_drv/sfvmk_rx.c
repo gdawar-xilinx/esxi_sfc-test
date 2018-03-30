@@ -425,8 +425,6 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   vmk_PktHandle *pPkt = NULL;
   vmk_SgElem elem;
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
-
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if ((pRxDesc == NULL) || (qIndex >= pAdapter->numRxqsAllocated)) {
@@ -474,7 +472,6 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   pRxDesc->pPkt = NULL;
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
   return;
 }
 
@@ -497,8 +494,6 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   VMK_ReturnStatus status;
   vmk_VA pFrameVa;
   vmk_Bool isRxCsumEnabled = VMK_FALSE;
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
 
   VMK_ASSERT_NOT_NULL(pRxq);
 
@@ -633,7 +628,6 @@ discard_pkt:
   if (level < pRxq->refillThreshold)
     sfvmk_rxqFill(pRxq, pCompCtx);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_RX);
   return;
 }
 
@@ -661,8 +655,6 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   vmk_uint32 mblkAllocSize;
   vmk_uint32 headroom;
   vmk_uint32 id;
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
 
   VMK_ASSERT_NOT_NULL(pRxq);
 
@@ -773,7 +765,6 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
                       "No of pushed buffer = %u", pRxq->pushed);
 
 done:
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_RX);
   return;
 }
 

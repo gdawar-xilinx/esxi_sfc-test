@@ -535,6 +535,41 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
                           "rx_desc_size: %u", pRxDesc->size);
     }
 
+    if (pRxq->index >= sfvmk_getRSSQStartIndex(pAdapter))
+    {
+      vmk_PktRssType rssType = VMK_PKT_RSS_TYPE_NONE;
+      vmk_uint32 rssHash;
+
+      /* Note: For tunneled packets RSS is performed on inner
+       * headers so for those packets these fields should refer
+       * to the inner header protocol fields. */
+      if (pRxDesc->flags & EFX_PKT_IPV4) {
+        if (pRxDesc->flags & EFX_PKT_TCP)
+          rssType = VMK_PKT_RSS_TYPE_IPV4_TCP;
+        else if (pRxDesc->flags & EFX_PKT_UDP)
+          rssType = VMK_PKT_RSS_TYPE_IPV4_UDP;
+        else
+          rssType = VMK_PKT_RSS_TYPE_IPV4;
+      } else if (pRxDesc->flags & EFX_PKT_IPV6) {
+        if (pRxDesc->flags & EFX_PKT_TCP)
+          rssType = VMK_PKT_RSS_TYPE_IPV6_TCP;
+        else if (pRxDesc->flags & EFX_PKT_UDP)
+          rssType = VMK_PKT_RSS_TYPE_IPV6_UDP;
+        else
+          rssType = VMK_PKT_RSS_TYPE_IPV6;
+      }
+
+      rssHash = efx_pseudo_hdr_hash_get(pRxq->pCommonRxq, EFX_RX_HASHALG_TOEPLITZ,
+                                        (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt));
+
+      status = vmk_PktRssHashSet(pPkt, rssHash, rssType);
+      if (VMK_UNLIKELY(status != VMK_OK)) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktRssHashSet failed status: %s",
+                            vmk_StatusToString(status));
+        pRxq->stats[SFVMK_RXQ_RSS_HASH_FAILED]++;
+      }
+    }
+
     /* Initialize the pkt len for vmk_PktPushHeadroom to work */
     vmk_PktFrameLenSet(pPkt, pRxDesc->size);
 

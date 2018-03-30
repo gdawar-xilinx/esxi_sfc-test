@@ -349,6 +349,7 @@ typedef enum sfvmk_rxqStats_e {
   SFVMK_RXQ_INVALID_FRAME_SZ,
   SFVMK_RXQ_INVALID_PROTO,
   SFVMK_RXQ_DISCARD,
+  SFVMK_RXQ_RSS_HASH_FAILED,
   SFVMK_RXQ_MAX_STATS
 } sfvmk_rxqStats_t;
 
@@ -365,6 +366,7 @@ static const char * const pSfvmkRxqStatsName[] = {
   "rx_invalid_frame_sz",
   "rx_invalid_proto",
   "rx_discard",
+  "rx_rsshash_failed",
   "rx_max_stats"
 };
 

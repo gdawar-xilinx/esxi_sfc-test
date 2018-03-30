@@ -5377,12 +5377,12 @@ sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   if (isRxQueue) {
-    pStatsVal = &pAdapter->ppRxq[qIndex]->stats;
+    pStatsVal = (vmk_uint64 *)&pAdapter->ppRxq[qIndex]->stats;
     ppStatsName = (char **)pSfvmkRxqStatsName;
     pHdr = "RxQ[%u]:\n";
     maxStats = SFVMK_RXQ_MAX_STATS;
   } else {
-    pStatsVal = &pAdapter->ppTxq[qIndex]->stats;
+    pStatsVal = (vmk_uint64 *)&pAdapter->ppTxq[qIndex]->stats;
     ppStatsName = (char **)pSfvmkTxqStatsName;
     pHdr = "TxQ[%u]:\n";
     maxStats = SFVMK_TXQ_MAX_STATS;

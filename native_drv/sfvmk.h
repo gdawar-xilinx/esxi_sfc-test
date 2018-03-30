@@ -89,11 +89,7 @@ typedef enum sfvmk_logLevel_e {
 
 #define SFVMK_DEBUG_ALL (sfvmk_debugMask_t)(-1)
 
-#ifdef VMX86_DEBUG
-#define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_DBG
-#else
 #define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_INFO
-#endif
 
 #ifdef VMX86_DEBUG
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \

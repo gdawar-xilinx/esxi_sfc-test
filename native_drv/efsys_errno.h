@@ -43,7 +43,7 @@
 #define EINTR       VMK_WAIT_INTERRUPTED
 #define EFBIG       VMK_LIMIT_EXCEEDED
 #define ENODEV      VMK_INVALID_TARGET
-#define ENOTACTIVE  VMK_NOT_READY /* TBD : Check if this is the correct mapping */
+#define ENOTACTIVE  VMK_NOT_READY
 #define EACCES      VMK_NO_ACCESS
 #define EDEADLK     VMK_RANK_VIOLATION
 #define EMSGSIZE    VMK_MESSAGE_TOO_LONG

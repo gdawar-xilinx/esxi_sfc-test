@@ -195,7 +195,7 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
       return VMK_UPLINK_CABLE_TYPE_DA;
   }
 
-  /* TBD: -Bug72898- Cable type could not get detected, lookup into quirk table */
+  /* TODO: Bug72898: Cable type could not get detected, lookup into quirk table */
 
   return VMK_UPLINK_CABLE_TYPE_OTHER;
 }
@@ -261,7 +261,7 @@ vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter)
       (1 << SFP_A0_COMPLIANCE_1000BASE_T))
     return VMK_UPLINK_CABLE_TYPE_TP;
 
-  /* TBD: Cable type could not get detected, lookup into quirk table */
+  /* TODO: Cable type could not get detected, lookup into quirk table */
 
   return VMK_UPLINK_CABLE_TYPE_OTHER;
 }

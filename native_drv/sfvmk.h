@@ -31,9 +31,6 @@
 #include <lib/vmkapi_types.h>
 
 /* Constants/Defines */
-/* Define it to include  Unit test code.
-TBD : Move it to Makefile */
-//#define SFVMK_WITH_UNIT_TESTS
 
 typedef struct sfvmk_modInfo_s {
    vmk_Name           driverName;

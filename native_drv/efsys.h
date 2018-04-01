@@ -442,7 +442,6 @@ typedef struct efsys_bar_s {
             vmk_DelayUsecs(_us);                                        \
         } while (B_FALSE)
 
-/* TBD: VmWare does not provide sleep API, we may need to implement sleep function */
 #define EFSYS_SLEEP     EFSYS_SPIN
 
 /* Timestamps */

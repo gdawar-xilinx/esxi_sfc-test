@@ -190,8 +190,8 @@ sfvmk_calcHeapSize(void)
                                          1, 0, 0, &allocDesc[20].size);
   if (status != VMK_OK) {
     allocDesc[20].size = 0;
-    vmk_WarningMessage("Failed to determine management heap size: status:%s",
-                       vmk_StatusToString(status));
+    SFVMK_ERROR("Failed to determine management heap size: status:%s",
+                 vmk_StatusToString(status));
   }
 
   allocDesc[20].alignment = 0;
@@ -205,8 +205,8 @@ sfvmk_calcHeapSize(void)
                                     sizeof(allocDesc) / sizeof(allocDesc[0]),
                                     &maxSize);
   if (status != VMK_OK) {
-    vmk_WarningMessage("Failed to determine heap max size: status:%s",
-                       vmk_StatusToString(status));
+    SFVMK_ERROR("Failed to determine heap max size: status:%s",
+                 vmk_StatusToString(status));
   }
 
   /* Add 20% more for fragmentation */
@@ -237,7 +237,7 @@ init_module(void)
   /* 2. Heap */
   heapSize = sfvmk_calcHeapSize();
   if (!heapSize) {
-    vmk_WarningMessage("Failed to determine heap max size");
+    SFVMK_ERROR("Failed to determine heap max size");
     goto failed_max_heap_size;
   }
 
@@ -250,7 +250,7 @@ init_module(void)
 
   status = vmk_HeapCreate(&heapProps, &sfvmk_modInfo.heapID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create heap (%x) for sfc_native driver", status);
+     SFVMK_ERROR("Failed to create heap (%x) for sfc_native driver", status);
      goto failed_heap_create;
   }
 
@@ -263,7 +263,7 @@ init_module(void)
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register log component (%x)", status);
+     SFVMK_ERROR("Failed to register log component (%x)", status);
      goto failed_log_register;
   }
 
@@ -273,7 +273,7 @@ init_module(void)
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logThrottledID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register throttled log component (%x)", status);
+     SFVMK_ERROR("Failed to register throttled log component (%x)", status);
      goto failed_throttled_log_register;
   }
 
@@ -283,7 +283,7 @@ init_module(void)
                                 &sfvmk_modInfo.driverName,
                                 &sfvmk_modInfo.lockDomain);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create lock domain (%x)", status);
+     SFVMK_ERROR("Failed to create lock domain (%x)", status);
      goto failed_lock_domain_create;
   }
 
@@ -331,8 +331,8 @@ init_module(void)
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
   if (status != VMK_OK) {
-    vmk_WarningMessage("Initialization of SFC driver failed (%s)",
-                       vmk_StatusToString(status));
+    SFVMK_ERROR("Initialization of SFC driver failed (%s)",
+                 vmk_StatusToString(status));
     goto failed_driver_register;
   }
 

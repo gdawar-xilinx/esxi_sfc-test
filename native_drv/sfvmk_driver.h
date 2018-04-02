@@ -150,6 +150,16 @@ typedef struct sfvmk_txMapping_s {
   vmk_SgElem    sgElem;
 } sfvmk_txMapping_t;
 
+typedef enum {
+   /*TODO: TSO offload type */
+   SFVMK_TX_VLAN   = 1 << 0,
+} sfvmk_offloadType_t;
+
+typedef struct sfvmk_xmitInfo_s {
+   sfvmk_offloadType_t offloadFlag;
+   vmk_PktHandle       *pXmitPkt;
+} sfvmk_xmitInfo_t;
+
 typedef struct sfvmk_txq_s {
   struct sfvmk_adapter_s  *pAdapter;
   /* Lock to synchronize transmit flow with tx completion context */

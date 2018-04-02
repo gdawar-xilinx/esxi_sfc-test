@@ -14,6 +14,9 @@
 #define SFVMK_TXQ_UNBLOCK_LEVEL(n)            (EFX_TXQ_LIMIT(n) / 4)
 /* Number of desc needed for each SG */
 #define SFVMK_TXD_NEEDED(sgSize, maxBufSize)  EFX_DIV_ROUND_UP(sgSize, maxBufSize)
+/* utility macros for VLAN handling */
+#define SFVMK_VLAN_PRIO_SHIFT                 13
+#define SFVMK_VLAN_VID_MASK                   0x0fff
 
 /*! \brief  Allocate resources required for a particular TX queue.
 **
@@ -422,6 +425,7 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   vmk_SpinlockLock(pTxq->lock);
 
+  pTxq->hwVlanTci = 0;
   pTxq->numDesc = pAdapter->numTxqBuffDesc;
   pTxq->ptrMask = pTxq->numDesc - 1;
 
@@ -677,6 +681,9 @@ sfvmk_txDmaDescEstimate(sfvmk_txq_t *pTxq,
      numDesc += SFVMK_TXD_NEEDED(pSge->length, pAdapter->txDmaDescMaxSize);
   }
 
+  /* +1 for VLAN optional descriptor */
+  numDesc++;
+
   /* TODO: handle TSO estimation */
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
                       "Estimated number of DMA desc = %u", numDesc);
@@ -823,6 +830,55 @@ done:
   return status;
 }
 
+/*! \brief check and insert vlan tag in the packet header
+**
+** \param[in]        pTxq        pointer to txq
+** \param[in]        pXmitInfo   pointer to transmit info structure
+** \param[in,out]    pTxMapId    pointer to txMap Id
+**
+** \return: void
+*/
+static void
+sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq,
+                       sfvmk_xmitInfo_t *pXmitInfo,
+                       vmk_uint32 *pTxMapId)
+{
+  vmk_uint16 thisTag = 0;
+  vmk_VlanID vlanId = 0;
+  vmk_VlanPriority vlanPrio = 0;
+  vmk_PktHandle *pkt = pXmitInfo->pXmitPkt;
+  sfvmk_txMapping_t *pTxMap = pTxq->pTxMap;
+  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+
+  if (pXmitInfo->offloadFlag & SFVMK_TX_VLAN) {
+    vlanId = vmk_PktVlanIDGet(pkt);
+    vlanPrio = vmk_PktPriorityGet(pkt);
+
+    thisTag = (vlanId & SFVMK_VLAN_VID_MASK) | (vlanPrio << SFVMK_VLAN_PRIO_SHIFT);
+  }
+
+  if (thisTag != pTxq->hwVlanTci) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                        "vlan_id: %d, prio: %d, tci: %d, hwVlanTci: %d",
+                        vlanId, vlanPrio, thisTag, pTxq->hwVlanTci);
+
+    efx_tx_qdesc_vlantci_create(pTxq->pCommonTxq,
+                                vmk_CPUToBE16(thisTag),
+                                &pTxq->pPendDesc[pTxq->nPendDesc ++]);
+    pTxq->hwVlanTci = thisTag;
+    /* zero tx map array elem for option desc, to make sure completion process
+     * doesn't try to clean-up.
+     */
+    vmk_Memset(&pTxMap[*pTxMapId], 0, sizeof(sfvmk_txMapping_t));
+    *pTxMapId = (*pTxMapId + 1) & pTxq->ptrMask;
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+  return;
+}
+
 /*! \brief post the queue descriptors.
 **
 ** \param[in]  pTxq    pointer to txq
@@ -871,15 +927,14 @@ done:
 /*! \brief fill the transmit buffer descriptor with pkt fragments
 **
 ** \param[in]  pTxq      pointer to txq
-** \param[in]  pkt       packet to be transmitted
+** \param[in]  pXmitInfo pointer to transmit info structure
 **
 ** \return: VMK_OK in case of success, VMK_FAILURE otherwise
 **
 */
-
 VMK_ReturnStatus
 sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
-                           vmk_PktHandle *pkt)
+                           sfvmk_xmitInfo_t *pXmitInfo)
 {
    VMK_ReturnStatus status = VMK_FAILURE;
    sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
@@ -888,12 +943,15 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
    VMK_ASSERT(pTxq->nPendDesc == 0);
 
-   /* TODO: VLAN, CSO and TSO handling */
+   /* VLAN handling */
+   sfvmk_txMaybeInsertTag(pTxq, pXmitInfo, &txMapId);
 
-   status = sfvmk_txNonTsoPkt(pTxq, pkt, &txMapId);
+   /* TODO: CSO and TSO handling */
+
+   status = sfvmk_txNonTsoPkt(pTxq, pXmitInfo->pXmitPkt, &txMapId);
    if (status != VMK_OK) {
      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx failed: %s",
-                         pkt, vmk_StatusToString(status));
+                         pXmitInfo->pXmitPkt, vmk_StatusToString(status));
      goto done;
    }
 
@@ -901,7 +959,7 @@ sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
    status = sfvmk_txqListPost(pTxq);
    if (status != VMK_OK) {
      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] post failed: %s",
-                         pkt, vmk_StatusToString(status));
+                         pXmitInfo->pXmitPkt, vmk_StatusToString(status));
    }
 
 done:
@@ -950,6 +1008,7 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   vmk_uint32 pushed = 0;
   vmk_uint32 nTotalDesc = 0;
   sfvmk_adapter_t *pAdapter = NULL;
+  sfvmk_xmitInfo_t xmitInfo;
 
   VMK_ASSERT_NOT_NULL(pTxq);
   VMK_ASSERT_NOT_NULL(pTxq->pCommonTxq);
@@ -957,6 +1016,18 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+
+  vmk_Memset(&xmitInfo, 0, sizeof(sfvmk_xmitInfo_t));
+  xmitInfo.offloadFlag |= vmk_PktMustVlanTag(pkt) ? SFVMK_TX_VLAN : 0;
+  xmitInfo.pXmitPkt = pkt;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_DBG,
+                      "Xmit start, pkt = %p, TX VLAN offload %s needed, "
+                      "numElems = %d, pktLen = %d", pkt,
+                      xmitInfo.offloadFlag & SFVMK_TX_VLAN ? "" : "not ",
+                      vmk_PktSgArrayGet(pkt)->numElems,
+                      vmk_PktFrameLenGet(pkt));
+
 
   /* Do estimation as early as possible */
   nTotalDesc = sfvmk_txDmaDescEstimate(pTxq, pkt);
@@ -979,7 +1050,7 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
 
   VMK_ASSERT_EQ(pTxq->blocked, VMK_FALSE);
 
-  status = sfvmk_populateTxDescriptor(pTxq, pkt);
+  status = sfvmk_populateTxDescriptor(pTxq, &xmitInfo);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_populateTxDescriptor failed: %s",
                         vmk_StatusToString(status));

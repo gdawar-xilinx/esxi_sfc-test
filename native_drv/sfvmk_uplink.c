@@ -573,6 +573,7 @@ done:
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -607,6 +608,29 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter,"CAP_MULTI_PAGE_SG register failed status: %s",
                         vmk_StatusToString(status));
     goto done;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL NIC configuration ptr");
+    goto done;
+  }
+
+  /* Register capability for VLAN TX Offload support (tag insertion)
+   * Note: only claim VMK_UPLINK_CAP_VLAN_TX_INSERT when hardware has this
+   * capability */
+  if (pNicCfg->enc_hw_tx_insert_vlan_enabled) {
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_VLAN_TX_INSERT, NULL);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_VLAN_TX_INSERT failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+  else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "VMK_UPLINK_CAP_VLAN_TX_INSERT: not supported by hw");
   }
 
 

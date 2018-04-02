@@ -373,6 +373,7 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  pAdapter->txDmaDescMaxSize = pNicCfg->enc_tx_dma_desc_size_max;
   vmk_Memset(&limits, 0, sizeof(limits));
 
   /* Get number of queues supported (this is depend on number of cpus) */

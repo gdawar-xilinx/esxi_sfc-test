@@ -189,24 +189,118 @@ done:
 
 /*! \brief Uplink callback function to transmit pkt
 **
-** \param[in]  cookie     vmk_AddrCookie
+** \param[in]  cookie     pointer to sfvmk_adapter_t
 ** \param[in]  pktList    List of packets to be transmitted
 **
-** \return: VMK_OK on success, VMK_BUSY otherwise.
+** \return: VMK_OK [success]
+** \return: VMK_BUSY when queue busy
+** \return: VMK_FAILURE [failure]
 **
 */
 static VMK_ReturnStatus
 sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_PktHandle *pkt;
+  vmk_UplinkQueueID uplinkQid;
+  vmk_uint32 qid = 0;
+  vmk_uint32 txqStartIndex;
+  vmk_int16 maxRxQueues;
+  vmk_int16 maxTxQueues;
+  VMK_PKTLIST_ITER_STACK_DEF(iter);
+  sfvmk_pktCompCtx_t compCtx = {
+    .type = SFVMK_PKT_COMPLETION_OTHERS,
+  };
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  /* TODO: Add implementation */
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  maxRxQueues = pAdapter->uplink.queueInfo.maxRxQueues;
+  maxTxQueues = pAdapter->uplink.queueInfo.maxTxQueues;
+
+  /* Retrieve the queue id from first packet */
+  pkt = vmk_PktListGetFirstPkt(pktList);
+  if (pkt == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "First packet pointer NULL");
+    goto release_all_pkts;
+  }
+
+  uplinkQid = vmk_PktQueueIDGet(pkt);
+  qid = vmk_UplinkQueueIDVal(uplinkQid);
+  txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+
+  if ((qid < txqStartIndex) || (qid >= (maxTxQueues + maxRxQueues))) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "Invalid QID %d, uplinkQID %p, txqs %d, rxqs %d",
+                        qid, uplinkQid, maxTxQueues, maxRxQueues);
+
+    goto release_all_pkts;
+  }
+
+  /* Cross over the rx queues in shared queue data structure */
+  qid -= txqStartIndex;
+
+  if ((pAdapter->ppTxq == NULL) || (pAdapter->ppTxq[qid] == NULL)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL ppTxq ptr, qid: %d", qid);
+    goto release_all_pkts;
+  }
+
+  vmk_SpinlockLock(pAdapter->ppTxq[qid]->lock);
+
+  if (pAdapter->ppTxq[qid]->state != SFVMK_TXQ_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ state[%d] not yet started",
+                        pAdapter->ppTxq[qid]->state);
+    vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
+    goto release_all_pkts;
+  }
+
+  for (vmk_PktListIterStart(iter, pktList); !vmk_PktListIterIsAtEnd(iter);) {
+    vmk_PktListIterRemovePkt(iter, &pkt);
+
+    if (pkt == NULL) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NULL pkt pointer");
+      continue;
+    }
+
+    if (pAdapter->ppTxq[qid]->blocked) {
+      VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, qid),
+                 "Txq index = %u", qid);
+      vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                          "Queue blocked, returning");
+      vmk_PktListIterInsertPktBefore(iter, pkt);
+      status = VMK_BUSY;
+      goto done;
+    }
+
+    status = sfvmk_transmitPkt(pAdapter->ppTxq[qid], pkt);
+    if(status == VMK_BUSY) {
+      vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                          "Queue full, returning");
+      vmk_PktListIterInsertPktBefore(iter, pkt);
+      goto done;
+    } else if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_transmitPkt failed status %s",
+                          vmk_StatusToString(status));
+      sfvmk_pktRelease(pAdapter, &compCtx, pkt);
+    }
+  }
+
+  vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
+  goto done;
+
+release_all_pkts:
+  vmk_PktListReleaseAllPkts(pktList);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
 }
+ 
 
 /*! \brief Uplink callback function to set MTU
 **
@@ -357,6 +451,7 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
     goto failed_start_io;
   }
 
+
   status = VMK_OK;
 
 failed_quiesce_io:
@@ -496,9 +591,70 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /* Driver supports scatter-gather transmit */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_SG_TX, NULL);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "CAP_SG_TX register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Driver supports scatter-gather entries spanning multiple pages */
+  status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                 VMK_UPLINK_CAP_MULTI_PAGE_SG, NULL);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"CAP_MULTI_PAGE_SG register failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
+}
+
+
+
+/*! \brief function to update the queue state.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  qState   queue state STOPPED or STARTED
+** \param[in]  qIndex   index in to shared queueData structure
+**
+** \return:    Nothing
+**
+*/
+void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
+                             vmk_UplinkQueueState qState, vmk_uint32 qIndex)
+{
+  vmk_UplinkSharedQueueData *queueData;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  queueData = sfvmk_getUplinkTxSharedQueueData(&pAdapter->uplink);
+
+  if (queueData[qIndex].state != qState) {
+    sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
+    if (queueData[qIndex].flags &
+        (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+      queueData[qIndex].state = qState;
+    }
+    sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
+
+    if (queueData[qIndex].flags &
+        (VMK_UPLINK_QUEUE_FLAG_IN_USE|VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
+      if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+        vmk_UplinkQueueStop(pAdapter->uplink.handle, queueData[qIndex].qid);
+      }
+      else {
+        vmk_UplinkQueueStart(pAdapter->uplink.handle, queueData[qIndex].qid);
+      }
+    }
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
 
 /*! \brief Set the driver limit in fw.
@@ -855,7 +1011,6 @@ done:
 /****************************************************************************
  * Utility function to design TX/RX queue layout                            *
  ****************************************************************************/
-#define SFVMK_UPLINK_RXQ_START_INDEX    0
 #define SFVMK_DEFAULT_UPLINK_RXQ        SFVMK_UPLINK_RXQ_START_INDEX
 
 /*! \brief Get number of uplink TXQs
@@ -913,17 +1068,6 @@ static inline vmk_Bool sfvmk_isQueueFree(sfvmk_uplink_t *pUplink, vmk_uint32 qIn
 static inline vmk_uint32 sfvmk_getUplinkRxqStartIndex(sfvmk_uplink_t *pUplink)
 {
   return SFVMK_UPLINK_RXQ_START_INDEX;
-}
-
-/*! \brief Get the start index of uplink TXQs in vmk_UplinkSharedQueueData array
-**
-** \param[in]  pUplink  pointer to uplink structure
-**
-** \return: index from where TXQs is starting in vmk_UplinkSharedQueueData array
-*/
-static inline vmk_uint32 sfvmk_getUplinkTxqStartIndex(sfvmk_uplink_t *pUplink)
-{
-  return (SFVMK_UPLINK_RXQ_START_INDEX + pUplink->queueInfo.maxRxQueues);
 }
 
 /*! \brief Check if given uplink RXQ is a default RXQ

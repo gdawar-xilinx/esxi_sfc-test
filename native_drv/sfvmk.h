@@ -75,6 +75,7 @@ typedef enum sfvmk_logLevel_e {
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
                              SFVMK_DEBUG_UPLINK |                            \
                              SFVMK_DEBUG_EVQ    |                            \
+                             SFVMK_DEBUG_TX     |                            \
                              SFVMK_DEBUG_HW)
 
 #define SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ...)                   \

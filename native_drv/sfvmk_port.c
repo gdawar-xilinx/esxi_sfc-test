@@ -61,7 +61,11 @@ done:
 void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
 {
   vmk_UplinkSharedData *pSharedData = NULL;
+  vmk_UplinkSharedQueueInfo *pQueueInfo = NULL;
   efx_link_mode_t linkMode;
+  vmk_uint32 index = 0;
+  vmk_UplinkQueueState state = VMK_UPLINK_QUEUE_STATE_STOPPED;
+  vmk_Bool blocked = VMK_TRUE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
@@ -112,6 +116,24 @@ void sfvmk_macLinkUpdate(sfvmk_adapter_t *pAdapter)
    * Check will be added along with admin link status capability in uplink.
    * Right now it is safe to call this always as by default admin link status is up */
   vmk_UplinkUpdateLinkState(pAdapter->uplink.handle, &pAdapter->uplink.sharedData.link);
+
+  pQueueInfo = &pAdapter->uplink.queueInfo;
+
+  if (pSharedData->link.state == VMK_LINK_STATE_UP) {
+    state = VMK_UPLINK_QUEUE_STATE_STARTED;
+    blocked = VMK_FALSE;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "state %u blocked %u", state, blocked);
+
+  for (index = 0; index < pQueueInfo->maxTxQueues; index++) {
+    VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
+    vmk_SpinlockLock(pAdapter->ppTxq[index]->lock);
+    pAdapter->ppTxq[index]->blocked = blocked;
+    sfvmk_updateQueueStatus(pAdapter, state, index);
+    vmk_SpinlockUnlock(pAdapter->ppTxq[index]->lock);
+  }
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

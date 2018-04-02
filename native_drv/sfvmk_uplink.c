@@ -371,10 +371,10 @@ done:
 
 /*! \brief uplink callback function to get the cable type
 **
-** \param[in]   cookie     pointer to sfvmk_adapter_t
-** \param[out]  cableType  ptr to cable type
+** \param[in]   cookie      pointer to sfvmk_adapter_t
+** \param[out]  pCableType  ptr to cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
                                            vmk_UplinkCableType *pCableType)
@@ -419,7 +419,7 @@ done:
 ** \param[in]   cookie     pointer to sfvmk_adapter_t
 ** \param[out]  cableType  cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
                                            vmk_UplinkCableType cableType)
@@ -440,10 +440,10 @@ static VMK_ReturnStatus sfvmk_setCableType(vmk_AddrCookie cookie,
 
 /*! \brief uplink callback function to get all cable type supported by interface.
 **
-** \param[in]   cookie     pointer to sfvmk_adapter_t
-** \param[out]  cableType  ptr to cable type
+** \param[in]   cookie      pointer to sfvmk_adapter_t
+** \param[out]  pCableType  ptr to cable type
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 */
 static VMK_ReturnStatus sfvmk_getSupportedCableTypes(vmk_AddrCookie cookie,
                                                      vmk_UplinkCableType *pCableType)
@@ -470,9 +470,9 @@ done:
 
 /*! \brief function to register all driver cap with uplink device.
 **
-** \param[in]  adapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK <success> error code <failure>
+** \return: VMK_OK [success] error code [failure]
 **
 */
 static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)

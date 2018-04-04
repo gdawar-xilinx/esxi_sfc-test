@@ -83,7 +83,7 @@ imported/%:
 
 doc:
 	@$(RM) -rf $(DOXYGEN_TARGET)
-	@mkdir $(DOXYGEN_TARGET)
+	@mkdir -p $(DOXYGEN_TARGET)
 	@cd $(DOXYGEN_TARGET)
 	@doxygen $(ESXI_DOXY_CFG)
 

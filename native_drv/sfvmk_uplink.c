@@ -5366,7 +5366,7 @@ static VMK_ReturnStatus
 sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
                           const char *pEnd, vmk_uint16 qIndex, vmk_Bool isRxQueue)
 {
-  char *pHdr = NULL;
+  const char *pHdr = NULL;
   char **ppStatsName = NULL;
   vmk_uint64 *pStatsVal = NULL;
   vmk_ByteCount offset = 0;

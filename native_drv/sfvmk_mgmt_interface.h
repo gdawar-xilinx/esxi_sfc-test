@@ -53,6 +53,7 @@
  ** SFVMK_CB_NVRAM_REQUEST:            NVRAM operations callback
  ** SFVMK_CB_IMG_UPDATE:               Perform Image Update
  ** SFVMK_CB_HW_QUEUE_STATS_GET:       Get Rx/Tx hardware queue stats
+ ** SFVMK_CB_DEBUG_CONTROL_REQUEST:    Get/Set driver debug mask at runtime
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -67,6 +68,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_NVRAM_REQUEST,
   SFVMK_CB_IMG_UPDATE,
   SFVMK_CB_HW_QUEUE_STATS_GET,
+  SFVMK_CB_DEBUG_CONTROL_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -450,6 +452,52 @@ typedef struct sfvmk_hwQueueStats_s{
   vmk_uint32           size;
 } __attribute__((__packed__)) sfvmk_hwQueueStats_t;
 
+/* Structure and macros for logging */
+typedef enum sfvmk_mgmtDebugMask_e {
+  SFVMK_MGMT_DEBUG_DRIVER = 1 << 0,
+  SFVMK_MGMT_DEBUG_UTILS  = 1 << 1,
+  SFVMK_MGMT_DEBUG_MGMT   = 1 << 2,
+  SFVMK_MGMT_DEBUG_UPLINK = 1 << 3,
+  SFVMK_MGMT_DEBUG_RSS    = 1 << 4,
+  SFVMK_MGMT_DEBUG_INTR   = 1 << 5,
+  SFVMK_MGMT_DEBUG_HW     = 1 << 6,
+  SFVMK_MGMT_DEBUG_TX     = 1 << 7,
+  SFVMK_MGMT_DEBUG_RX     = 1 << 8,
+  SFVMK_MGMT_DEBUG_EVQ    = 1 << 9,
+  SFVMK_MGMT_DEBUG_PORT   = 1 << 10,
+  SFVMK_MGMT_DEBUG_MCDI   = 1 << 11,
+  SFVMK_MGMT_DEBUG_FILTER = 1 << 12,
+  SFVMK_MGMT_DEBUG_COMMON_CODE  = 1 << 13
+} sfvmk_mgmtDebugMask_t;
+
+#define SFVMK_MGMT_DEBUG_ALL (SFVMK_MGMT_DEBUG_DRIVER      | \
+                              SFVMK_MGMT_DEBUG_UTILS       | \
+                              SFVMK_MGMT_DEBUG_MGMT        | \
+                              SFVMK_MGMT_DEBUG_UPLINK      | \
+                              SFVMK_MGMT_DEBUG_RSS         | \
+                              SFVMK_MGMT_DEBUG_INTR        | \
+                              SFVMK_MGMT_DEBUG_HW          | \
+                              SFVMK_MGMT_DEBUG_TX          | \
+                              SFVMK_MGMT_DEBUG_RX          | \
+                              SFVMK_MGMT_DEBUG_EVQ         | \
+                              SFVMK_MGMT_DEBUG_PORT        | \
+                              SFVMK_MGMT_DEBUG_MCDI        | \
+                              SFVMK_MGMT_DEBUG_FILTER      | \
+                              SFVMK_MGMT_DEBUG_COMMON_CODE)
+
+/*! \brief struct sfvmk_debugControl_s to control
+ **        the debug mask runtime
+ **
+ ** type[in]      Command type (get/set)
+ **
+ ** mask[in,out]  Debug mask
+ **
+ */
+typedef struct sfvmk_debugControl_s {
+  sfvmk_mgmtDevOps_t    type;
+  sfvmk_mgmtDebugMask_t mask;
+} sfvmk_debugControl_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -532,6 +580,11 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
                                             sfvmk_mgmtDevInfo_t *pDevIface,
                                             sfvmk_hwQueueStats_t *pUserStatsBuffer);
 
+VMK_ReturnStatus sfvmk_mgmtDebugCtrlCallback(vmk_MgmtCookies *pCookies,
+                                            vmk_MgmtEnvelope *pEnvelope,
+                                            sfvmk_mgmtDevInfo_t *pDevIface,
+                                            sfvmk_debugControl_t *pDbgCtrl);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -549,6 +602,7 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtImgUpdateCallback NULL
 #define sfvmk_mgmtHWQStatsCallback NULL
+#define sfvmk_mgmtDebugCtrlCallback NULL
 #endif
 
 #endif

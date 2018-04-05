@@ -30,7 +30,7 @@
 #define SFVMK_NETQ_COUNT_DEFAULT 8
 
 /* Default number of RSSQ supported */
-#define SFVMK_RSSQ_COUNT_DEFAULT 4
+#define SFVMK_RSSQ_COUNT_DEFAULT 0
 
 /* Initialize module params with default values */
 sfvmk_modParams_t modParams = {
@@ -46,8 +46,8 @@ VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
                    "NetQ count(includes defQ) [Min:1 Max:16 Default:8]"
                    "(invalid value sets netQCount to default value(8))");
 VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
-                   "RSSQ count [Min:1 (RSS disable) Max:4 Default:4]"
-                   "(Invalid value sets rssQCount to default value(4))");
+                   "RSSQ count [Min:1 (RSS disable) Max:4 Default:RSS disable]"
+                   "(invalid value of rssQCount disables RSS");
 VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
                    "Enable / disable vxlan offload "
                    "[0:Disable, 1:Enable (default)]");

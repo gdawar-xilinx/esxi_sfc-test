@@ -173,6 +173,8 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 
 #define EFSYS_OPT_RX_PACKED_STREAM 0
 
+#define EFSYS_OPT_FW_SUBVARIANT_AWARE 0
+
 /* Memory Allocation/Deallocation */
 typedef vmk_IOA  efsys_dma_addr_t;
 #define SFVMK_UNREFERENCED_LOCAL_VARIABLE(x)  (void)(x)

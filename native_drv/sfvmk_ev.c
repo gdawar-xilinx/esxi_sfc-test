@@ -1094,6 +1094,9 @@ failed_evq_init:
   while (qIndex > 0)
     sfvmk_evqFini(pAdapter, --qIndex);
 
+  vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->ppEvq);
+  pAdapter->ppEvq = NULL;
+
 failed_evq_alloc:
   pAdapter->numEvqsAllocated = 0;
 

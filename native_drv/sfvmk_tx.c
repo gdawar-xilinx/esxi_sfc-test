@@ -725,8 +725,8 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
 
   if (VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE) &&
      (pEvq != pAdapter->ppEvq[0])) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "System in panic state, returning");
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "System in panic state, returning");
     goto done;
   }
 
@@ -753,9 +753,9 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
     vmk_Memset(pTxMap, 0, sizeof(sfvmk_txMapping_t));
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "Processed completions from id: %u to %u",
-                      pTxq->completed, pTxq->pending);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "Processed completions from id: %u to %u",
+                         pTxq->completed, pTxq->pending);
 
   pTxq->completed = completed;
 
@@ -823,8 +823,8 @@ sfvmk_txDmaDescEstimate(sfvmk_txq_t *pTxq,
   /* +1 for CSO optional descriptor */
   numDesc++;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "Estimated number of DMA desc = %u", numDesc);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "Estimated number of DMA desc = %u", numDesc);
   return numDesc;
 }
 
@@ -886,9 +886,9 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
   pktLen = pktLenLeft = vmk_PktFrameLenGet(pXmitPkt);
   numElems = vmk_PktSgArrayGet(pXmitPkt)->numElems;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "Start creating non-TSO desc, pXmitPkt=%p, "
-                      "numElems=%d, startID=%d", pXmitPkt, numElems, startID);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "Start creating non-TSO desc, pXmitPkt=%p, "
+                         "numElems=%d, startID=%d", pXmitPkt, numElems, startID);
 
   for (i = 0; i < numElems && pktLenLeft > 0; i ++) {
      pSgElem = vmk_PktSgElemGet(pXmitPkt, i);
@@ -928,9 +928,9 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
         goto fail_map;
      }
 
-     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                         "sge[%d] DMA mapped, ioa = %lx, len = %d", i,
-                         mappedAddr.ioAddr, mappedAddr.length);
+     SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                            "sge[%d] DMA mapped, ioa = %lx, len = %d", i,
+                            mappedAddr.ioAddr, mappedAddr.length);
 
      pTxMap[id].sgElem.ioAddr = mappedAddr.ioAddr;
      pTxMap[id].sgElem.length = mappedAddr.length;
@@ -949,9 +949,9 @@ sfvmk_txNonTsoPkt(sfvmk_txq_t *pTxq,
 
   pTxq->stats[SFVMK_TXQ_BYTES] += pktLen;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "non-TSO %u descriptors created, next startID = %u",
-                      descCount, id);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "non-TSO %u descriptors created, next startID = %u",
+                         descCount, id);
 
   status = VMK_OK;
   goto done;
@@ -1001,9 +1001,9 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq,
 
     thisTag = (vlanId & SFVMK_VLAN_VID_MASK) | (vlanPrio << SFVMK_VLAN_PRIO_SHIFT);
 
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "vlan_id: %d, prio: %d, tci: %d, hwVlanTci: %d",
-                        vlanId, vlanPrio, thisTag, pTxq->hwVlanTci);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "vlan_id: %d, prio: %d, tci: %d, hwVlanTci: %d",
+                           vlanId, vlanPrio, thisTag, pTxq->hwVlanTci);
 
     if (thisTag == pTxq->hwVlanTci) {
         goto done;
@@ -1017,8 +1017,8 @@ sfvmk_txMaybeInsertTag(sfvmk_txq_t *pTxq,
   }
   else {
     if (pTxq->hwVlanTci != 0) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                          "clear sticky desc for non-tagged traffic");
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                             "clear sticky desc for non-tagged traffic");
       efx_tx_qdesc_vlantci_create(pTxq->pCommonTxq, 0,
                                   &pTxq->pPendDesc[pTxq->nPendDesc ++]);
       pTxq->hwVlanTci = 0;
@@ -1197,9 +1197,9 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
   totalHdrLen = pTcpHdr->pHdrEntry->nextHdrOffset;
 
   if (firstSgLen < totalHdrLen) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "Pkt headers are fragmented, headerLen = %u, first SG len = %u",
-                        totalHdrLen, firstSgLen);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "Pkt headers are fragmented, headerLen = %u, first SG len = %u",
+                           totalHdrLen, firstSgLen);
     pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_HEADER;
   }
 
@@ -1208,17 +1208,17 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
    */
   if (firstSgLen == totalHdrLen) {
     pXmitInfo->dmaDescsEst -= 1;
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "Estimated number of DMA desc adjusted to %u",
-                         pXmitInfo->dmaDescsEst);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "Estimated number of DMA desc adjusted to %u",
+                           pXmitInfo->dmaDescsEst);
   }
 
   /* Check if the number of desc is beyond limit */
   if (pXmitInfo->dmaDescsEst > SFVMK_TX_TSO_DMA_DESC_MAX) {
     pXmitInfo->fixFlag |= SFVMK_TSO_DEFRAG_SGES;
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "Estimated no of DMA desc[%u] beyond limit of FATSOv2",
-                        pXmitInfo->dmaDescsEst);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "Estimated no of DMA desc[%u] beyond limit of FATSOv2",
+                           pXmitInfo->dmaDescsEst);
   }
 
   pXmitInfo->headerLen = totalHdrLen;
@@ -1316,9 +1316,9 @@ sfvmk_hwTsoFixPkt(sfvmk_txq_t *pTxq,
           & (SFVMK_TSO_DEFRAG_HEADER | SFVMK_TSO_DEFRAG_SGES))) {
        break;
     }
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "Iteration[%u] copyBytes: %u, copyEst: %u, oldEst: %u",
-                        i, copyBytes, copiedEsti, oldEsti);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "Iteration[%u] copyBytes: %u, copyEst: %u, oldEst: %u",
+                           i, copyBytes, copiedEsti, oldEsti);
   }
 
   /*
@@ -1343,10 +1343,10 @@ sfvmk_hwTsoFixPkt(sfvmk_txq_t *pTxq,
   newNumElems = vmk_PktSgArrayGet(pXmitPkt)->numElems;
   VMK_ASSERT(newNumElems <= numElems);
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "Pkt fixed, pOrigPkt = %p, pXmitPkt = %p,"
-                      "copyBytes = %u, numElems = %u new numElems = %u",
-                      pOrigPkt, pXmitPkt, copyBytes, numElems, newNumElems);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "Pkt fixed, pOrigPkt = %p, pXmitPkt = %p,"
+                         "copyBytes = %u, numElems = %u new numElems = %u",
+                         pOrigPkt, pXmitPkt, copyBytes, numElems, newNumElems);
   status = VMK_OK;
 
 done:
@@ -1367,7 +1367,6 @@ sfvmk_hwTsoOptDesc(sfvmk_txq_t *pTxq,
                    sfvmk_xmitInfo_t *pXmitInfo,
                    vmk_uint32 *pId)
 {
-   sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
    efx_desc_t *desc = &pTxq->pPendDesc[pTxq->nPendDesc];
 
    efx_tx_qdesc_tso2_create(pTxq->pCommonTxq,
@@ -1381,11 +1380,11 @@ sfvmk_hwTsoOptDesc(sfvmk_txq_t *pTxq,
    pTxq->nPendDesc += EFX_TX_FATSOV2_OPT_NDESCS;
    *pId = (*pId + EFX_TX_FATSOV2_OPT_NDESCS) & pTxq->ptrMask;
 
-   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                       "TSO opt desc pktID = %u, outerPktID = %u,"
-                       "seqNumNbo = %u, mss = %u",
-                       pXmitInfo->packetId, pXmitInfo->outerPacketId,
-                       pXmitInfo->seqNumNbo, pXmitInfo->mss);
+   SFVMK_ADAPTER_DEBUG_IO(pTxq->pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                          "TSO opt desc pktID = %u, outerPktID = %u,"
+                          "seqNumNbo = %u, mss = %u",
+                          pXmitInfo->packetId, pXmitInfo->outerPacketId,
+                          pXmitInfo->seqNumNbo, pXmitInfo->mss);
 }
 
 /*! \brief Prepare and dispatch packet using FATSOv2
@@ -1433,12 +1432,12 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
   pktLenLeft = pktLen = vmk_PktFrameLenGet(pXmitPkt);
   numElems = vmk_PktSgArrayGet(pXmitPkt)->numElems;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "TSO desc, pXmitPkt=%p, pOrigPkt=%p, numElems=%u "
-                      "mss=%u, headerLen=%u, pktId=%u, outerPktId=%u, startID=%u",
-                      pXmitPkt, pOrigPkt, numElems, pXmitInfo->mss,
-                      pXmitInfo->headerLen, pXmitInfo->packetId,
-                      pXmitInfo->outerPacketId, startID);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "TSO desc, pXmitPkt=%p, pOrigPkt=%p, numElems=%u "
+                         "mss=%u, headerLen=%u, pktId=%u, outerPktId=%u, startID=%u",
+                         pXmitPkt, pOrigPkt, numElems, pXmitInfo->mss,
+                         pXmitInfo->headerLen, pXmitInfo->packetId,
+                         pXmitInfo->outerPacketId, startID);
 
   /* options desc */
   sfvmk_hwTsoOptDesc(pTxq, pXmitInfo, &id);
@@ -1446,8 +1445,8 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
   /* skip option headers */
   for (i = startID; i < startID + EFX_TX_FATSOV2_OPT_NDESCS; i++) {
     vmk_Memset(&pTxMap[i & pTxq->ptrMask], 0, sizeof(sfvmk_txMapping_t));
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "Skipping txMap[%u] for opt desc", i & pTxq->ptrMask);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "Skipping txMap[%u] for opt desc", i & pTxq->ptrMask);
   }
 
   for (i = 0; i < numElems && pktLenLeft > 0; i++) {
@@ -1470,9 +1469,9 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
       goto fail_map;
     }
 
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "sge[%u] DMA mapped, ioa = %lx, len = %u", i,
-                        mappedAddr.ioAddr, mappedAddr.length);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "sge[%u] DMA mapped, ioa = %lx, len = %u", i,
+                           mappedAddr.ioAddr, mappedAddr.length);
 
     elemBytesLeft = mappedAddr.length;
     if(elemBytesLeft != elemLength) {
@@ -1517,10 +1516,10 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
         pTxMap[id].pOrigPkt = (pXmitPkt == pOrigPkt) ? NULL : pOrigPkt;
       }
 
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                          "txMap[%u]: pXmitPkt=%p, pOrigPkt=%p, ioAddr=0x%lx"
-                          "length=%u",id, pTxMap[id].pXmitPkt, pTxMap[id].pOrigPkt,
-                          pTxMap[id].sgElem.ioAddr, pTxMap[id].sgElem.length);
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                             "txMap[%u]: pXmitPkt=%p, pOrigPkt=%p, ioAddr=0x%lx"
+                             "length=%u",id, pTxMap[id].pXmitPkt, pTxMap[id].pOrigPkt,
+                             pTxMap[id].sgElem.ioAddr, pTxMap[id].sgElem.length);
 
       /* create DMA desc */
       sfvmk_createDmaDesc(pTxq, mappedAddr.ioAddr + offset, descLen, eop, &id);
@@ -1532,9 +1531,9 @@ sfvmk_txHwTso(sfvmk_txq_t *pTxq,
 
   pTxq->stats[SFVMK_TXQ_BYTES] += pktLen;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "FATSO done: created %u desc, next startID = %u",
-                      descCount, id);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "FATSO done: created %u desc, next startID = %u",
+                         descCount, id);
 
   *pTxMapId = id;
   status = VMK_OK;
@@ -1616,8 +1615,8 @@ sfvmk_txCreateCsumDesc(sfvmk_txq_t *pTxq, vmk_Bool isCso, vmk_Bool isEncapCso) {
   vmk_uint16 flags = 0;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_TX);
-  SFVMK_ADAPTER_DEBUG(pTxq->pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "isCso: %u, isEncapCso: %u", isCso, isEncapCso);
+  SFVMK_ADAPTER_DEBUG_IO(pTxq->pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "isCso: %u, isEncapCso: %u", isCso, isEncapCso);
 
   if(isCso)
     flags = EFX_TXQ_CKSUM_TCPUDP | EFX_TXQ_CKSUM_IPV4;
@@ -1767,15 +1766,15 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   if (pAdapter->isTunnelEncapSupported)
     xmitInfo.offloadFlag |= vmk_PktIsInnerLargeTcpPacket(pkt) ? SFVMK_TX_ENCAP_TSO : 0;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                      "Xmit start, pkt = %p, TX VLAN offload %s needed, "
-                      "TSO %sabled ENCAP_TSO %sabled numElems = %u,"
-                      "pktLen = %u", pkt,
-                      xmitInfo.offloadFlag & SFVMK_TX_VLAN ? "" : "not ",
-                      xmitInfo.offloadFlag & SFVMK_TX_TSO  ? "en" : "dis",
-                      xmitInfo.offloadFlag & SFVMK_TX_ENCAP_TSO  ? "en" : "dis",
-                      vmk_PktSgArrayGet(pkt)->numElems,
-                      vmk_PktFrameLenGet(pkt));
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                         "Xmit start, pkt = %p, TX VLAN offload %s needed, "
+                         "TSO %sabled ENCAP_TSO %sabled numElems = %u,"
+                         "pktLen = %u", pkt,
+                         xmitInfo.offloadFlag & SFVMK_TX_VLAN ? "" : "not ",
+                         xmitInfo.offloadFlag & SFVMK_TX_TSO  ? "en" : "dis",
+                         xmitInfo.offloadFlag & SFVMK_TX_ENCAP_TSO  ? "en" : "dis",
+                         vmk_PktSgArrayGet(pkt)->numElems,
+                         vmk_PktFrameLenGet(pkt));
 
   /* Do estimation as early as possible */
   nTotalDesc = sfvmk_txDmaDescEstimate(pTxq, pkt, &xmitInfo);
@@ -1816,8 +1815,8 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     if (xmitInfo.fixFlag & (SFVMK_TSO_DEFRAG_HEADER | SFVMK_TSO_DEFRAG_SGES)) {
       VMK_ASSERT(xmitInfo.offloadFlag & SFVMK_TX_TSO);
 
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                          "Pkt fix needed, type = %u", xmitInfo.fixFlag);
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                             "Pkt fix needed, type = %u", xmitInfo.fixFlag);
 
       status = sfvmk_hwTsoFixPkt(pTxq, &xmitInfo);
       if (status != VMK_OK) {

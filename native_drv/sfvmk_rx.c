@@ -531,8 +531,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
         goto discard_pkt;
       }
       pRxDesc->size = len + pAdapter->rxPrefixSize;
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
-                          "rx_desc_size: %u", pRxDesc->size);
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                             "rx_desc_size: %u", pRxDesc->size);
     }
 
     if (pRxq->index >= sfvmk_getRSSQStartIndex(pAdapter))
@@ -653,8 +653,8 @@ discard_pkt:
       pRxDesc->pPkt = NULL;
     }
 
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO, "completed = %u"
-                        "pending = %u", completed, pRxq->pending);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO, "completed = %u"
+                           "pending = %u", completed, pRxq->pending);
   }
 
   pRxq->completed = completed;
@@ -780,8 +780,8 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     batch = 0;
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
-                      "No of allocated buffer = %u", posted);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                         "No of allocated buffer = %u", posted);
 
   /* Push entries in queue */
   efx_rx_qpush(pRxq->pCommonRxq, pRxq->added, &pRxq->pushed);
@@ -796,8 +796,8 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     pRxq->refillDelay = SFVMK_RXQ_REFILL_DELAY_MS;
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
-                      "No of pushed buffer = %u", pRxq->pushed);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                         "No of pushed buffer = %u", pRxq->pushed);
 
 done:
   return;

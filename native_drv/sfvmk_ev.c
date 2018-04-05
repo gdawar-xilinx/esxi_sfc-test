@@ -145,8 +145,8 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   }
 
   pEvq->rxDone++;
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_IO,
-                      "pending %u, completed %u", pRxq->pending, pRxq->completed);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_IO,
+                         "pending %u, completed %u", pRxq->pending, pRxq->completed);
 
   if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
     sfvmk_evqComplete(pEvq);
@@ -190,8 +190,8 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   /* Process only default transmit queue when system is in panic state */
   if (VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE) &&
      (pEvq != pAdapter->ppEvq[0])) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
-                        "System in panic state, returning");
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "System in panic state, returning");
     status = VMK_FALSE;
     goto done;
   }

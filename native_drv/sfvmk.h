@@ -89,6 +89,8 @@ typedef enum sfvmk_logLevel_e {
 #define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_INFO
 
 #ifdef VMX86_DEBUG
+#define ENABLE_IO_DEBUG_LOG 1
+
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
                              SFVMK_DEBUG_UPLINK |                            \
                              SFVMK_DEBUG_EVQ    |                            \
@@ -96,6 +98,8 @@ typedef enum sfvmk_logLevel_e {
                              SFVMK_DEBUG_RX     |                            \
                              SFVMK_DEBUG_HW)
 #else
+#define ENABLE_IO_DEBUG_LOG 0
+
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
                              SFVMK_DEBUG_UPLINK |                            \
                              SFVMK_DEBUG_HW)
@@ -122,6 +126,14 @@ typedef enum sfvmk_logLevel_e {
                    __FUNCTION__, __LINE__, ##__VA_ARGS__);                   \
     }                                                                        \
   } while (0)
+
+
+#if ENABLE_IO_DEBUG_LOG
+#define  SFVMK_ADAPTER_DEBUG_IO(pAdapter, mask, lvl, fmt, ...)               \
+         SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ##__VA_ARGS__)
+#else
+#define  SFVMK_ADAPTER_DEBUG_IO(pAdapter, mask, lvl, fmt, ...)
+#endif
 
 /* Errors (never masked) */
 #define SFVMK_ADAPTER_ERROR(pAdapter, fmt, ...)                              \

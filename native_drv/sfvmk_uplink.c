@@ -649,8 +649,8 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
                  "Txq index = %u", qid);
       vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
 
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-                          "Queue blocked, returning");
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_IO,
+                             "Queue blocked, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
       pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]++;
       status = VMK_BUSY;
@@ -660,8 +660,8 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
     status = sfvmk_transmitPkt(pAdapter->ppTxq[qid], pkt);
     if(status == VMK_BUSY) {
       vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-                          "Queue full, returning");
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_IO,
+                             "Queue full, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
       pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]++;
       goto done;

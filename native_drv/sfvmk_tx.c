@@ -1790,9 +1790,9 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     pTxq->blocked = VMK_TRUE;
     sfvmk_updateQueueStatus(pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED,
                             pTxq->index);
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_INFO,
-                        "not enough desc entries in txq[%u], stopping the queue",
-                        pTxq->index);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "not enough desc entries in txq[%u], stopping the queue",
+                           pTxq->index);
     status = VMK_BUSY;
     goto done;
   }

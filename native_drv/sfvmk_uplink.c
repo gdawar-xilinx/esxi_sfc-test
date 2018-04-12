@@ -3042,9 +3042,9 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
 failed_net_poll_create:
 failed_valid_queue_data:
   while(queueIndex > queueStartIndex) {
+    queueIndex--;
     vmk_NetPollDestroy(pAdapter->ppEvq[queueIndex]->netPoll);
     pAdapter->ppEvq[queueIndex]->netPoll = NULL;
-    queueIndex--;
   }
 
 done:
@@ -3246,6 +3246,7 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createNetPollForRSSQs failed status: %s",
                           vmk_StatusToString(status));
       sfvmk_disableRSS(pAdapter);
+      goto failed_create_netpoll_rss;
     }
   }
 
@@ -3278,6 +3279,10 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
 failed_create_uplink_txq:
 failed_create_uplink_rxq:
 failed_txqdata_init:
+  if (sfvmk_isRSSEnable(pAdapter))
+    sfvmk_destroyNetPollForRSSQs(pAdapter);
+
+failed_create_netpoll_rss:
   sfvmk_rxqDataFini(pAdapter);
 
 failed_rxqdata_init:

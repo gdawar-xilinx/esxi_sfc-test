@@ -1084,14 +1084,19 @@ sfvmk_rxFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     vmk_SpinlockUnlock(pEvq->lock);
 
     /* Release DMA memory. */
-    sfvmk_freeDMAMappedMem(pRxq->mem.esmHandle,
-                           pRxq->mem.pEsmBase,
-                           pRxq->mem.ioElem.ioAddr,
-                           pRxq->mem.ioElem.length);
+    if (pRxq->mem.pEsmBase) {
+      sfvmk_freeDMAMappedMem(pRxq->mem.esmHandle,
+                             pRxq->mem.pEsmBase,
+                             pRxq->mem.ioElem.ioAddr,
+                             pRxq->mem.ioElem.length);
+    }
 
-    vmk_HeapFree(sfvmk_modInfo.heapID, pRxq->pQueue);
+    if (pRxq->pQueue)
+      vmk_HeapFree(sfvmk_modInfo.heapID, pRxq->pQueue);
+
     /* Destroy the common code receive queue. */
-    efx_rx_qdestroy(pRxq->pCommonRxq);
+    if (pRxq->pCommonRxq)
+      efx_rx_qdestroy(pRxq->pCommonRxq);
   }
 
 done:

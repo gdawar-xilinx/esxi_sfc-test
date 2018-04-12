@@ -69,8 +69,12 @@ ifneq ($(VMW_KC_NAME),)
 endif
 
 # Driver requires common code files, import it from v5 repo
+# Common code would be used from v5 tag for the released version of sfvmk
+# or from the tip of v5 branch or tip of default branch for beta version
 V5_TAG          = default
-V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
+V5_BRANCH       = v4_13_1_sfvmk
+V5_TARGET       = $(V5_BRANCH)
+V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TARGET}
 FILE            = export.files-common
 IMPORTED_FILES  = $(shell cat ${FILE})
 MAKEFILE_LIST   = $(IMPORTED_FILES)
@@ -121,6 +125,4 @@ clean_targets: clean_doxygen
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
 
-cleanall: clean_imported clean_targets
-
-clean:    clean_targets
+clean: clean_imported clean_targets

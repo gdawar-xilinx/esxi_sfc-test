@@ -452,9 +452,21 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
     pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_DMA_UNMAP_FAILED]++;
   }
 
-  /* Convert checksum flags */
-  if (pRxDesc->flags & EFX_CKSUM_TCPUDP)
-    vmk_PktSetCsumVfd(pPkt);
+  if (pRxDesc->flags & EFX_CKSUM_TCPUDP) {
+    if ((pAdapter->isTunnelEncapSupported) &&
+        (pRxDesc->flags & EFX_PKT_TUNNEL) &&
+        ((pRxDesc->flags & EFX_PKT_TCP) ||
+         (pRxDesc->flags & EFX_PKT_UDP))) {
+      /* Mark the given packet as "IP/L4 checksum verified" for
+       * both outer and inner headers of the encapsulated packet.
+       */
+      vmk_PktSetEncapCsumVfd(pPkt);
+    }
+    else {
+      /* Non tunneled traffic - set CSO for outer & the only header */
+      vmk_PktSetCsumVfd(pPkt);
+    }
+  }
 
   if (VMK_UNLIKELY(pAdapter->ppEvq[qIndex]->panicPktList != NULL)) {
     VMK_ASSERT(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE);
@@ -890,7 +902,7 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
                           EFX_RXQ_TYPE_DEFAULT,
                           &pRxq->mem,
                           pRxq->numDesc, 0,
-                          EFX_RXQ_FLAG_NONE,
+                          EFX_RXQ_FLAG_INNER_CLASSES,
                           pEvq->pCommonEvq,
                           &pRxq->pCommonRxq);
   if (status != VMK_OK) {

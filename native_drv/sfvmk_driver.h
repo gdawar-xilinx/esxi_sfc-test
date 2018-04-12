@@ -58,7 +58,7 @@
 #define SFVMK_MAX_FW_IMAGE_SIZE       1843200 /* 1.8 MB */
 
 /* Max number of NetQ supported */
-#define SFVMK_MAX_NETQ_COUNT          16
+#define SFVMK_MAX_NETQ_COUNT          15
 
 /* Max number of RSSQ supported */
 #define SFVMK_MAX_RSSQ_COUNT          4
@@ -71,7 +71,7 @@
  */
 #define SFVMK_MC_REBOOT_TIME_OUT_MSEC               11000
 
-/* 21 EVQs, 16 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
+/* 20 EVQs, 15 (NetQ) + 1 (RSS) for Uplink Qs and 4 for HW RSS Q */
 #define SFVMK_MAX_EVQ                 (SFVMK_MAX_NETQ_COUNT + 1 + SFVMK_MAX_RSSQ_COUNT)
 #define SFVMK_MAX_INTR                SFVMK_MAX_EVQ
 #define SFVMK_MAX_TXQ                 SFVMK_MAX_EVQ

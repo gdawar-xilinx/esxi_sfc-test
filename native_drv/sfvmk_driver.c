@@ -43,7 +43,7 @@ sfvmk_modParams_t modParams = {
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
 VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
-                   "NetQ count(includes defQ) [Min:1 Max:16 Default:8]"
+                   "NetQ count(includes defQ) [Min:1 Max:15 Default:8]"
                    "(invalid value sets netQCount to default value(8))");
 VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
                    "RSSQ count [Min:1 (RSS disable) Max:4 Default:RSS disable]"

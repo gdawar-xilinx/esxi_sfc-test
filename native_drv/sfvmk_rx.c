@@ -559,14 +559,16 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
           rssType = VMK_PKT_RSS_TYPE_IPV6;
       }
 
-      rssHash = efx_pseudo_hdr_hash_get(pRxq->pCommonRxq, EFX_RX_HASHALG_TOEPLITZ,
-                                        (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt));
+      if (rssType != VMK_PKT_RSS_TYPE_NONE) {
+        rssHash = efx_pseudo_hdr_hash_get(pRxq->pCommonRxq, EFX_RX_HASHALG_TOEPLITZ,
+                                          (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt));
 
-      status = vmk_PktRssHashSet(pPkt, rssHash, rssType);
-      if (VMK_UNLIKELY(status != VMK_OK)) {
-        SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktRssHashSet failed status: %s",
-                            vmk_StatusToString(status));
-        pRxq->stats[SFVMK_RXQ_RSS_HASH_FAILED]++;
+        status = vmk_PktRssHashSet(pPkt, rssHash, rssType);
+        if (VMK_UNLIKELY(status != VMK_OK)) {
+          SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktRssHashSet failed status: %s",
+                              vmk_StatusToString(status));
+          pRxq->stats[SFVMK_RXQ_RSS_HASH_FAILED]++;
+        }
       }
     }
 

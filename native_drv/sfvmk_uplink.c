@@ -5366,7 +5366,6 @@ static VMK_ReturnStatus
 sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
                           const char *pEnd, vmk_uint16 qIndex, vmk_Bool isRxQueue)
 {
-  const char *pHdr = NULL;
   char **ppStatsName = NULL;
   vmk_uint64 *pStatsVal = NULL;
   vmk_ByteCount offset = 0;
@@ -5379,16 +5378,16 @@ sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
   if (isRxQueue) {
     pStatsVal = (vmk_uint64 *)&pAdapter->ppRxq[qIndex]->stats;
     ppStatsName = (char **)pSfvmkRxqStatsName;
-    pHdr = "RxQ[%u]:\n";
     maxStats = SFVMK_RXQ_MAX_STATS;
   } else {
     pStatsVal = (vmk_uint64 *)&pAdapter->ppTxq[qIndex]->stats;
     ppStatsName = (char **)pSfvmkTxqStatsName;
-    pHdr = "TxQ[%u]:\n";
     maxStats = SFVMK_TXQ_MAX_STATS;
   }
 
-  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset, pHdr, qIndex);
+  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset,
+                            isRxQueue ?  "RxQ[%u]:\n" : "TxQ[%u]:\n",
+                            qIndex);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));

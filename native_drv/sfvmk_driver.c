@@ -594,7 +594,7 @@ sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
   props.heap = sfvmk_modInfo.heapID;
   props.preallocRequests = VMK_FALSE;
   props.blockingSubmit = VMK_FALSE;
-  props.maxRequests = 8;
+  props.maxRequests = 16;
   props.mutables.minWorlds = 0;
   props.mutables.maxWorlds = 1;
   props.mutables.maxIdleTime = 0;

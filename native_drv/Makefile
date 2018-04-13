@@ -71,7 +71,7 @@ endif
 # Driver requires common code files, import it from v5 repo
 # Common code would be used from v5 tag for the released version of sfvmk
 # or from the tip of v5 branch or tip of default branch for beta version
-V5_TAG          = default
+V5_TAG          = v4_13_1_1000
 V5_BRANCH       = v4_13_1_sfvmk
 V5_TARGET       = $(V5_BRANCH)
 V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TARGET}

@@ -3004,8 +3004,10 @@ sfvmk_rxqDataInit(sfvmk_adapter_t *pAdapter, vmk_ServiceAcctID serviceID)
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_NONE;
     } else {
       pQueueData->supportedFeatures = VMK_UPLINK_QUEUE_FEAT_PAIR |
-                                      VMK_UPLINK_QUEUE_FEAT_DYNAMIC |
-                                      VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
+                                      VMK_UPLINK_QUEUE_FEAT_DYNAMIC;
+
+      if (sfvmk_isRSSEnable(pAdapter))
+        pQueueData->supportedFeatures |= VMK_UPLINK_QUEUE_FEAT_RSS_DYN;
 
       pQueueData->maxFilters = SFVMK_MAX_FILTER / pQueueInfo->maxRxQueues;
     }

@@ -36,7 +36,7 @@ SCONS         = cd $(SRC); $(SRC)/scons/bin/scons
 REL_PWD       = $(shell pwd | $(SED) -e 's,$(SRC),,')
 SC            = $(shell echo *.sc | $(AWK) '{print $$1}')
 MANIFEST      = $(REL_PWD)/$(SC)
-BUILDTYPE     = release
+BUILDTYPE     = beta
 BUILD_NUMBER  = 4598673
 TARGET        = $(CURDIR)/build
 SCONS_TARGET  = $(CURDIR)/.build
@@ -44,6 +44,7 @@ IMPORTED_CODE = $(CURDIR)/imported
 DOXYGEN       = $(CURDIR)/../doxygen
 DOXYGEN_TARGET= $(DOXYGEN)/doc
 ESXI_DOXY_CFG = $(DOXYGEN)/esxi_doxy.cfg
+
 
 # Map VIB acceptance level to canonical default signing-key file base name
 ACCEPT_LEVEL = $(shell grep acceptance-level $(SRC)/$(MANIFEST))
@@ -68,22 +69,33 @@ ifneq ($(VMW_KC_NAME),)
 endif
 
 # Driver requires common code files, import it from v5 repo
-V5_TAG          = default
-V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TAG}
+# Common code would be used from v5 tag for the released version of sfvmk
+# or from the tip of v5 branch or tip of default branch for beta version
+V5_TAG          = v4_13_1_1000
+V5_BRANCH       = v4_13_1_sfvmk
+
+ifeq ($(BUILDTYPE), beta)
+V5_TARGET       = $(V5_BRANCH)
+else
+V5_TARGET       = $(V5_TAG)
+endif
+
+V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TARGET}
 FILE            = export.files-common
 IMPORTED_FILES  = $(shell cat ${FILE})
 MAKEFILE_LIST   = $(IMPORTED_FILES)
 
-all: vib
-
-doc:
-	@mkdir $(DOXYGEN_TARGET)
-	@cd $(DOXYGEN_TARGET)
-	@doxygen $(ESXI_DOXY_CFG)
+all: doc vib
 
 imported/%:
 	@wget -q -O $@ $(V5_URL)/src/driver/common/$(@F)
 	@chmod a-w $@
+
+doc:
+	@$(RM) -rf $(DOXYGEN_TARGET)
+	@mkdir -p $(DOXYGEN_TARGET)
+	@cd $(DOXYGEN_TARGET)
+	@doxygen $(ESXI_DOXY_CFG)
 
 imported_dir:
 	@mkdir -p $(IMPORTED_CODE)
@@ -98,7 +110,6 @@ vib:	imported_code
 	       BUILDTYPE=$(BUILDTYPE) \
 	       BUILD_NUMBER=$(BUILD_NUMBER) \
 	       ESX_SIGN_BINARIES=0 \
-	       SKIP_BIG_BROTHER=1 \
 	       VIBPATH=$(VIBTOOLS) \
 	       BUILDROOT=$(SCONS_TARGET) \
 	       VIRTUAL_GOBUILD=$(VIRTUAL_GOBUILD) \
@@ -110,16 +121,14 @@ clean_imported:
 	@$(RM) -rf $(IMPORTED_CODE)
 	@echo Done.
 
-clean_targets:
+clean_doxygen:
+	@echo Cleaning out doxygen files ...
+	@$(RM) -rf $(DOXYGEN_TARGET)
+	@echo Done.
+
+clean_targets: clean_doxygen
 	@echo Cleaning out build directories ...
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
 
-clean_doc:
-	@echo Cleaning out generated documents ...
-	@$(RM) -rf $(DOXYGEN_TARGET)
-	@echo Done.
-
-cleanall: clean_imported clean_targets clean_doc
-
-clean:    clean_targets clean_doc
+clean: clean_imported clean_targets

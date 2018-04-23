@@ -31,7 +31,7 @@
 #
 
 driver_name    = "sfvmk"
-driver_ver     = "0.2.0.99"
+driver_ver     = "0.2.1.00"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {
@@ -164,9 +164,9 @@ sfvmk_vib_def = {
       # Can use strings to define Boolean values  - see below
       "acceptance-level"	: 'certified',
       # Determines if a live install is permitted
-      "live-install-allowed"	: False,
+      "live-install-allowed"	: True,
       # Determines if a live remove is permitted
-      "live-remove-allowed"	: False,
+      "live-remove-allowed"	: True,
       "cimom-restart"		: False,
       "stateless-ready"		: True,
       "overlay"			: False,

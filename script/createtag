@@ -201,7 +201,9 @@ updateV5Target () {
 pullV5Repo () {
     echo "cloning ${commoncode_repo} repository"
     hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${commoncode_repo}
-    cd ${commoncode_repo} ; hg --noninteractive update -C ${v5_branch} ; cd ${TOP_DIR}
+    cd ${commoncode_repo} 
+    echo "Update repo ${commoncode_repo} to branch ${v5_branch}"
+    hg --noninteractive update -C ${v5_branch} ; cd ${TOP_DIR}
 
     #Required by mmaketag script
     echo "cloning ${distfiles_repo} repository"
@@ -271,6 +273,7 @@ getV5LastTag () {
 }
 
 varifyTag () {
+    echo "Run some sanity check on v5 tag"
     isTopOfTreeTagged ${commoncode_repo}
     if [ $? -eq 1 ] ; then
       echo "Top of the tree for ${commoncode_repo} is tagged"

@@ -63,6 +63,7 @@ winutils_repo=winutils
 host_name="rpm-test1"
 current_host=$(hostname)
 TOP_DIR=$(pwd)
+v5_lasttag=
 
 # Functions
 strstr() {
@@ -134,6 +135,17 @@ checkSfvmkLastTag() {
          fail "Error: $sfvmk_tag already exist !!!"
 
      echo " Tag $sfvmk_tag does not exist in the repo : $sfvmk_repo"
+}
+
+isTopOfTreeTagged () {
+    local repo=$1
+    cd ${repo}
+    tot_tag=$(hg --noninteractive parent | egrep summary: | tail -1); cd ${TOP_DIR}
+    if [[ $tot_tag == *Added\ tag* ]]; then
+      return 1
+    else
+      return 0
+    fi
 }
 
 # Update the sfvmk.sc file with new version number
@@ -218,15 +230,24 @@ removeV5Repo () {
     rm -rf ${TOP_DIR}/${winutils_repo}
 }
 
-handleV5NoTag () {
-
+compareV5Tag () {
     file=${TOP_DIR}/native_drv/Makefile
     existing_tag=$(grep '\(V5_TAG\ *\=\)' $file | awk '{print $3}')
 
     cd ${commoncode_repo}
     last_tag=$(hg --noninteractive parent | egrep summary: | tail -1)
+    cd ${TOP_DIR}
 
     if [[ $last_tag == *$existing_tag* ]]; then
+      return 1
+    else
+      return 0
+    fi
+}
+
+handleV5NoTag () {
+    compareV5Tag
+    if [ $? -eq 1 ]; then
        echo "No changes after the last v5 tag. Continuing ...";
     else
        echo "There have been code commits after the last v5 tag.";
@@ -235,11 +256,56 @@ handleV5NoTag () {
          echo "Continuing without tagging v5"
        else
          removeV5Repo
-         fail "exit"
+         echo "exit"
+         exit
        fi
     fi
 
     cd ${TOP_DIR}
+}
+
+getV5LastTag () {
+   cd ${commoncode_repo}
+   hg --noninteractive log --branch ${v5_branch} --rev "sort(tag(), '-date')" -l 1 --template "{tags}\n" 2>/dev/null
+   cd ${TOP_DIR}
+}
+
+varifyTag () {
+    isTopOfTreeTagged ${commoncode_repo}
+    if [ $? -eq 1 ] ; then
+      echo "Top of the tree for ${commoncode_repo} is tagged"
+      if [ "${v5_tag}" != "" ]; then
+        removeV5Repo
+        echo "Top of tree is tagged, try without --v5_tag option"
+        exit 1
+      fi
+
+      compareV5Tag
+      if [ $? -eq 1 ] ; then
+         isTopOfTreeTagged .
+         if [ $? -eq 1 ] ; then
+           removeV5Repo
+           echo "What are we tagging ? No change found in ${commoncode_repo}, ${sfvmk_repo}"
+           exit 1
+         else
+           handleV5NoTag
+           return
+         fi
+      fi
+
+      v5_lasttag="$(getV5LastTag ${repo})"
+      if [ -z "${v5_lasttag}" ] ; then
+        removeV5Repo
+        echo "Last tag on ${commoncode_repo} not found"
+        exit 1
+      fi
+    else
+      echo "Top of tree is not tagged"
+      if [ "${v5_tag}" == "" ]; then
+        handleV5NoTag
+      fi
+    fi
+
 }
 
 # Return true (via $?) if the working directory contains local changes
@@ -293,12 +359,13 @@ makeTag () {
 
 tagV5Repo () {
     pullV5Repo
-    if [ "${v5_tag}" == "" ]; then
-       handleV5NoTag
-    else
+    varifyTag
+    if [ "${v5_tag}" != "" ]; then
        createV5Tag
     fi
     removeV5Repo
+
+    v5_tag=${v5_lasttag}
 }
 
 bumpVersion () {

@@ -64,6 +64,8 @@ host_name="rpm-test1"
 current_host=$(hostname)
 TOP_DIR=$(pwd)
 v5_lasttag=
+tot_tagged=
+match_v5tag=
 
 # Functions
 strstr() {
@@ -141,11 +143,12 @@ isTopOfTreeTagged () {
     local repo=$1
     cd ${repo}
     tot_tag=$(hg --noninteractive parent | egrep summary: | tail -1); cd ${TOP_DIR}
-    if [[ $tot_tag == *Added\ tag* ]]; then
-      return 1
-    else
-      return 0
+    if [[ "$tot_tag" == *Added\ tag* ]] ; then
+      tot_tagged="yes"
+      return
     fi
+
+    tot_tagged=""
 }
 
 # Update the sfvmk.sc file with new version number
@@ -241,15 +244,16 @@ compareV5Tag () {
     cd ${TOP_DIR}
 
     if [[ $last_tag == *$existing_tag* ]]; then
-      return 1
-    else
-      return 0
+      match_v5tag="yes"
+      return
     fi
+
+    match_v5tag=""
 }
 
 handleV5NoTag () {
     compareV5Tag
-    if [ $? -eq 1 ]; then
+    if [[ ${match_v5tag} == *yes* ]]; then
        echo "No changes after the last v5 tag. Continuing ...";
     else
        echo "There have been code commits after the last v5 tag.";
@@ -273,24 +277,28 @@ getV5LastTag () {
 }
 
 varifyTag () {
-    echo "Run some sanity check on v5 tag"
+    # Find out if common code ToT is tagged or not
     isTopOfTreeTagged ${commoncode_repo}
-    if [ $? -eq 1 ] ; then
+    if [[ ${tot_tagged} == *yes* ]] ; then
       echo "Top of the tree for ${commoncode_repo} is tagged"
       if [ "${v5_tag}" != "" ]; then
-        removeV5Repo
         echo "Top of tree is tagged, try without --v5_tag option"
+        removeV5Repo
         exit 1
       fi
 
+      # Compare v5 tag from ToT with SFVMK makefile
       compareV5Tag
-      if [ $? -eq 1 ] ; then
+      if [[ ${match_v5tag} == *yes* ]] ; then
+         # Find out if SFVMK repo ToT is tagged or not
+         tot_tagged=""
          isTopOfTreeTagged .
-         if [ $? -eq 1 ] ; then
-           removeV5Repo
+         if [[ ${tot_tagged} == *yes* ]] ; then
            echo "What are we tagging ? No change found in ${commoncode_repo}, ${sfvmk_repo}"
+           removeV5Repo
            exit 1
          else
+           echo "repo ${sfvmk_repo} top of tree is not tagged, continue tagging ${sfvmk_repo}"
            handleV5NoTag
            return
          fi

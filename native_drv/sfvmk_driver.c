@@ -404,6 +404,7 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
 {
   efx_drv_limits_t limits;
   VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 maxEvqCount;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
@@ -490,9 +491,35 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
    * In the corner case of RSS queue being created on the last uplink queue
    * one hardware queue can be saved but currently this case is not optimized
    */
-  limits.edl_max_evq_count = MIN((modParams.netQCount +
-                                 (modParams.rssQCount ? (modParams.rssQCount + 1) : 0)),
-                                  MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count));
+  maxEvqCount = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
+
+  /* Compute EVQ count based on netQCount */
+  if (maxEvqCount <= modParams.netQCount) {
+    /* Can't support RSS as available event queue is less than netQCount
+     * also netQCount gets limited by the number of event queue available
+     */
+    modParams.netQCount = maxEvqCount;
+    limits.edl_max_evq_count = maxEvqCount;
+    modParams.rssQCount = 0;
+  } else {
+    limits.edl_max_evq_count = modParams.netQCount;
+  }
+
+  /* Compute EVQ count if RSS support is required */
+  if (modParams.rssQCount) {
+    /* If RSS is enabled there should be atleast three more EVQs to support RSS
+     * break up of 3 additional event queues
+     * 1 event queue corresponding to additional NetQ for RSSQ
+     * 2 event queues as RSS as a feature is useful only when there
+     * are at least 2 RSS Qs */
+    if ((maxEvqCount - limits.edl_max_evq_count) < 3) {
+      modParams.rssQCount = 0;
+    } else {
+      limits.edl_max_evq_count = MIN(maxEvqCount, (limits.edl_max_evq_count +
+                                     modParams.rssQCount + 1));
+    }
+  }
+
   pAdapter->numEvqsDesired = limits.edl_max_evq_count;
 
   limits.edl_min_rxq_count = limits.edl_min_evq_count;

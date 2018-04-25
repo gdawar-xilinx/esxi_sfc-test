@@ -202,21 +202,6 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
       .parmSizes[1] = sizeof(sfvmk_hwQueueStats_t),
 
       .callbackId = SFVMK_CB_HW_QUEUE_STATS_GET
-  },
-
-  {
-      .location = VMK_MGMT_CALLBACK_KERNEL,
-      .callback = sfvmk_mgmtDebugCtrlCallback,
-      .synchronous = 1,
-      .numParms = 2,
-
-      .parmTypes[0] = VMK_MGMT_PARMTYPE_INOUT,
-      .parmSizes[0] = sizeof(sfvmk_mgmtDevInfo_t),
-
-      .parmTypes[1] = VMK_MGMT_PARMTYPE_INOUT,
-      .parmSizes[1] = sizeof(sfvmk_debugControl_t),
-
-      .callbackId = SFVMK_CB_DEBUG_CONTROL_REQUEST
   }
 
 };
@@ -233,7 +218,7 @@ const vmk_MgmtApiSignature sfvmk_mgmtSig = {
     * management APIs will be extended to support compatibility shimming in
     * future versions of VMKAPI.
     */
-   .version = VMK_REVISION_FROM_NUMBERS (1, 0, 0, 10),
+   .version = VMK_REVISION_FROM_NUMBERS (1, 0, 0, 1000),
    /*
     * The name is the name of this interface. The name and vendor,
     * must be globally unique or else initialization will fail.

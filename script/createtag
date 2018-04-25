@@ -139,11 +139,25 @@ checkSfvmkLastTag() {
      echo " Tag $sfvmk_tag does not exist in the repo : $sfvmk_repo"
 }
 
+getLastTag () {
+    local repo=$1
+    local branch=$2
+
+    cd ${repo}
+    hg --noninteractive log --branch ${branch} --rev "sort(tag(), '-date')" -l 1 --template "{tags}\n" 2>/dev/null
+    cd ${TOP_DIR}
+}
+
 isTopOfTreeTagged () {
     local repo=$1
+    local branch=$2
+
     cd ${repo}
-    tot_tag=$(hg --noninteractive parent | egrep summary: | tail -1); cd ${TOP_DIR}
-    if [[ "$tot_tag" == *Added\ tag* ]] ; then
+    tot_summary=$(hg --noninteractive parent | egrep summary: | tail -1); cd ${TOP_DIR}
+
+    tag="$(getLastTag ${repo} ${branch})"
+
+    if [[ $tot_summary == *$tag* ]] ; then
       tot_tagged="yes"
       return
     fi
@@ -204,7 +218,7 @@ updateV5Target () {
 pullV5Repo () {
     echo "cloning ${commoncode_repo} repository"
     hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${commoncode_repo}
-    cd ${commoncode_repo} 
+    cd ${commoncode_repo}
     echo "Update repo ${commoncode_repo} to branch ${v5_branch}"
     hg --noninteractive update -C ${v5_branch} ; cd ${TOP_DIR}
 
@@ -270,15 +284,10 @@ handleV5NoTag () {
     cd ${TOP_DIR}
 }
 
-getV5LastTag () {
-   cd ${commoncode_repo}
-   hg --noninteractive log --branch ${v5_branch} --rev "sort(tag(), '-date')" -l 1 --template "{tags}\n" 2>/dev/null
-   cd ${TOP_DIR}
-}
-
-varifyTag () {
+# Validate if a new v5 tag is required or not.
+varifyV5Tag () {
     # Find out if common code ToT is tagged or not
-    isTopOfTreeTagged ${commoncode_repo}
+    isTopOfTreeTagged ${commoncode_repo} ${v5_branch}
     if [[ ${tot_tagged} == *yes* ]] ; then
       echo "Top of the tree for ${commoncode_repo} is tagged"
       if [ "${v5_tag}" != "" ]; then
@@ -292,7 +301,7 @@ varifyTag () {
       if [[ ${match_v5tag} == *yes* ]] ; then
          # Find out if SFVMK repo ToT is tagged or not
          tot_tagged=""
-         isTopOfTreeTagged .
+         isTopOfTreeTagged . ${sfvmk_branch}
          if [[ ${tot_tagged} == *yes* ]] ; then
            echo "What are we tagging ? No change found in ${commoncode_repo}, ${sfvmk_repo}"
            removeV5Repo
@@ -304,7 +313,7 @@ varifyTag () {
          fi
       fi
 
-      v5_lasttag="$(getV5LastTag ${repo})"
+      v5_lasttag="$(getLastTag ${commoncode_repo} ${v5_branch})"
       if [ -z "${v5_lasttag}" ] ; then
         removeV5Repo
         echo "Last tag on ${commoncode_repo} not found"
@@ -350,7 +359,7 @@ sfvmkHgPush () {
     hg --noninteractive push || true
 }
 
-makeTag () {
+makeSfvmkTag () {
     commitVersion
 
     local answer=""
@@ -370,7 +379,7 @@ makeTag () {
 
 tagV5Repo () {
     pullV5Repo
-    varifyTag
+    varifyV5Tag
     if [ "${v5_tag}" != "" ]; then
        createV5Tag
     fi
@@ -385,12 +394,14 @@ bumpVersion () {
 }
 
 addSfvmkTag () {
-    echo -e "\n\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
+    echo "Updating sfvmk.sc ...."
     versionUpdate
+    liveVibParamUpdate
+    echo "Updating Makefile ...."
     buildtypeupdate
     updateV5Target
-    liveVibParamUpdate
-    makeTag
+    echo -e "\n\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
+    makeSfvmkTag
 }
 
 updateAndTagSfvmk () {

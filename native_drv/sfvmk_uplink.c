@@ -1571,10 +1571,10 @@ sfvmk_messageLevelGet(vmk_AddrCookie cookie, vmk_uint32 *pLevel)
     goto done;
   }
 
-  *pLevel = vmk_LogGetCurrentLogLevel(sfvmk_modInfo.logID);
+  *pLevel = modParams.debugMask;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "Log level: %u", *pLevel);
+                      "Current debug mask: 0x%x", *pLevel);
 
   status = VMK_OK;
 
@@ -1606,13 +1606,10 @@ sfvmk_messageLevelSet(vmk_AddrCookie cookie, vmk_uint32 level)
   }
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "Seting log level to %u", level);
+                      "Setting debug mask to 0x%x", level);
 
-  status = vmk_LogSetCurrentLogLevel(sfvmk_modInfo.logID, level);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_LogSetCurrentLogLevel failed status: %s",
-                        vmk_StatusToString(status));
-  }
+  modParams.debugMask = level;
+  status = VMK_OK;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

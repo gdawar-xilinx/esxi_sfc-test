@@ -73,7 +73,7 @@ endif
 # or from the tip of v5 branch or tip of default branch for beta version
 V5_TAG          = v4_13_1_1000
 V5_BRANCH       = v4_13_1_sfvmk
-V5_TARGET       = $(V5_BRANCH)
+V5_TARGET       = $(V5_TAG)
 V5_URL          = http://source.uk.solarflarecom.com/hg/incoming/v5/rawfile/${V5_TARGET}
 FILE            = export.files-common
 IMPORTED_FILES  = $(shell cat ${FILE})

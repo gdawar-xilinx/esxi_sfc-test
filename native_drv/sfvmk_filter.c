@@ -652,5 +652,6 @@ sfvmk_freeFilterDBHash(sfvmk_adapter_t *pAdapter)
    vmk_HashDeleteAll(pAdapter->filterDBHashTable);
    if (vmk_HashIsEmpty(pAdapter->filterDBHashTable)) {
       vmk_HashRelease(pAdapter->filterDBHashTable);
+      pAdapter->filterDBHashTable = VMK_INVALID_HASH_HANDLE;
    }
 }

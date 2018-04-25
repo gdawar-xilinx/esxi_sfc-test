@@ -3663,7 +3663,9 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   }
 
   vmk_MutexLock(pAdapter->lock);
-  if ((qIndex == pAdapter->uplink.rssUplinkQueue) && pAdapter->rssInit) {
+  if ((qIndex == pAdapter->uplink.rssUplinkQueue) &&
+      (pAdapter->rssInit) &&
+      (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED)) {
 
     efx_mac_filter_default_rxq_clear(pAdapter->pNic);
 
@@ -3984,6 +3986,13 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
   vmk_MutexLock(pAdapter->lock);
 
+  /* Nothing to do if adapter is down already and filters were all gone */
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "Adapter not started, Ignoring filterKey:%u", filterKey);
+    goto done;
+  }
+
   if (qidVal == 0) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                         "Queue ID value is 0, Ignoring filterKey:%u", filterKey);
@@ -4062,6 +4071,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   vmk_MutexLock(pAdapter->lock);
+  VMK_ASSERT(pAdapter->filterDBHashTable != VMK_INVALID_HASH_HANDLE);
 
   if (qidVal == 0) {
     /* Do not commit filters to default queue */

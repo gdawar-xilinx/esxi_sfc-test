@@ -125,4 +125,6 @@ clean_targets: clean_doxygen
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
 
-clean: clean_imported clean_targets
+clean: clean_targets
+
+cleanall: clean_imported clean_targets

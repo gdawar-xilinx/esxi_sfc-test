@@ -10,6 +10,10 @@
       <namespace path="sfvmk.mclog">
          <description>esxcli extension to get/ set the MC logging enable state</description>
       </namespace>
+      <!-- esxcli sfvmk statistics -->
+      <namespace path="sfvmk.stats">
+         <description>esxcli extension to get hardware queue statistics</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -47,6 +51,22 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/solarflare/bin/sfvmkcli --object mclog --set --nic-name $val{nic-name} --enable $val{enable}</execute>
+      </command>
+      <!-- esxcli sfvmk statistics get -->
+      <command path="sfvmk.stats.get">
+         <description>Gets Rx/ Tx hardware queue statistics</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object stats --get --nic-name $val{nic-name}</execute>
       </command>
    </commands>
 </plugin>

@@ -28,6 +28,7 @@
 #include <string.h>
 #include <vmkapi.h>
 #include <getopt.h>
+#include <malloc.h>
 #include <errno.h>
 #include "sfvmk_mgmt_interface.h"
 
@@ -38,17 +39,20 @@ static vmk_MgmtUserHandle mgmtHandle;
 
 typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_MCLOG = 0,
+  SFVMK_OBJECT_STATS,
   SFVMK_OBJECT_MAX
 } sfvmk_objectType_t;
 
 static const char * supportedObjects[] = {
   "mclog",
+  "stats"
 };
 
 /*
  * Functions to handle request for each object
  */
 static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, char cmdOption);
+static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm);
 
 static int sfvmk_findObjectType(const char *obj)
 {
@@ -194,6 +198,9 @@ main(int argc, char **argv)
 
       sfvmk_mcLog(opType, &mgmtParm, optionEnable);
       break;
+    case SFVMK_OBJECT_STATS:
+      sfvmk_hwQueueStats(opType, &mgmtParm);
+      break;
     default:
       printf("ERROR: Unknown object - %s\n", objectName);
   }
@@ -229,4 +236,64 @@ static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, vmk_Bool cmdO
   }
 
   printf("%s", mcLog.state ? "Enabled" : "Disabled");
+}
+
+static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
+{
+  sfvmk_hwQueueStats_t stats;
+  char *pBuffer;
+  int status;
+
+  if (opType != SFVMK_MGMT_DEV_OPS_GET) {
+    printf("ERROR: Set operation not supported\n");
+    goto end;
+  }
+
+  stats.subCmd = SFVMK_MGMT_STATS_GET_SIZE;
+  stats.size = 0;
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_HW_QUEUE_STATS_GET, mgmtParm, &stats);
+  if (status != VMK_OK){
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    goto end;
+  }
+
+  if (mgmtParm->status != VMK_OK) {
+    printf("ERROR: Hardware queue statistics get failed, error 0x%x\n", mgmtParm->status);
+    goto end;
+  }
+
+  if (!stats.size) {
+    printf("ERROR: Invalid statistics buffer size\n");
+    goto end;
+  }
+
+  pBuffer = malloc(stats.size);
+  if (!pBuffer) {
+    printf("ERROR: Unable to allocate memmory for queue statistics buffer\n");
+    goto end;
+  }
+
+  memset(pBuffer, 0, stats.size);
+  stats.statsBuffer = (vmk_uint64)pBuffer;
+  stats.subCmd = SFVMK_MGMT_STATS_GET;
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_HW_QUEUE_STATS_GET, mgmtParm, &stats);
+  if (status != VMK_OK){
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    goto free_buffer;
+  }
+
+  if (mgmtParm->status != VMK_OK) {
+    printf("ERROR: Hardware queue statistics get failed, error 0x%x\n", mgmtParm->status);
+    goto free_buffer;
+  }
+
+  printf("%s\n", pBuffer);
+
+free_buffer:
+  free(pBuffer);
+
+end:
+  return;
 }

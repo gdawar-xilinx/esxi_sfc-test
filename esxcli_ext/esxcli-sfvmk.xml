@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<plugin xmlns="http://www.solarflare.com">
+  <version>1.0.0</version>
+
+   <namespaces>
+      <namespace path="sfvmk">
+         <description>SFVMK esxcli functionality</description>
+      </namespace>
+      <!-- esxcli sfvmk mclog -->
+      <namespace path="sfvmk.mclog">
+         <description>esxcli extension to get/ set the MC logging enable state</description>
+      </namespace>
+   </namespaces>
+
+   <commands>
+      <!-- esxcli sfvmk mclog get -->
+      <command path="sfvmk.mclog.get">
+         <description>Gets MC logging state</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object mclog --get --nic-name $val{nic-name}</execute>
+      </command>
+      <!-- esxcli sfvmk mclog set -->
+      <command path="sfvmk.mclog.set">
+         <description>Sets MC logging state to enable/ disable</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+            <parameter name="enable" type="string" required="true" shortname="e">
+               <description>Enable/ Disable MC logging (Y/ Yes/ N / No).</description>
+            </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object mclog --set --nic-name $val{nic-name} --enable $val{enable}</execute>
+      </command>
+   </commands>
+</plugin>

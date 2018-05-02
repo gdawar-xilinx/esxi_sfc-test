@@ -1,0 +1,18 @@
+This is a user space application to provide esxcli extensions for sfvmk driver.
+
+(1) Run make in user directory esxcli_ext
+(2) Copy  vmware-esx-elxcli<>.vib  to esx host
+(3) On the esx host install the vibs as follows:
+    esxcli software vib install --no-sig-check -v /<pathname>/ vmware-esx-elxcli<>.vib
+(4) Restart hostd: /etc/init.d/hostd restart
+(5) Once restarted esxcli sfvmk namesapce appears and command objects can be invoked,
+    esxcli sfvmk <object-name> <get/set> <-n|--nic-name=str>
+    Ex: esxcli sfvmk mclog get -n vmnic4
+
+    Note: Following command can be used to get <nic-name>
+    #esxcli network nic list
+     Name    PCI Device    Driver  Admin Status  Link Status  Speed  Duplex  MAC Address         MTU  Description
+     ------  ------------  ------  ------------  -----------  -----  ------  -----------------  ----  -------------------------------------------------------
+     vmnic4  0000:05:00.0  sfvmk   Up            Up           10000  Full    00:0f:53:4d:86:d0  1500  Solarflare SFC9220 Ethernet Controller
+     vmnic5  0000:05:00.1  sfvmk   Up            Up           10000  Full    00:0f:53:4d:86:d1  1500  Solarflare SFC9220 Ethernet Controller
+

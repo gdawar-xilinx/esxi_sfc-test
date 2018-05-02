@@ -14,6 +14,10 @@
       <namespace path="sfvmk.stats">
          <description>esxcli extension to get hardware queue statistics</description>
       </namespace>
+      <!-- esxcli sfvmk vpd -->
+      <namespace path="sfvmk.vpd">
+         <description>esxcli extension to get VPD information</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -67,6 +71,22 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/solarflare/bin/sfvmkcli --object stats --get --nic-name $val{nic-name}</execute>
+      </command>
+      <!-- esxcli sfvmk vpd get -->
+      <command path="sfvmk.vpd.get">
+         <description>Gets Vital Product Data</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object vpd --get --nic-name $val{nic-name}</execute>
       </command>
    </commands>
 </plugin>

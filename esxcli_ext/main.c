@@ -40,12 +40,14 @@ static vmk_MgmtUserHandle mgmtHandle;
 typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_MCLOG = 0,
   SFVMK_OBJECT_STATS,
+  SFVMK_OBJECT_VPD,
   SFVMK_OBJECT_MAX
 } sfvmk_objectType_t;
 
 static const char * supportedObjects[] = {
   "mclog",
-  "stats"
+  "stats",
+  "vpd"
 };
 
 /*
@@ -53,6 +55,7 @@ static const char * supportedObjects[] = {
  */
 static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, char cmdOption);
 static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm);
+static void sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *mgmtParm);
 
 static int sfvmk_findObjectType(const char *obj)
 {
@@ -201,6 +204,9 @@ main(int argc, char **argv)
     case SFVMK_OBJECT_STATS:
       sfvmk_hwQueueStats(opType, &mgmtParm);
       break;
+    case SFVMK_OBJECT_VPD:
+      sfvmk_vpdGet(opType, &mgmtParm);
+      break;
     default:
       printf("ERROR: Unknown object - %s\n", objectName);
   }
@@ -297,3 +303,64 @@ free_buffer:
 end:
   return;
 }
+
+static int sfvmk_vpdGetByTag(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_vpdInfo_t *vpdInfo,
+                             vmk_uint8 tag, vmk_uint16 keyword)
+{
+  int status;
+
+  memset(vpdInfo, 0, sizeof(*vpdInfo));
+  vpdInfo->vpdOp = SFVMK_MGMT_DEV_OPS_GET;
+  vpdInfo->vpdTag = tag;
+  vpdInfo->vpdKeyword = keyword;
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_VPD_REQUEST, mgmtParm, vpdInfo);
+  if (status != VMK_OK) {
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    return -EAGAIN;
+  }
+
+  if (mgmtParm->status != VMK_OK) {
+    printf("ERROR: VPD info get failed, error 0x%x\n", mgmtParm->status);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static void sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
+{
+  sfvmk_vpdInfo_t vpdInfo;
+  int ret;
+
+  if (opType != SFVMK_MGMT_DEV_OPS_GET) {
+    printf("ERROR: Set operation not supported\n");
+    return;
+  }
+
+  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x02, 0x0);
+  if (ret < 0)
+    return;
+  printf("Product Name: %s\n", vpdInfo.vpdPayload);
+
+  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('P' | 'N' << 8));
+  if (ret < 0)
+    return;
+  printf("[PN] Part number: %s\n", vpdInfo.vpdPayload);
+
+  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('S' | 'N' << 8));
+  if (ret < 0)
+    return;
+  printf("[SN] Serial number: %s\n", vpdInfo.vpdPayload);
+
+  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('E' | 'C' << 8));
+  if (ret < 0)
+    return;
+  printf("[EC] Engineering changes: %s\n", vpdInfo.vpdPayload);
+
+  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('V' | 'D' << 8));
+  if (ret < 0)
+    return;
+  printf("[VD] Version: %s\n", vpdInfo.vpdPayload);
+}
+

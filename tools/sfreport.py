@@ -12,7 +12,7 @@ import re
 import sys
 import optparse
 from threading import Timer
-from collections import defaultdict,OrderedDict
+from collections import defaultdict
 from operator import itemgetter
 
 # sfreport version to be incremented for any changes made before releases:
@@ -855,6 +855,9 @@ if __name__=="__main__":
        output_file.write('<a href="#vSwitch">-> vSwitch Information</a><br>')
        output_file.write('<a href="#Portgroup Information">-> Portgroup Information</a><br>')
        if mode == "esxi":
+           # Following module needs to be imported here as vcli python version
+           # doesn't have this module included [python-ver < 3]
+           from collections import OrderedDict
            output_file.write('<a href="#module file">-> SF Module File names </a><br>')
            output_file.write('<a href="#Known Kernel Modules">-> Known SF Kernel Modules</a><br>')
            output_file.write('<a href="#NUMA info">-> NUMA info</a><br>')

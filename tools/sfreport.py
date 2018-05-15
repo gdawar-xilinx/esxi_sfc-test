@@ -898,6 +898,10 @@ if __name__ == "__main__":
         print("\nError: while running mode=vcli, --server option should "
               "be specified")
         sys.exit()
+    elif CURRENT_MODE == "esxi" and SERVER_NAME:
+        print("\nError: while running mode=esxi, --server option is "
+              "not required\n")
+        sys.exit()
     # Proceed only if any SF adapters are found.
     if CURRENT_MODE == "vcli":
         SERVER_NAME = "--server " + SERVER_NAME

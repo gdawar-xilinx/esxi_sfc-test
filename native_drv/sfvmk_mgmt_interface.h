@@ -478,9 +478,9 @@ typedef struct sfvmk_hwQueueStats_s{
  **
  */
 VMK_ReturnStatus sfvmk_mgmtMcdiCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_mcdiRequest_t *pMgmtMCDI);
+                                        vmk_MgmtEnvelope *pEnvelope,
+                                        sfvmk_mgmtDevInfo_t *pDevIface,
+                                        sfvmk_mcdiRequest_t *pMgmtMCDI);
 
 VMK_ReturnStatus sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
                                              vmk_MgmtEnvelope *pEnvelope,
@@ -497,25 +497,25 @@ VMK_ReturnStatus sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
                                            sfvmk_mgmtDevInfo_t *pDevIface,
                                            sfvmk_vpdInfo_t *pVpdInfo);
 
-VMK_ReturnStatus sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
-                                         vmk_MgmtEnvelope *pEnvelope,
-                                         sfvmk_mgmtDevInfo_t *pDevIface,
-                                         vmk_Bool *pLinkState);
+VMK_ReturnStatus sfvmk_mgmtLinkStatusCallback(vmk_MgmtCookies *pCookies,
+                                              vmk_MgmtEnvelope *pEnvelope,
+                                              sfvmk_mgmtDevInfo_t *pDevIface,
+                                              vmk_Bool *pLinkState);
 
-VMK_ReturnStatus sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
-                                            vmk_MgmtEnvelope *pEnvelope,
-                                            sfvmk_mgmtDevInfo_t *pDevIface,
-                                            sfvmk_linkSpeed_t *pLinkSpeed);
+VMK_ReturnStatus sfvmk_mgmtLinkSpeedCallback(vmk_MgmtCookies *pCookies,
+                                             vmk_MgmtEnvelope *pEnvelope,
+                                             sfvmk_mgmtDevInfo_t *pDevIface,
+                                             sfvmk_linkSpeed_t *pLinkSpeed);
 
 VMK_ReturnStatus sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
                                            vmk_MgmtEnvelope *pEnvelope,
                                            sfvmk_mgmtDevInfo_t *pDevIface,
                                            sfvmk_versionInfo_t *pVerInfo);
 
-VMK_ReturnStatus sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
-                                          vmk_MgmtEnvelope *pEnvelope,
-                                          sfvmk_mgmtDevInfo_t *pDevIface,
-                                          sfvmk_intrCoalsParam_t *pIntrMod);
+VMK_ReturnStatus sfvmk_mgmtIntrModerationCallback(vmk_MgmtCookies *pCookies,
+                                                  vmk_MgmtEnvelope *pEnvelope,
+                                                  sfvmk_mgmtDevInfo_t *pDevIface,
+                                                  sfvmk_intrCoalsParam_t *pIntrMod);
 
 VMK_ReturnStatus sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies *pCookies,
                                          vmk_MgmtEnvelope *pEnvelope,
@@ -542,10 +542,10 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtMCLoggingCallback NULL
 #define sfvmk_mgmtPCIInfoCallback NULL
 #define sfvmk_mgmtVPDInfoCallback NULL
-#define sfvmk_mgmtLinkStatusGet NULL
-#define sfvmk_mgmtLinkSpeedRequest NULL
+#define sfvmk_mgmtLinkStatusCallback NULL
+#define sfvmk_mgmtLinkSpeedCallback NULL
 #define sfvmk_mgmtVerInfoCallback NULL
-#define sfvmk_mgmtIntrModeration NULL
+#define sfvmk_mgmtIntrModerationCallback NULL
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtImgUpdateCallback NULL
 #define sfvmk_mgmtHWQStatsCallback NULL

@@ -45,9 +45,9 @@ static const efx_nvram_type_t nvramTypes[] = {
 
 /*! \brief  Get adapter pointer based on hash.
 **
-** \param[in] pMgmtParm pointer to managment param
+** \param[in] pMgmtParm Pointer to managment param
 **
-** \return: pointer to sfvmk_adapter_t [success]  NULL [failure]
+** \return: Pointer to sfvmk_adapter_t [success]  NULL [failure]
 */
 static sfvmk_adapter_t *
 sfvmk_mgmtFindAdapter(sfvmk_mgmtDevInfo_t *pMgmtParm)
@@ -93,10 +93,10 @@ end:
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtMcdiCallback(vmk_MgmtCookies       *pCookies,
-                        vmk_MgmtEnvelope     *pEnvelope,
-                        sfvmk_mgmtDevInfo_t  *pDevIface,
-                        sfvmk_mcdiRequest_t  *pMgmtMcdi)
+sfvmk_mgmtMcdiCallback(vmk_MgmtCookies      *pCookies,
+                       vmk_MgmtEnvelope     *pEnvelope,
+                       sfvmk_mgmtDevInfo_t  *pDevIface,
+                       sfvmk_mcdiRequest_t  *pMgmtMcdi)
 {
   sfvmk_adapter_t *pAdapter = NULL;
   efx_mcdi_req_t   emr;
@@ -159,8 +159,8 @@ end:
 /*! \brief  A Mgmt callback routine to control dynamic
  **         logging of MC Logs
  **
- ** \param[in]  pCookies    Pointer to cookie
- ** \param[in]  pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
  ** \param[in,out]  pDevIface  Pointer to device interface structure
  ** \param[in,out]  pMcdiLog   Pointer to MCDI log structure
  **
@@ -175,10 +175,10 @@ end:
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_mcdiLogging_t *pMcdiLog)
+sfvmk_mgmtMCLoggingCallback(vmk_MgmtCookies     *pCookies,
+                            vmk_MgmtEnvelope    *pEnvelope,
+                            sfvmk_mgmtDevInfo_t *pDevIface,
+                            sfvmk_mcdiLogging_t *pMcdiLog)
 {
   sfvmk_adapter_t *pAdapter = NULL;
 
@@ -237,21 +237,21 @@ end:
 }
 
 /*! \brief  A Mgmt callback to Get PCI BDF and PCI device information
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in,out]  pDevIface  pointer to device interface structure
-** \param[in,out]  pPciInfo   pointer to sfvmk_pciInfo_s structure
-**
-** \return VMK_OK
-**     Below error values are filled in the status field of
-**     sfvmk_mgmtDevInfo_t.
-**     VMK_BAD_PARAM:      Null Pointer passed in parameter
-**     VMK_NOT_FOUND:      In case of dev not found
-**     VMK_FAILURE:        String copy failed or any other
-**                         error
-**
-*/
+ **
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pPciInfo   Pointer to sfvmk_pciInfo_s structure
+ **
+ ** \return VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_BAD_PARAM:      Null Pointer passed in parameter
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_FAILURE:        String copy failed or any other
+ **                         error
+ **
+ */
 VMK_ReturnStatus
 sfvmk_mgmtPCIInfoCallback(vmk_MgmtCookies      *pCookies,
                           vmk_MgmtEnvelope     *pEnvelope,
@@ -305,26 +305,26 @@ end:
 }
 
 /*! \brief  A Mgmt callback to get and set VPD information
-**
-** \param[in]      pCookies    pointer to cookie
-** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in,out]  pDevIface   pointer to mgmt param
-** \param[in,out]  pVpdInfo    pointer to sfvmk_vpdInfo_s structure
-**
-** \return VMK_OK
-**     Below error values are filled in the status field of
-**     sfvmk_mgmtDevInfo_t.
-**     VMK_NOT_FOUND:      In case of dev not found
-**     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
-**                         input param
-**     VMK_FAILURE:        Any other error
-**
-*/
+ **
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pVpdInfo    Pointer to sfvmk_vpdInfo_s structure
+ **
+ ** \return VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
+ **                         input param
+ **     VMK_FAILURE:        Any other error
+ **
+ */
 VMK_ReturnStatus
-sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies *pCookies,
-                          vmk_MgmtEnvelope *pEnvelope,
+sfvmk_mgmtVPDInfoCallback(vmk_MgmtCookies     *pCookies,
+                          vmk_MgmtEnvelope    *pEnvelope,
                           sfvmk_mgmtDevInfo_t *pDevIface,
-                          sfvmk_vpdInfo_t *pVpdInfo)
+                          sfvmk_vpdInfo_t     *pVpdInfo)
 {
   sfvmk_adapter_t *pAdapter = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -388,23 +388,24 @@ end:
 
 /*! \brief  A Mgmt callback for Get Link state
  **
- ** \param[in]  pCookies    pointer to cookie
- ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in,out]  pDevIface   pointer to mgmt param
- ** \param[in,out]  pLinkState  pointer to link state flag
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pLinkState  Pointer to link state flag
  **
- ** \return VMK_OK
+ ** \return VMK_OK  [success]
  **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
  **     VMK_NOT_FOUND:   In case of dev not found
  **     VMK_BAD_PARAM:   Unknown command option or
  **                      Null Pointer passed in parameter
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtLinkStatusGet(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        vmk_Bool *pLinkState)
+sfvmk_mgmtLinkStatusCallback(vmk_MgmtCookies     *pCookies,
+                             vmk_MgmtEnvelope    *pEnvelope,
+                             sfvmk_mgmtDevInfo_t *pDevIface,
+                             vmk_Bool            *pLinkState)
 {
   sfvmk_adapter_t *pAdapter = NULL;
   vmk_LinkState   linkState = VMK_LINK_STATE_DOWN;
@@ -448,13 +449,13 @@ end:
 
 /*! \brief  A Mgmt callback for Get/Set Link speed and autoneg
  **
- ** \param[in]  pCookies    pointer to cookie
- ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in,out]  pDevIface    pointer to device interface structure
- ** \param[in,out]  pLinkSpeed   pointer to speed and autoneg
- **                              param structure
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pLinkSpeed  Pointer to speed and autoneg
+ **                             param structure
  **
- ** \return VMK_OK
+ ** \return VMK_OK  [success]
  **     Below error values are filled in the status field of
  **     sfvmk_mgmtDevInfo_t
  **     VMK_NOT_FOUND:   In case of dev not found
@@ -464,10 +465,10 @@ end:
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtLinkSpeedRequest(vmk_MgmtCookies *pCookies,
-                           vmk_MgmtEnvelope *pEnvelope,
-                           sfvmk_mgmtDevInfo_t *pDevIface,
-                           sfvmk_linkSpeed_t *pLinkSpeed)
+sfvmk_mgmtLinkSpeedCallback(vmk_MgmtCookies     *pCookies,
+                            vmk_MgmtEnvelope    *pEnvelope,
+                            sfvmk_mgmtDevInfo_t *pDevIface,
+                            sfvmk_linkSpeed_t   *pLinkSpeed)
 {
   sfvmk_adapter_t      *pAdapter = NULL;
   vmk_uint32            speed;
@@ -529,26 +530,26 @@ end:
 }
 
 /*! \brief  A Mgmt callback to get Version info
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in,out]  pDevIface   pointer to device interface structure
-** \param[in,out]  pVerInfo    pointer to version info struct
-**
-** \return: VMK_OK  [success]
-**     Below error values are filled in the status field of
-**     sfvmk_mgmtDevInfo_t.
-**     VMK_BAD_PARAM:   Unknown version option or
-**                      Null Pointer passed in parameter
-**     VMK_NOT_FOUND:   In case of dev not found
-**     VMK_NOT_READY:   If get NVRAM version failed
-**     VMK_FAILURE:     If get MC Fw version failed
-**                      or any other error
-**
-*/
+ **
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pVerInfo    Pointer to version info struct
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_BAD_PARAM:   Unknown version option or
+ **                      Null Pointer passed in parameter
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_NOT_READY:   If get NVRAM version failed
+ **     VMK_FAILURE:     If get MC Fw version failed
+ **                      or any other error
+ **
+ */
 VMK_ReturnStatus
-sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies *pCookies,
-                          vmk_MgmtEnvelope *pEnvelope,
+sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies     *pCookies,
+                          vmk_MgmtEnvelope    *pEnvelope,
                           sfvmk_mgmtDevInfo_t *pDevIface,
                           sfvmk_versionInfo_t *pVerInfo)
 {
@@ -641,16 +642,17 @@ end:
 }
 
 /*! \brief  A Mgmt callback to Get/Set interrupt
- **          moderation settings
+ **         moderation settings
  **
- ** \param[in]  pCookies    pointer to cookie
- ** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
- ** \param[in,out]  pDevIface  pointer to device interface structure
- ** \param[in,out]  pIntrMod   pointer to interrrupt
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pIntrMod   Pointer to interrrupt
  **                            moderation structure
  **
- ** \return VMK_OK
+ ** \return VMK_OK [success]
  **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
  **     VMK_NOT_FOUND:   In case of dev not found
  **     VMK_BAD_PARAM:   Unknown command/param option or
  **                      Null Pointer passed in parameter
@@ -658,10 +660,10 @@ end:
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtIntrModeration(vmk_MgmtCookies *pCookies,
-                         vmk_MgmtEnvelope *pEnvelope,
-                         sfvmk_mgmtDevInfo_t *pDevIface,
-                         sfvmk_intrCoalsParam_t *pIntrMod)
+sfvmk_mgmtIntrModerationCallback(vmk_MgmtCookies        *pCookies,
+                                 vmk_MgmtEnvelope       *pEnvelope,
+                                 sfvmk_mgmtDevInfo_t    *pDevIface,
+                                 sfvmk_intrCoalsParam_t *pIntrMod)
 {
   sfvmk_adapter_t           *pAdapter = NULL;
   vmk_UplinkCoalesceParams   params;
@@ -736,30 +738,31 @@ end:
 }
 
 /*! \brief  A Mgmt callback to perform Image Update
-**
-** \param[in]      pCookies    pointer to cookie
-** \param[in]      pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in,out]  pDevIface   pointer to sfvmk_mgmtDevInfo_t
-** \param[in,out]  pImgUpdate  pointer to sfvmk_imgUpdate_t structure
-**
-** \return VMK_OK
-**     Below error values are filled in the status field of
-**     sfvmk_mgmtDevInfo_t.
-**     VMK_NOT_FOUND      :  In case of dev not found
-**     VMK_BAD_PARAM      :  Invalid Ioctl option or wrong
-**                           input param
-**     VMK_NO_MEMORY      :  Memory Allocation failed
-**     VMK_NOT_SUPPORTED  :  Unsupported Firmware type
-**     VMK_FAILURE        :  Copy from User or NVRAM operation failure
-**
-*/
-VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
-                        vmk_MgmtEnvelope *pEnvelope,
-                        sfvmk_mgmtDevInfo_t *pDevIface,
-                        sfvmk_imgUpdate_t *pImgUpdate)
+ **
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[in,out]  pImgUpdate  Pointer to sfvmk_imgUpdate_t structure
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
+ **                         input param
+ **     VMK_NO_MEMORY:      Memory Allocation failed
+ **     VMK_NOT_SUPPORTED:  Unsupported Firmware type
+ **     VMK_FAILURE:        Copy from User or NVRAM operation failure
+ **
+ */
+VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies     *pCookies,
+                                             vmk_MgmtEnvelope    *pEnvelope,
+                                             sfvmk_mgmtDevInfo_t *pDevIface,
+                                             sfvmk_imgUpdate_t   *pImgUpdate)
 {
   sfvmk_adapter_t  *pAdapter = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
+
   pDevIface->status = VMK_FAILURE;
 
   if (!pDevIface) {
@@ -813,21 +816,21 @@ end:
 }
 
 /*! \brief  A Mgmt callback routine to post NVRAM req
-**
-** \param[in]  pCookies    pointer to cookie
-** \param[in]  pEnvelope   pointer to vmk_MgmtEnvelope
-** \param[in,out]  pDevIface  pointer to device interface structure
-** \param[in,out]  pCmd       pointer to NVRAM cmd struct
-**
-** \return: VMK_OK  [success]
-**     Below error values are filled in the status field of
-**     sfvmk_mgmtDevInfo_t.
-**     VMK_NOT_FOUND:      In case of dev not found
-**     VMK_NOT_SUPPORTED:  Operation not supported
-**     VMK_BAD_PARAM:      Unknown option or NULL input param
-**     VMK_FAILURE:        Any other error
-**
-*/
+ **
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pCmd       Pointer to NVRAM cmd struct
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_NOT_SUPPORTED:  Operation not supported
+ **     VMK_BAD_PARAM:      Unknown option or NULL input param
+ **     VMK_FAILURE:        Any other error
+ **
+ */
 VMK_ReturnStatus
 sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
                         vmk_MgmtEnvelope    *pEnvelope,
@@ -934,9 +937,9 @@ end:
  **
  */
 VMK_ReturnStatus
-sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
-                           vmk_MgmtEnvelope *pEnvelope,
-                           sfvmk_mgmtDevInfo_t *pDevIface,
+sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
+                           vmk_MgmtEnvelope     *pEnvelope,
+                           sfvmk_mgmtDevInfo_t  *pDevIface,
                            sfvmk_hwQueueStats_t *pHwQueueStats)
 {
   sfvmk_adapter_t   *pAdapter = NULL;

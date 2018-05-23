@@ -101,7 +101,7 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
 
   {
       .location = VMK_MGMT_CALLBACK_KERNEL,
-      .callback = sfvmk_mgmtLinkStatusGet,
+      .callback = sfvmk_mgmtLinkStatusCallback,
       .synchronous = 1,
       .numParms = 2,
 
@@ -116,7 +116,7 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
 
   {
       .location = VMK_MGMT_CALLBACK_KERNEL,
-      .callback = sfvmk_mgmtLinkSpeedRequest,
+      .callback = sfvmk_mgmtLinkSpeedCallback,
       .synchronous = 1,
       .numParms = 2,
 
@@ -146,7 +146,7 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
 
   {
       .location = VMK_MGMT_CALLBACK_KERNEL,
-      .callback = sfvmk_mgmtIntrModeration,
+      .callback = sfvmk_mgmtIntrModerationCallback,
       .synchronous = 1,
       .numParms = 2,
 
@@ -218,7 +218,7 @@ const vmk_MgmtApiSignature sfvmk_mgmtSig = {
     * management APIs will be extended to support compatibility shimming in
     * future versions of VMKAPI.
     */
-   .version = VMK_REVISION_FROM_NUMBERS (1, 0, 0, 1000),
+   .version = VMK_REVISION_FROM_NUMBERS (1, 0, 0, 1001),
    /*
     * The name is the name of this interface. The name and vendor,
     * must be globally unique or else initialization will fail.

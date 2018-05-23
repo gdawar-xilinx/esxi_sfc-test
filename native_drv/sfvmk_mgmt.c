@@ -1030,3 +1030,60 @@ end:
   return VMK_OK;
 }
 
+/*! \brief  A Mgmt callback to get the MAC address of an interface
+ **
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface   Pointer to device interface structure
+ ** \param[out]     pMacBuffer  Pointer to MAC address buffer
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies     *pCookies,
+                             vmk_MgmtEnvelope    *pEnvelope,
+                             sfvmk_mgmtDevInfo_t *pDevIface,
+                             vmk_uint8           *pMacBuffer)
+{
+  sfvmk_adapter_t      *pAdapter = NULL;
+  vmk_UplinkSharedData *pSharedData = NULL;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pMacBuffer) {
+    SFVMK_ERROR("pMacBuffer: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  pSharedData = &pAdapter->uplink.sharedData;
+
+  vmk_Memcpy(pMacBuffer, pSharedData->macAddr, VMK_ETH_ADDR_LENGTH);
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}

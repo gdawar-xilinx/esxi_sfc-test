@@ -53,6 +53,7 @@
  ** SFVMK_CB_NVRAM_REQUEST:            NVRAM operations callback
  ** SFVMK_CB_IMG_UPDATE:               Perform Image Update
  ** SFVMK_CB_HW_QUEUE_STATS_GET:       Get Rx/Tx hardware queue stats
+ ** SFVMK_CB_MAC_ADDRESS_GET:          Get MAC address of an interface
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -67,6 +68,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_NVRAM_REQUEST,
   SFVMK_CB_IMG_UPDATE,
   SFVMK_CB_HW_QUEUE_STATS_GET,
+  SFVMK_CB_MAC_ADDRESS_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -532,6 +534,11 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
                                             sfvmk_mgmtDevInfo_t *pDevIface,
                                             sfvmk_hwQueueStats_t *pUserStatsBuffer);
 
+VMK_ReturnStatus sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies *pCookies,
+                                              vmk_MgmtEnvelope *pEnvelope,
+                                              sfvmk_mgmtDevInfo_t *pDevIface,
+                                              vmk_uint8 *pMacBuffer);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -549,6 +556,7 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtImgUpdateCallback NULL
 #define sfvmk_mgmtHWQStatsCallback NULL
+#define sfvmk_mgmtMACAddressCallback NULL
 #endif
 
 #endif

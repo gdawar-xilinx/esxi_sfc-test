@@ -3193,8 +3193,12 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
   /* Populate shared filter class with MAC and VLANMAC filter */
   pQueueInfo->supportedRxQueueFilterClasses =
                               VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY |
-                              VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC |
+                              VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC;
+
+  if (pAdapter->isTunnelEncapSupported) {
+    pQueueInfo->supportedRxQueueFilterClasses |=
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
+  }
 
   /* Update max TX and RX queue
    * For base RSSQ one uplink Q is added

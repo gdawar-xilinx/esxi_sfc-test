@@ -77,6 +77,47 @@ end:
   return NULL;
 }
 
+/*! \brief Iterator used to iterate and copy the vmnic name
+ **
+ ** \param[in]     htbl   Hash handle.
+ ** \param[in]     key    Hash key.
+ ** \param[in]     value  Hash entry value stored at key
+ ** \param[in,out] data   pointer to sfvmk_ifaceList_t,
+ **                       if an entry is found then
+ **                       copy the vmnic name.
+ **
+ ** \return: Key iterator commands.
+ **
+ */
+static vmk_HashKeyIteratorCmd
+sfvmk_adapterHashIter(vmk_HashTable htbl,
+                      vmk_HashKey key, vmk_HashValue value,
+                      vmk_AddrCookie data)
+{
+  sfvmk_ifaceList_t *pIfaceList = data.ptr;
+  char              *pIfaceName = (char *)key;
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  if (!pIfaceList || !pIfaceName) {
+    SFVMK_ERROR("Failed to find vmk device");
+    return VMK_HASH_KEY_ITER_CMD_STOP;
+  }
+
+  if (pIfaceList->ifaceCount >= SFVMK_MAX_INTERFACE)
+    return VMK_HASH_KEY_ITER_CMD_STOP;
+
+  status = vmk_StringCopy(pIfaceList->ifaceArray[pIfaceList->ifaceCount].string,
+                          pIfaceName, 32);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("String copy failed with error %s", vmk_StatusToString(status));
+    return VMK_HASH_KEY_ITER_CMD_STOP;
+  }
+
+  pIfaceList->ifaceCount++;
+
+  return VMK_HASH_KEY_ITER_CMD_CONTINUE;
+}
+
 /*! \brief  A Mgmt callback routine to post MCDI commands
  **
  ** \param[in]      pCookies    Pointer to cookie
@@ -1080,6 +1121,61 @@ sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies     *pCookies,
   pSharedData = &pAdapter->uplink.sharedData;
 
   vmk_Memcpy(pMacBuffer, pSharedData->macAddr, VMK_ETH_ADDR_LENGTH);
+
+  pDevIface->status = VMK_OK;
+
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback to get SolarFlare interface list
+ **
+ ** \param[in]      pCookies    Pointer to cookie
+ ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
+ ** \param[out]     pDevIface   Pointer to device interface structure
+ ** \param[out]     pIfaceList  Pointer to interface list structure
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtInterfaceListCallback(vmk_MgmtCookies     *pCookies,
+                                vmk_MgmtEnvelope    *pEnvelope,
+                                sfvmk_mgmtDevInfo_t *pDevIface,
+                                sfvmk_ifaceList_t   *pIfaceList)
+{
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pIfaceList) {
+    SFVMK_ERROR("pIfaceList: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pIfaceList->ifaceCount = 0;
+  status = vmk_HashKeyIterate(sfvmk_modInfo.vmkdevHashTable,
+                              sfvmk_adapterHashIter, pIfaceList);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Iterator failed with error code %s",
+                 vmk_StatusToString(status));
+    pDevIface->status = status;
+    goto end;
+  }
 
   pDevIface->status = VMK_OK;
 

@@ -54,6 +54,7 @@
  ** SFVMK_CB_IMG_UPDATE:               Perform Image Update
  ** SFVMK_CB_HW_QUEUE_STATS_GET:       Get Rx/Tx hardware queue stats
  ** SFVMK_CB_MAC_ADDRESS_GET:          Get MAC address of an interface
+ ** SFVMK_CB_IFACE_LIST_GET:           Get list of all SFVMK interface
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -69,6 +70,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_IMG_UPDATE,
   SFVMK_CB_HW_QUEUE_STATS_GET,
   SFVMK_CB_MAC_ADDRESS_GET,
+  SFVMK_CB_IFACE_LIST_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -86,6 +88,9 @@ typedef enum sfvmk_mgmtCbTypes_e {
 
 /* Length of VPD data */
 #define SFVMK_VPD_MAX_PAYLOAD  0x100
+
+/* Max limit of Solarflare NIC */
+#define SFVMK_MAX_INTERFACE    16
 
 /*
  * The vendor name for interface. The vendor name cannot be changed for
@@ -452,6 +457,20 @@ typedef struct sfvmk_hwQueueStats_s{
   vmk_uint32           size;
 } __attribute__((__packed__)) sfvmk_hwQueueStats_t;
 
+/*! \brief struct sfvmk_hwQueueStats_s to get
+ **        list of Solarflare NIC
+ **
+ ** ifaceCount[out]  Total count of interface name
+ **                  copied in ifaceArray
+ **
+ ** ifaceArray[out]  List of interface name
+ **
+ */
+typedef struct sfvmk_ifaceList_s {
+  vmk_uint32  ifaceCount;
+  vmk_Name    ifaceArray[SFVMK_MAX_INTERFACE];
+} __attribute__((__packed__)) sfvmk_ifaceList_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -539,6 +558,11 @@ VMK_ReturnStatus sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies *pCookies,
                                               sfvmk_mgmtDevInfo_t *pDevIface,
                                               vmk_uint8 *pMacBuffer);
 
+VMK_ReturnStatus sfvmk_mgmtInterfaceListCallback(vmk_MgmtCookies *pCookies,
+                                                 vmk_MgmtEnvelope *pEnvelope,
+                                                 sfvmk_mgmtDevInfo_t *pDevIface,
+                                                 sfvmk_ifaceList_t *pIfaceList);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -557,6 +581,7 @@ VMK_ReturnStatus sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtImgUpdateCallback NULL
 #define sfvmk_mgmtHWQStatsCallback NULL
 #define sfvmk_mgmtMACAddressCallback NULL
+#define sfvmk_mgmtInterfaceListCallback NULL
 #endif
 
 #endif

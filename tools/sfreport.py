@@ -19,21 +19,25 @@ import optparse
 # major minor build
 SFREPORT_VERSION = "v0.1.0"
 
-def terminate(process, timeout, cmd):
+def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """
     timeout["value"] = True
     process.kill()
-    print("ERROR: Following command took longer than expected:\n%s" +cmd)
-    return 0
+    print("ERROR: Following command took longer than expected:\ncmd: " +cmd)
+    if mode == "vcli":
+        print("CAUTION: Check connectivity with the target machine\n\t\tOR"
+              " \n\t Make sure thumbprints were added\n")
+        print ("INFO: Press enter to return to prompt")
+    return 1
 
-def execute(cmd):
+def execute(cmd, mode='esxi'):
     """ function to execute the command on the cmdline using subprocess """
     timeout_sec = 5
     process = subprocess.Popen((cmd), stdout=subprocess.PIPE, \
                                stderr=subprocess.PIPE,\
                                shell=True)
     timeout = {"value": False}
-    timer = Timer(timeout_sec, terminate, [process, timeout, cmd])
+    timer = Timer(timeout_sec, terminate, [process, timeout, cmd, mode])
     timer.start()
     out, err = process.communicate()
     timer.cancel()
@@ -55,12 +59,12 @@ def file_header(output_file, time, mode, sf_ver):
     output_file.write("Time:"+time)
     output_file.write("</br>Report generation: " + mode+"</br>")
     if mode != "vcli":
-        user = (execute('echo $USER'))
+        user = (execute('echo $USER', mode))
         user = "(User : " + user + " )"
         output_file.write(user)
         output_file.write('<h1 <br></H1>')
         output_file.write('<h1 style="font-size:26px;"> System uptime:</H1>')
-        uptime = (execute('uptime'))
+        uptime = (execute('uptime', mode))
         output_file.write(uptime)
     return 0
 
@@ -163,7 +167,7 @@ def system_summary(output_file, server, mode):
     output_file.write(table)
     return 0
 
-def driver_binding(output_file, server):
+def driver_binding(output_file, server, mode):
     """function to fetch driver specific information"""
     output_file.write('<h1 id="Driver Bindings"style="font-size:26px;"\
                       > Driver Bindings: <br></H1>')
@@ -206,7 +210,7 @@ def vmkernel_logs(output_file):
     output_file.write('%s</p>'%lines)
     return 0
 
-def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list):
+def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
                       Parameters of sfvmk : <br></H1>')
@@ -330,7 +334,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list):
     output_file.write(queue_count_html)
     return 0
 
-def sf_pci_devices(output_file, sfvmk_tlp_list, server):
+def sf_pci_devices(output_file, sfvmk_tlp_list, server, mode):
     """function to fetch sf pci info"""
     output_file.write('<h1 id="SF PCI devices"style="font-size:26px;">\
                       Solarflare PCI devices: <br></H1>')
@@ -414,7 +418,7 @@ def sf_kernel_modules(output_file):
     output_file.write(html)
     return 0
 
-def network_configuration(output_file, server):
+def network_configuration(output_file, server, mode):
     """function to fetch network configuration informations"""
     output_file.write('<h1 id="Network Configurations"style="font-size:26px;"> \
                       Network Configurations: <br></H1>')
@@ -552,7 +556,7 @@ def network_configuration(output_file, server):
     output_file.write(route_table)
     return 0
 
-def ethernet_settings(output_file, sfvmk_adapter_list, server):
+def ethernet_settings(output_file, sfvmk_adapter_list, server, mode):
     """Fetch ethernet setting of SF adapters"""
     for interface in sfvmk_adapter_list:
         output_file.write('<h1 id="Ethernet Settings"style="font-size:26px;"> \
@@ -688,7 +692,7 @@ def net_queue_status(output_file, sfvmk_adapter_list):
         output_file.write('%s</p>' % lines)
     return 0
 
-def file_properties(output_file, server):
+def file_properties(output_file, server, mode):
     """function to get file properties of SF drivers"""
     file_cmd = "esxcli "+ server + " software vib get"
     file_status = execute(file_cmd)
@@ -713,7 +717,7 @@ def file_properties(output_file, server):
     output_file.write(table)
     return 0
 
-def arp_cache(output_file, server):
+def arp_cache(output_file, server, mode):
     """function to fetch arp information."""
     table = '<table id="ARP Cache"style="font-size:26px;"><th>ARP cache:</th>\
             <table border="1">'
@@ -744,7 +748,7 @@ def arp_cache(output_file, server):
     output_file.write(table)
     return 0
 
-def virtual_machine_info(output_file, server):
+def virtual_machine_info(output_file, server, mode):
     """function to fetch Virtual Machine information on the host"""
     table = '<table id="Virtual Machine"style="font-size:26px;">\
              <th>Virtual Machine Information: </th><table border="1">'
@@ -778,7 +782,7 @@ def virtual_machine_info(output_file, server):
     output_file.write(table)
     return 0
 
-def portgroup_details(output_file, server):
+def portgroup_details(output_file, server, mode):
     """function to fetch Vswitch portgroup informations"""
     table = '<table id="Portgroup Information"style="font-size:26px;">\
              <th>Portgroup Information: </th><table border="1">'
@@ -806,7 +810,7 @@ def portgroup_details(output_file, server):
     output_file.write(table)
     return 0
 
-def vswitch_details(output_file, server):
+def vswitch_details(output_file, server, mode):
     """function to fetch Vswitch portgroup informations"""
     output_file.write('<h1 id="vSwitch"style="font-size:26px;">\
                       vSwitch Information: <br></H1>')
@@ -879,7 +883,7 @@ if __name__ == "__main__":
     CURRENT_MODE = OPTIONS.mode.lower()
     SFVMK_ADAPTERS = []
     SFVMK_TLPS = []
-    OS_TYPE = execute("uname -o")
+    OS_TYPE = execute("uname -o", CURRENT_MODE)
     if CURRENT_MODE not in ['vcli', 'esxi']:
         print("\nOption Error: -m|--mode can be either 'vcli' or 'esxi'\n")
         sys.exit()
@@ -906,7 +910,10 @@ if __name__ == "__main__":
     if CURRENT_MODE == "vcli":
         SERVER_NAME = "--server " + SERVER_NAME
     GET_NIC_CMD = 'esxcli ' + SERVER_NAME + ' network nic list |grep sfvmk'
-    SF_ADAPTERS = execute(GET_NIC_CMD)
+    SF_ADAPTERS = execute(GET_NIC_CMD, CURRENT_MODE)
+    # check if connection not established between vcli server and host:
+    if not SF_ADAPTERS and CURRENT_MODE == 'vcli':
+       sys.exit()
     if SF_ADAPTERS == 1 or SF_ADAPTERS is None:
         print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare "
               "NIC is NOT visible\n")
@@ -961,17 +968,17 @@ if __name__ == "__main__":
                             </a><br>')
 
         system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        driver_binding(OUT_FILE, SERVER_NAME)
-        sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS)
-        sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME)
-        network_configuration(OUT_FILE, SERVER_NAME)
-        ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME)
+        driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
+        sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE)
+        sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
+        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
-        file_properties(OUT_FILE, SERVER_NAME)
-        arp_cache(OUT_FILE, SERVER_NAME)
-        virtual_machine_info(OUT_FILE, SERVER_NAME)
-        vswitch_details(OUT_FILE, SERVER_NAME)
-        portgroup_details(OUT_FILE, SERVER_NAME)
+        file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         # run esxi specific functions under this check.
         if CURRENT_MODE == "esxi":
             sf_module_file(OUT_FILE)

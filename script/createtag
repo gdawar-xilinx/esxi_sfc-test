@@ -423,8 +423,6 @@ updateSfreport() {
 }
 
 addSfvmkTag () {
-    echo "Updating sfreport.py  ...."
-    updateSfreport
     echo "Updating sfvmk.sc ...."
     versionUpdate
     liveVibParamUpdate
@@ -438,6 +436,8 @@ addSfvmkTag () {
 
 updateAndTagSfvmk () {
     buildtype='release'
+    echo "Updating sfreport.py  ...."
+    updateSfreport
     addSfvmkTag
 
     bumpVersion

@@ -18,7 +18,7 @@ fail () { log "$@"; exit 1; }
 
 # Usage
 usage () {
-    err "Usage: createtag <sfvmk branch> <desired new tag> <firmware family> <v5 branch> [<new v5 tag>]"
+    err "Usage: createtag <sfvmk branch> <desired new tag> <firmware family> <v5 branch> [<v5 tag>]"
     err "  Create tag on esxi_sfc and common code repo for sfvmk driver"
     err
     err "  --sfvmk_branch="
@@ -42,17 +42,17 @@ usage () {
     err
     err "  --v5_tag="
     err
-    err "    New tag for v5 repo, this could be optional"
+    err "    Tag for v5 repo, this could be optional. If v5 tag is not provided,"
+    err "    the script continues tagging the SFVMK with v5 tag present in Makefile"
     err "    v4.13.1.xxxx"
     err
-    err "    ./scripts/createtag --sfvmk_branch=sfvmk_dev_p2 --sfvmk_tag=v1.0.0.1 --v5_branch=deafult"
+    err "    ./scripts/createtag --sfvmk_branch=sfvmk_dev_p2 --sfvmk_tag=v1.0.0.1 --v5_branch=default"
     err "      --fwfamily=v7_1_1_1000-internal"
     err
     err "    ./scripts/createtag --sfvmk_branch=sfvmk_dev_p2 --sfvmk_tag=v1.0.0.2"
     err "     --v5_branch=v4_13_1_sfvmk --v5_tag=v4.13.1.1002 --fwfamily=v7_1_1_1000-internal"
     exit 1
 }
-[ $# = 4 ] || [ $# = 5 ] ||usage
 
 sfvmk_repo="esxi_sfc"
 prompt=true
@@ -74,10 +74,18 @@ strstr() {
 }
 
 checkRequiredArgs() {
+    local first_char
+
     [ "${sfvmk_branch}" != "" ] || \
         fail "Please check -- arguments Must specify --sfvmk_branch"
-    [ "${sfvmk_tag}" != "" ] || \
+    if [ "${sfvmk_tag}" == "" ]; then
         fail "Please check -- arguments Must specify --sfvmk_tag"
+    else
+        first_char=$(echo "${sfvmk_tag}" | cut -c 1)
+        [ "${first_char}" != "v" ] && \
+           fail "Please check -- arguments, Inavlid --sfvmk_tag ${sfvmk_tag}"
+    fi
+
     [ "${v5_branch}" != "" ] || \
         fail "Please check -- arguments Must specify --v5_branch"
     [ "${fwfamily}" != "" ] || \
@@ -85,7 +93,7 @@ checkRequiredArgs() {
     if [ "${v5_tag}" == "" ]; then
         echo
         echo "*** v5 tag is not provided, continue without v5 tag ***"
-        read -p "Press enter to proceed ..."
+        read -p "Press Ctrl+C to exit or press enter to proceed ..."
         echo "Thanks, proceeding ..."
     fi
 }
@@ -124,16 +132,22 @@ pullSfvmkRepo () {
     # We assume that newbranch already exists
     # This will leave esxi_sfc/build
     log "Updating '${sfvmk_repo}' to branch '${sfvmk_branch}'"
+
+    lines=$(hg --noninteractive branches |grep ${sfvmk_branch} | wc -l)
+    if [ "${lines}" = 0 ]; then
+      fail "Branch ${sfvmk_branch} not found in repo ${sfvmk_repo}, exit."
+    fi
+
     hg --noninteractive update --clean ${sfvmk_branch}
 }
 
-checktagexists() {
+checkTagExists() {
      echo "Checking Existing tags"
      hg log -r "$sfvmk_tag" >/dev/null 2>&1
 }
 
 checkSfvmkLastTag() {
-     checktagexists  && \
+     checkTagExists  && \
          fail "Error: $sfvmk_tag already exist !!!"
 
      echo " Tag $sfvmk_tag does not exist in the repo : $sfvmk_repo"
@@ -167,13 +181,11 @@ isTopOfTreeTagged () {
 
 # Update the sfvmk.sc file with new version number
 versionUpdate () {
-    echo "updating ${sfvmk_repo} repo to ${sfvmk_tag}"
-
     file=$(pwd)/native_drv/sfvmk.sc
     ver=$sfvmk_tag
-    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
     ver=${ver:1}
     ver="\"${ver}\""
+    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
     sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
 }
 
@@ -216,9 +228,19 @@ updateV5Target () {
 }
 
 pullV5Repo () {
+    local lines
+
     echo "cloning ${commoncode_repo} repository"
     hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${commoncode_repo}
     cd ${commoncode_repo}
+
+    lines=$(hg --noninteractive branches |grep ${v5_branch} | wc -l)
+    echo "check if branch ${v5_branch} is present or not"
+    if [ "${lines}" = 0 ]; then
+      cd ${TOP_DIR}; rm -rf ${TOP_DIR}/${commoncode_repo};
+      fail "Branch ${v5_branch} not found in repo ${commoncode_repo}, cleanup and exit."
+    fi
+
     echo "Update repo ${commoncode_repo} to branch ${v5_branch}"
     hg --noninteractive update -C ${v5_branch} ; cd ${TOP_DIR}
 
@@ -276,8 +298,7 @@ handleV5NoTag () {
          echo "Continuing without tagging v5"
        else
          removeV5Repo
-         echo "exit"
-         exit
+         fail "exit"
        fi
     fi
 
@@ -285,7 +306,7 @@ handleV5NoTag () {
 }
 
 # Validate if a new v5 tag is required or not.
-varifyV5Tag () {
+verifyV5Tag () {
     # Find out if common code ToT is tagged or not
     isTopOfTreeTagged ${commoncode_repo} ${v5_branch}
     if [[ ${tot_tagged} == *yes* ]] ; then
@@ -308,7 +329,7 @@ varifyV5Tag () {
            exit 1
          else
            echo "repo ${sfvmk_repo} top of tree is not tagged, continue tagging ${sfvmk_repo}"
-           handleV5NoTag
+           cd ${TOP_DIR}
            return
          fi
       fi
@@ -316,11 +337,10 @@ varifyV5Tag () {
       v5_lasttag="$(getLastTag ${commoncode_repo} ${v5_branch})"
       if [ -z "${v5_lasttag}" ] ; then
         removeV5Repo
-        echo "Last tag on ${commoncode_repo} not found"
-        exit 1
+        fail "Last tag on ${commoncode_repo} not found"
       fi
     else
-      echo "Top of tree is not tagged"
+      echo "Top of tree of branch ${v5_branch} is not tagged for repo ${commoncode_repo}"
       if [ "${v5_tag}" == "" ]; then
         handleV5NoTag
       fi
@@ -379,7 +399,7 @@ makeSfvmkTag () {
 
 tagV5Repo () {
     pullV5Repo
-    varifyV5Tag
+    verifyV5Tag
     if [ "${v5_tag}" != "" ]; then
        createV5Tag
     fi
@@ -400,7 +420,7 @@ addSfvmkTag () {
     echo "Updating Makefile ...."
     buildtypeupdate
     updateV5Target
-    echo -e "\n\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
+    echo -e "\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
     makeSfvmkTag
 }
 

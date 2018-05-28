@@ -212,6 +212,16 @@ liveVibParamUpdate () {
     sed -i 's/\(\"live-remove-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
 }
 
+# Update the sfreport utility version
+updateSfreport() {
+    file=$(pwd)/tools/sfreport.py
+    ver=$sfvmk_tag
+    ver=${ver:1}
+    ver="\"${ver}\""
+    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
+    sed -i 's/\(SFREPORT_VERSION = \)\(.*\)$/\1'${ver}'/' $file
+}
+
 # Update the V5_TAG params in the Makefile file
 updateV5Target () {
     file=$(pwd)/native_drv/Makefile
@@ -426,6 +436,8 @@ addSfvmkTag () {
 
 updateAndTagSfvmk () {
     buildtype='release'
+    echo "Updating sfreport.py  ...."
+    updateSfreport
     addSfvmkTag
 
     bumpVersion

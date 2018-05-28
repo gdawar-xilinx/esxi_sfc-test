@@ -413,7 +413,18 @@ bumpVersion () {
                 {$NF=sprintf("%0*d", length($NF), ($NF+1)); print}')
 }
 
+updateSfreport() {
+    file=$(pwd)/tools/sfreport.py
+    ver=$sfvmk_tag
+    ver=${ver:1}
+    ver="\"${ver}\""
+    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
+    sed -i 's/\(SFREPORT_VERSION = \)\(.*\)$/\1'${ver}'/' $file
+}
+
 addSfvmkTag () {
+    echo "Updating sfreport.py  ...."
+    updateSfreport
     echo "Updating sfvmk.sc ...."
     versionUpdate
     liveVibParamUpdate
@@ -423,6 +434,7 @@ addSfvmkTag () {
     echo -e "\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
     makeSfvmkTag
 }
+
 
 updateAndTagSfvmk () {
     buildtype='release'

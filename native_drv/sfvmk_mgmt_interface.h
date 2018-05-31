@@ -457,6 +457,16 @@ typedef struct sfvmk_hwQueueStats_s{
   vmk_uint32           size;
 } __attribute__((__packed__)) sfvmk_hwQueueStats_t;
 
+/*! \brief struct sfvmk_macAddress_s to get
+ **        MAC address of a port
+ **
+ ** macAddress[out]  MAC address
+ **
+ */
+typedef struct sfvmk_macAddress_s {
+  vmk_uint8            macAddress[6];
+} __attribute__((__packed__)) sfvmk_macAddress_t;
+
 /*! \brief struct sfvmk_hwQueueStats_s to get
  **        list of Solarflare NIC
  **
@@ -556,7 +566,7 @@ VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
 VMK_ReturnStatus sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies *pCookies,
                                               vmk_MgmtEnvelope *pEnvelope,
                                               sfvmk_mgmtDevInfo_t *pDevIface,
-                                              vmk_uint8 *pMacBuffer);
+                                              sfvmk_macAddress_t *pMacBuffer);
 
 VMK_ReturnStatus sfvmk_mgmtInterfaceListCallback(vmk_MgmtCookies *pCookies,
                                                  vmk_MgmtEnvelope *pEnvelope,

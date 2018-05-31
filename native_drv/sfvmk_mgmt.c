@@ -1076,7 +1076,7 @@ end:
  ** \param[in]      pCookies    Pointer to cookie
  ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
  ** \param[in,out]  pDevIface   Pointer to device interface structure
- ** \param[out]     pMacBuffer  Pointer to MAC address buffer
+ ** \param[out]     pMacAddr    Pointer to MAC address
  **
  ** \return VMK_OK [success]
  **     Below error values are filled in the status field of
@@ -1090,7 +1090,7 @@ VMK_ReturnStatus
 sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies     *pCookies,
                              vmk_MgmtEnvelope    *pEnvelope,
                              sfvmk_mgmtDevInfo_t *pDevIface,
-                             vmk_uint8           *pMacBuffer)
+                             sfvmk_macAddress_t  *pMacAddr)
 {
   sfvmk_adapter_t      *pAdapter = NULL;
   vmk_UplinkSharedData *pSharedData = NULL;
@@ -1104,8 +1104,8 @@ sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies     *pCookies,
 
   pDevIface->status = VMK_FAILURE;
 
-  if (!pMacBuffer) {
-    SFVMK_ERROR("pMacBuffer: NULL pointer passed as input");
+  if (!pMacAddr) {
+    SFVMK_ERROR("pMacAddr: NULL pointer passed as input");
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
@@ -1120,7 +1120,7 @@ sfvmk_mgmtMACAddressCallback(vmk_MgmtCookies     *pCookies,
 
   pSharedData = &pAdapter->uplink.sharedData;
 
-  vmk_Memcpy(pMacBuffer, pSharedData->macAddr, VMK_ETH_ADDR_LENGTH);
+  vmk_Memcpy(pMacAddr->macAddress, pSharedData->macAddr, VMK_ETH_ADDR_LENGTH);
 
   pDevIface->status = VMK_OK;
 

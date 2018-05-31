@@ -214,7 +214,7 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
       .parmSizes[0] = sizeof(sfvmk_mgmtDevInfo_t),
 
       .parmTypes[1] = VMK_MGMT_PARMTYPE_INOUT,
-      .parmSizes[1] = sizeof(vmk_uint64),
+      .parmSizes[1] = sizeof(sfvmk_macAddress_t),
 
       .callbackId = SFVMK_CB_MAC_ADDRESS_GET
   },

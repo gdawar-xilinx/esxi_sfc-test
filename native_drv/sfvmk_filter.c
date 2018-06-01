@@ -43,7 +43,7 @@ typedef struct sfvmk_filterEncapEntry_s {
   {EFX_ETHER_TYPE_##ipv, EFX_TUNNEL_PROTOCOL_##encapType,  \
    EFX_FILTER_INNER_FRAME_MATCH_OTHER}
 
-static const sfvmk_filterEncapEntry_t sfvmk_filterEncapList[] = {
+static const sfvmk_filterEncapEntry_t sfvmk_filterVXLANList[] = {
   SFVMK_ENCAP_FILTER_ENTRY(IPV4, VXLAN),
   SFVMK_ENCAP_FILTER_ENTRY(IPV6, VXLAN)
 };
@@ -195,11 +195,11 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
   vni[1] = (pVxlanFilterInfo->vxlanID >> 8) & 0xFF;
   vni[2] = pVxlanFilterInfo->vxlanID & 0xFF;
 
-  EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterEncapList));
+  EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterVXLANList));
 
-  for (i = 0; i < EFX_ARRAY_SIZE(sfvmk_filterEncapList); i++) {
+  for (i = 0; i < EFX_ARRAY_SIZE(sfvmk_filterVXLANList); i++) {
 
-    const sfvmk_filterEncapEntry_t *pEncapFilter = &sfvmk_filterEncapList[i];
+    const sfvmk_filterEncapEntry_t *pEncapFilter = &sfvmk_filterVXLANList[i];
 
     if (pEncapFilter->etherType == EFX_ETHER_TYPE_IPV6) {
       if (!(pNicCfg->enc_features & EFX_FEATURE_IPV6))

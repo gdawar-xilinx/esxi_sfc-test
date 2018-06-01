@@ -1,9 +1,29 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "sfvmk_driver.h"
 
 #define SFVMK_MIN_PKT_SIZE  60
@@ -19,6 +39,98 @@
 #define	RX_REFILL_THRESHOLD(_entries)	(EFX_RXQ_LIMIT(_entries) * 9 / 10)
 /* Refill delay */
 #define SFVMK_RXQ_REFILL_DELAY_MS       10
+
+/*! \brief    Configure RSS by setting hash key, indirection table
+**            and scale mode.
+**
+** \param[in]  pAdapter     pointer to sfvmk_adapter_t
+** \param[in]  pKey         pointer to hash key
+** \param[in]  keySize      size of the key
+** \param[in]  pIndTable    pointer to indirection table
+** \param[in]  indTableSize indirection table size
+**
+** \return: VMK_OK on success or error code otherwise
+*/
+VMK_ReturnStatus
+sfvmk_configRSS(sfvmk_adapter_t *pAdapter,
+                vmk_uint8 *pKey,
+                vmk_uint32 keySize,
+                vmk_uint32 *pIndTable,
+                vmk_uint32 indTableSize)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  efx_rx_scale_context_type_t supportRSS;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  vmk_uint32 rssModes;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter is not yet started");
+    goto done;
+  }
+
+  status = efx_rx_scale_default_support_get(pAdapter->pNic, &supportRSS);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_default_support_get failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (supportRSS != EFX_RX_SCALE_EXCLUSIVE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not supported");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (indTableSize > EFX_RSS_TBL_SIZE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid ind table size(%u)", indTableSize);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  status = efx_rx_scale_tbl_set(pAdapter->pNic, EFX_RSS_CONTEXT_DEFAULT,
+                                pIndTable, indTableSize);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_tbl_set failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  rssModes = EFX_RX_HASH_IPV4 | EFX_RX_HASH_TCPIPV4;
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg != NULL) {
+    if (pNicCfg->enc_features & EFX_FEATURE_IPV6)
+      rssModes |= EFX_RX_HASH_IPV6 | EFX_RX_HASH_TCPIPV6;
+  }
+
+  status = efx_rx_scale_mode_set(pAdapter->pNic,
+                                 EFX_RSS_CONTEXT_DEFAULT,
+                                 EFX_RX_HASHALG_TOEPLITZ,
+                                 rssModes, B_TRUE);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_mode_set failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = efx_rx_scale_key_set(pAdapter->pNic,
+                                EFX_RSS_CONTEXT_DEFAULT,
+                                pKey, keySize);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_rx_scale_key_set failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
+
+  return status;
+}
 
 /*! \brief     Initialize all resources required for a RXQ
 **
@@ -139,8 +251,16 @@ sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  pAdapter->isRxCsumEnabled = VMK_TRUE;
   pAdapter->numRxqsAllocated = MIN(pAdapter->numEvqsAllocated,
                                    pAdapter->numRxqsAllotted);
+
+  /* NetQ count can not be more than RXQs allocated */
+  if (pAdapter->numRxqsAllocated < pAdapter->numNetQs)
+    pAdapter->numNetQs = pAdapter->numRxqsAllocated;
+
+  if (pAdapter->numRxqsAllocated > sfvmk_getRSSQStartIndex(pAdapter))
+    pAdapter->numRSSQs = pAdapter->numRxqsAllocated - sfvmk_getRSSQStartIndex(pAdapter);
 
   rxqArraySize = sizeof(sfvmk_rxq_t *) * pAdapter->numRxqsAllocated;
 
@@ -296,7 +416,7 @@ sfvmk_rxScheduleRefill(sfvmk_rxq_t *pRxq)
 /*! \brief   Deliver RX pkt to uplink layer
 **
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
-** \param[in]  pRxDesc     Pointer to  RX descriptor
+** \param[in]  pRxDesc     RX descriptor
 ** \param[in]  qIndex      RXQ Index
 **
 ** \return: void
@@ -309,13 +429,12 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   vmk_PktHandle *pPkt = NULL;
   vmk_SgElem elem;
 
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
-
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if ((pRxDesc == NULL) || (qIndex >= pAdapter->numRxqsAllocated)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid arguments pRxDesc = %p qIndex = %u",
                         pRxDesc, qIndex);
+    pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_INVALID_DESC]++;
     status = VMK_BAD_PARAM;
     goto done;
   }
@@ -323,6 +442,7 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   pPkt = pRxDesc->pPkt;
   if (pPkt == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NULL Pkt");
+    pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_INVALID_PKT_BUFFER]++;
     status = VMK_FAILURE;
     goto done;
   }
@@ -333,20 +453,41 @@ void sfvmk_rxDeliver(sfvmk_adapter_t *pAdapter,
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_DMAUnmapElem failed status: %s",
                         vmk_StatusToString(status));
+    pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_DMA_UNMAP_FAILED]++;
   }
 
-  /* Convert checksum flags */
-  if (pRxDesc->flags & EFX_CKSUM_TCPUDP)
-    vmk_PktSetCsumVfd(pPkt);
+  if (pRxDesc->flags & EFX_CKSUM_TCPUDP) {
+    if ((pAdapter->isTunnelEncapSupported) &&
+        (pRxDesc->flags & EFX_PKT_TUNNEL) &&
+        ((pRxDesc->flags & EFX_PKT_TCP) ||
+         (pRxDesc->flags & EFX_PKT_UDP))) {
+      /* Mark the given packet as "IP/L4 checksum verified" for
+       * both outer and inner headers of the encapsulated packet.
+       */
+      vmk_PktSetEncapCsumVfd(pPkt);
+    }
+    else {
+      /* Non tunneled traffic - set CSO for outer & the only header */
+      vmk_PktSetCsumVfd(pPkt);
+    }
+  }
 
-  /* Deliver the pkt to uplink layer */
-  vmk_NetPollRxPktQueue(pAdapter->ppEvq[qIndex]->netPoll, pPkt);
+  if (VMK_UNLIKELY(pAdapter->ppEvq[qIndex]->panicPktList != NULL)) {
+    VMK_ASSERT(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE);
+    vmk_PktListAppendPkt(pAdapter->ppEvq[qIndex]->panicPktList, pPkt);
+  }
+  else {
+    /* Deliver the pkt to uplink layer */
+    vmk_NetPollRxPktQueue(pAdapter->ppEvq[qIndex]->netPoll, pPkt);
+  }
+
+  pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_BYTES] += pRxDesc->size;
+  pAdapter->ppRxq[qIndex]->stats[SFVMK_RXQ_PKTS]++;
 
   pRxDesc->flags = EFX_DISCARD;
   pRxDesc->pPkt = NULL;
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_RX);
   return;
 }
 
@@ -368,8 +509,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   vmk_SgElem elem;
   VMK_ReturnStatus status;
   vmk_VA pFrameVa;
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
+  vmk_Bool isRxCsumEnabled = VMK_FALSE;
 
   VMK_ASSERT_NOT_NULL(pRxq);
 
@@ -388,10 +528,8 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     pPkt = pRxDesc->pPkt;
     VMK_ASSERT_NOT_NULL(pPkt);
 
-    if (pRxDesc->flags & EFX_DISCARD) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Pkt is discarded");
+    if (pRxDesc->flags & EFX_DISCARD)
       goto discard_pkt;
-    }
 
     /* Length is stored in the packet preefix when EF10 hardware is operating
      * in cut-through mode (so that the RX event is generated before the
@@ -405,11 +543,49 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       if (status != VMK_OK) {
         SFVMK_ADAPTER_ERROR(pAdapter, "efx_pseudo_hdr_pkt_length_get failed status: %s",
                             vmk_StatusToString(status));
+        pRxq->stats[SFVMK_RXQ_PSEUDO_HDR_PKT_LEN_FAILED]++;
         goto discard_pkt;
       }
       pRxDesc->size = len + pAdapter->rxPrefixSize;
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_DBG,
-                          "rx_desc_size: %u", pRxDesc->size);
+      SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                             "rx_desc_size: %u", pRxDesc->size);
+    }
+
+    if (pRxq->index >= sfvmk_getRSSQStartIndex(pAdapter))
+    {
+      vmk_PktRssType rssType = VMK_PKT_RSS_TYPE_NONE;
+      vmk_uint32 rssHash;
+
+      /* Note: For tunneled packets RSS is performed on inner
+       * headers so for those packets these fields should refer
+       * to the inner header protocol fields. */
+      if (pRxDesc->flags & EFX_PKT_IPV4) {
+        if (pRxDesc->flags & EFX_PKT_TCP)
+          rssType = VMK_PKT_RSS_TYPE_IPV4_TCP;
+        else if (pRxDesc->flags & EFX_PKT_UDP)
+          rssType = VMK_PKT_RSS_TYPE_IPV4_UDP;
+        else
+          rssType = VMK_PKT_RSS_TYPE_IPV4;
+      } else if (pRxDesc->flags & EFX_PKT_IPV6) {
+        if (pRxDesc->flags & EFX_PKT_TCP)
+          rssType = VMK_PKT_RSS_TYPE_IPV6_TCP;
+        else if (pRxDesc->flags & EFX_PKT_UDP)
+          rssType = VMK_PKT_RSS_TYPE_IPV6_UDP;
+        else
+          rssType = VMK_PKT_RSS_TYPE_IPV6;
+      }
+
+      if (rssType != VMK_PKT_RSS_TYPE_NONE) {
+        rssHash = efx_pseudo_hdr_hash_get(pRxq->pCommonRxq, EFX_RX_HASHALG_TOEPLITZ,
+                                          (vmk_uint8 *)vmk_PktFrameMappedPointerGet(pPkt));
+
+        status = vmk_PktRssHashSet(pPkt, rssHash, rssType);
+        if (VMK_UNLIKELY(status != VMK_OK)) {
+          SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktRssHashSet failed status: %s",
+                              vmk_StatusToString(status));
+          pRxq->stats[SFVMK_RXQ_RSS_HASH_FAILED]++;
+        }
+      }
     }
 
     /* Initialize the pkt len for vmk_PktPushHeadroom to work */
@@ -420,6 +596,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     if(status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktPushHeadroom failed status: %s",
                           vmk_StatusToString(status));
+      pRxq->stats[SFVMK_RXQ_PKT_HEAD_ROOM_FAILED]++;
       goto discard_pkt;
     }
     pRxDesc->size -= pAdapter->rxPrefixSize;
@@ -430,6 +607,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       if (!pFrameVa) {
         SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PktFrameMappedPointerGet failed status: %s",
                             vmk_StatusToString(status));
+        pRxq->stats[SFVMK_RXQ_PKT_FRAME_MAPPED_PTR_FAILED]++;
         goto discard_pkt;
       } else {
         if (vmk_PktIsBufDescWritable(pPkt) == VMK_TRUE) {
@@ -440,6 +618,7 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
         } else {
           SFVMK_ADAPTER_ERROR(pAdapter, "Buff desc is not writable(pkt size = %u",
                               pRxDesc->size);
+          pRxq->stats[SFVMK_RXQ_INVALID_BUFFER_DESC]++;
           goto discard_pkt;
         }
       }
@@ -448,23 +627,27 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     if (VMK_UNLIKELY(pRxDesc->size > pAdapter->rxMaxFrameSize)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u]: pkt size(%u) is invalid",
                           pRxq->index, pRxDesc->size);
+      pRxq->stats[SFVMK_RXQ_INVALID_FRAME_SZ]++;
       goto discard_pkt;
     }
 
-    /* Clear the CKSUM flags as CKSUM caps is not yet enabled
-     * TODO : A proper check based on the capability  will
-     * be added before clearing the flags */
+    isRxCsumEnabled = pAdapter->isRxCsumEnabled;
+
+    /* Clear the CKSUM flags if Rx CSUM validation is disabled */
     switch (pRxDesc->flags & (EFX_PKT_IPV4 | EFX_PKT_IPV6)) {
       case EFX_PKT_IPV4:
+        if(!isRxCsumEnabled)
           pRxDesc->flags &= ~(EFX_CKSUM_IPV4 | EFX_CKSUM_TCPUDP);
         break;
       case EFX_PKT_IPV6:
+        if(!isRxCsumEnabled)
           pRxDesc->flags &= ~EFX_CKSUM_TCPUDP;
         break;
       case 0:
         break;
       default:
         SFVMK_ADAPTER_ERROR(pAdapter, "RX Desc with both ipv4 and ipv6 flags");
+        pRxq->stats[SFVMK_RXQ_INVALID_PROTO]++;
         goto discard_pkt;
     }
 
@@ -474,6 +657,10 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     continue;
 
 discard_pkt:
+
+    if (pRxq->state == SFVMK_RXQ_STATE_STARTED)
+      pRxq->stats[SFVMK_RXQ_DISCARD]++;
+
     /* Return the packet to the pool */
     elem.ioAddr = pRxDesc->ioAddr;
     elem.length = pRxDesc->size;
@@ -484,8 +671,8 @@ discard_pkt:
       pRxDesc->pPkt = NULL;
     }
 
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_DBG, "completed = %u"
-                        "pending = %u", completed, pRxq->pending);
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO, "completed = %u"
+                           "pending = %u", completed, pRxq->pending);
   }
 
   pRxq->completed = completed;
@@ -494,7 +681,6 @@ discard_pkt:
   if (level < pRxq->refillThreshold)
     sfvmk_rxqFill(pRxq, pCompCtx);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_RX);
   return;
 }
 
@@ -523,12 +709,9 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
   vmk_uint32 headroom;
   vmk_uint32 id;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_RX);
-
   VMK_ASSERT_NOT_NULL(pRxq);
 
   if (pRxq->state != SFVMK_RXQ_STATE_STARTED) {
-    SFVMK_ERROR("RXQ[%u] is not yet started", pRxq->index);
     goto done;
   }
 
@@ -615,8 +798,8 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     batch = 0;
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_DBG,
-                      "No of allocated buffer = %u", posted);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                         "No of allocated buffer = %u", posted);
 
   /* Push entries in queue */
   efx_rx_qpush(pRxq->pCommonRxq, pRxq->added, &pRxq->pushed);
@@ -631,11 +814,10 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
     pRxq->refillDelay = SFVMK_RXQ_REFILL_DELAY_MS;
   }
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_DBG,
-                      "No of pushed buffer = %u", pRxq->pushed);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_IO,
+                         "No of pushed buffer = %u", pRxq->pushed);
 
 done:
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_RX);
   return;
 }
 
@@ -724,7 +906,7 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
                           EFX_RXQ_TYPE_DEFAULT,
                           &pRxq->mem,
                           pRxq->numDesc, 0,
-                          EFX_RXQ_FLAG_NONE,
+                          EFX_RXQ_FLAG_INNER_CLASSES,
                           pEvq->pCommonEvq,
                           &pRxq->pCommonRxq);
   if (status != VMK_OK) {
@@ -808,7 +990,7 @@ static void sfvmk_rxFlush(sfvmk_adapter_t *pAdapter)
       continue;
     }
 
-    pRxq->state = SFVMK_RXQ_STATE_INITIALIZED;
+    pRxq->state = SFVMK_RXQ_STATE_STOPPING;
     pRxq->flushState = SFVMK_FLUSH_STATE_PENDING;
     vmk_SpinlockUnlock(pEvq->lock);
 
@@ -874,6 +1056,13 @@ sfvmk_rxFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     }
 
     vmk_SpinlockLock(pEvq->lock);
+
+    if (pRxq->state != SFVMK_RXQ_STATE_STOPPING) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] is not in stopping state", qIndex);
+      vmk_SpinlockUnlock(pEvq->lock);
+      continue;
+    }
+
     while (currentTime < timeout) {
       /* Check to see if the flush event has been processed */
       if (pRxq->flushState != SFVMK_FLUSH_STATE_PENDING) {
@@ -907,17 +1096,23 @@ sfvmk_rxFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
     pRxq->pushed = 0;
     pRxq->pending = 0;
     pRxq->completed = 0;
+    pRxq->state = SFVMK_RXQ_STATE_INITIALIZED;
     vmk_SpinlockUnlock(pEvq->lock);
 
     /* Release DMA memory. */
-    sfvmk_freeDMAMappedMem(pRxq->mem.esmHandle,
-                           pRxq->mem.pEsmBase,
-                           pRxq->mem.ioElem.ioAddr,
-                           pRxq->mem.ioElem.length);
+    if (pRxq->mem.pEsmBase) {
+      sfvmk_freeDMAMappedMem(pRxq->mem.esmHandle,
+                             pRxq->mem.pEsmBase,
+                             pRxq->mem.ioElem.ioAddr,
+                             pRxq->mem.ioElem.length);
+    }
 
-    vmk_HeapFree(sfvmk_modInfo.heapID, pRxq->pQueue);
+    if (pRxq->pQueue)
+      vmk_HeapFree(sfvmk_modInfo.heapID, pRxq->pQueue);
+
     /* Destroy the common code receive queue. */
-    efx_rx_qdestroy(pRxq->pCommonRxq);
+    if (pRxq->pCommonRxq)
+      efx_rx_qdestroy(pRxq->pCommonRxq);
   }
 
 done:
@@ -933,10 +1128,10 @@ done:
 VMK_ReturnStatus
 sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
 {
+  const efx_nic_cfg_t *pNicCfg;
   vmk_uint32 qIndex;
   VMK_ReturnStatus status = VMK_BAD_PARAM;
   size_t alignEnd;
-  const efx_nic_cfg_t *pNicCfg;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_RX);
 
@@ -958,6 +1153,8 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
                         vmk_StatusToString(status));
     goto failed_rxq_init;
   }
+
+  pAdapter->rssInit = VMK_FALSE;
 
   pAdapter->rxBufferSize = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
 
@@ -995,8 +1192,7 @@ sfvmk_rxStart(sfvmk_adapter_t *pAdapter)
 
   status = efx_mac_filter_default_rxq_set(pAdapter->pNic,
                                           pAdapter->ppRxq[pAdapter->defRxqIndex]->pCommonRxq,
-                                          pAdapter->enableRSS);
-
+                                          VMK_FALSE);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
                         vmk_StatusToString(status));
@@ -1055,7 +1251,7 @@ done:
 /*! \brief Set the RXQ flush state.
 **
 ** \param[in]  pRxq       Pointer to RXQ
-** \param[in]  flushState Flush state
+** \param[in]  flushState flush state
 **
 ** \return: VMK_OK [success] error code [failure]
 */

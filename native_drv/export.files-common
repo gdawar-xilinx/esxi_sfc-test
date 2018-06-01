@@ -1,5 +1,6 @@
 imported/ef10_ev.c
 imported/ef10_filter.c
+imported/ef10_image.c
 imported/ef10_impl.h
 imported/ef10_intr.c
 imported/ef10_mac.c
@@ -8,6 +9,7 @@ imported/ef10_nic.c
 imported/ef10_nvram.c
 imported/ef10_phy.c
 imported/ef10_rx.c
+imported/ef10_signed_image_layout.h
 imported/ef10_tlv_layout.h
 imported/ef10_tx.c
 imported/ef10_vpd.c
@@ -45,5 +47,8 @@ imported/mcdi_mon.c
 imported/mcdi_mon.h
 imported/medford_impl.h
 imported/medford_nic.c
+imported/efx_tunnel.c
 imported/efx_annote.h
+imported/medford2_impl.h
+imported/medford2_nic.c
 imported/mc_driver_pcol_strs.h

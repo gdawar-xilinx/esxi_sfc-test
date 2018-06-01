@@ -1,9 +1,28 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- *************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #ifndef _SYS_EFSYS_H
 #define _SYS_EFSYS_H
@@ -22,6 +41,9 @@
 /*  Base Type */
 #define EFSYS_HAS_UINT64 1
 #define EFSYS_USE_UINT64 1
+
+/* ESX Image Header*/
+#define EFSYS_OPT_IMAGE_LAYOUT 1
 
 /* Helper Macros */
 #ifndef IS_P2ALIGNED
@@ -106,6 +128,7 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 #define EFSYS_OPT_SIENA 0
 #define EFSYS_OPT_HUNTINGTON 1
 #define EFSYS_OPT_MEDFORD 1
+#define EFSYS_OPT_MEDFORD2 1
 
 #ifdef DEBUG
 #define EFSYS_OPT_CHECK_REG 1
@@ -142,12 +165,15 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 
 #define EFSYS_OPT_EV_PREFETCH 0
 
+#define EFSYS_OPT_TUNNEL 1
 
 #define EFSYS_OPT_LICENSING 0
 
 #define EFSYS_OPT_ALLOW_UNCONFIGURED_NIC 0
 
 #define EFSYS_OPT_RX_PACKED_STREAM 0
+
+#define EFSYS_OPT_FW_SUBVARIANT_AWARE 0
 
 /* Memory Allocation/Deallocation */
 typedef vmk_IOA  efsys_dma_addr_t;
@@ -222,8 +248,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint32_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -238,8 +263,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -255,8 +279,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_oword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_oword_t)));    \
                                                                         \
             addr = (void *)((_esmp)->pEsmBase + (_offset));             \
                                                                         \
@@ -275,8 +298,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint32_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_dword_t)));    \
                                                                         \
             EFSYS_PROBE2(mem_writed, unsigned int, (_offset),           \
                 uint32_t, (_edp)->ed_u32[0]);                           \
@@ -291,8 +313,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)),     \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED(_offset, sizeof (efx_qword_t)));    \
                                                                         \
             EFSYS_PROBE3(mem_writeq, unsigned int, (_offset),           \
                 uint32_t, (_eqp)->eq_u32[1],                            \
@@ -309,8 +330,7 @@ typedef struct efsys_mem_s {
         do {                                                            \
             uint64_t *addr;                                             \
                                                                         \
-            VMK_ASSERT(IS_P2ALIGNED((_offset), sizeof (efx_oword_t)),   \
-                ("not power of 2 aligned"));                            \
+            VMK_ASSERT(IS_P2ALIGNED((_offset), sizeof (efx_oword_t)));  \
                                                                         \
             EFSYS_PROBE5(mem_writeo, unsigned int, (_offset),           \
                 uint32_t, (_eop)->eo_u32[3],                            \
@@ -424,7 +444,6 @@ typedef struct efsys_bar_s {
             vmk_DelayUsecs(_us);                                        \
         } while (B_FALSE)
 
-/* TBD: VmWare does not provide sleep API, we may need to implement sleep function */
 #define EFSYS_SLEEP     EFSYS_SPIN
 
 /* Timestamps */
@@ -485,7 +504,7 @@ typedef uint64_t    efsys_stat_t;
         const _t __x = (_t)(_x);                                        \
         const _t __y = (_t)(_y);                                        \
         if (!(__x _op __y))                                             \
-          VMK_ASSERT("assertion failed at %s:%u",__FILE__, __LINE__);   \
+          VMK_ASSERT(0);   \
         } while(0)
 
 #define EFSYS_ASSERT3U(_x, _op, _y)     EFSYS_ASSERT3(_x, _op, _y, uint64_t)
@@ -494,7 +513,7 @@ typedef uint64_t    efsys_stat_t;
 
 /* Probes */
 
-#define EFSYS_PROBES
+//#define EFSYS_PROBES
 
 #ifndef EFSYS_PROBES
 

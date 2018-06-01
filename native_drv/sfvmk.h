@@ -1,10 +1,28 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
-
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #ifndef __SFVMK_H__
 #define __SFVMK_H__
@@ -13,14 +31,6 @@
 #include <lib/vmkapi_types.h>
 
 /* Constants/Defines */
-
-/* Size of heap to be allocated */
-/* TBD: Add a function to calculate the Heap Size */
-#define SFVMK_HEAP_EST  (300 * VMK_MEGABYTE)
-
-/* Define it to include  Unit test code.
-TBD : Move it to Makefile */
-//#define SFVMK_WITH_UNIT_TESTS
 
 typedef struct sfvmk_modInfo_s {
    vmk_Name           driverName;
@@ -33,7 +43,7 @@ typedef struct sfvmk_modInfo_s {
    vmk_DumpFileHandle dumpFile;
    vmk_ListLinks      adapterList;
    vmk_MgmtHandle     mgmtHandle;
-   vmk_HashTable      vmkDevHashTable;
+   vmk_HashTable      vmkdevHashTable;
    vmk_Semaphore      lock;
 } sfvmk_modInfo_t;
 
@@ -42,6 +52,9 @@ extern sfvmk_modInfo_t sfvmk_modInfo;
 /* Structure for module params */
 typedef struct sfvmk_modParams_s {
   vmk_uint32 debugMask;
+  vmk_uint32 netQCount;
+  vmk_uint32 rssQCount;
+  vmk_uint32 vxlanOffload;
 } sfvmk_modParams_t;
 
 extern struct sfvmk_modParams_s modParams;
@@ -60,23 +73,41 @@ typedef enum sfvmk_debugMask_e {
   SFVMK_DEBUG_EVQ    = 1 << 9,
   SFVMK_DEBUG_PORT   = 1 << 10,
   SFVMK_DEBUG_MCDI   = 1 << 11,
-  SFVMK_DEBUG_COMMON_CODE  = 1 << 12
+  SFVMK_DEBUG_FILTER = 1 << 12,
+  SFVMK_DEBUG_COMMON_CODE  = 1 << 13
 } sfvmk_debugMask_t;
 
 typedef enum sfvmk_logLevel_e {
-  SFVMK_LOG_LEVEL_ERROR = 1,
-  SFVMK_LOG_LEVEL_WARN,
-  SFVMK_LOG_LEVEL_INFO,
+  SFVMK_LOG_LEVEL_INFO = 1,
   SFVMK_LOG_LEVEL_DBG,
   SFVMK_LOG_LEVEL_FUNCTION,
+  SFVMK_LOG_LEVEL_IO,
 } sfvmk_logLevel_t;
 
 #define SFVMK_DEBUG_ALL (sfvmk_debugMask_t)(-1)
+
+#ifdef VMX86_DEBUG
+#define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_DBG
+#else
+#define SFVMK_LOG_LEVEL_DEFAULT SFVMK_LOG_LEVEL_INFO
+#endif
+
+#ifdef VMX86_DEBUG
+#define ENABLE_IO_DEBUG_LOG 1
+
 #define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
                              SFVMK_DEBUG_UPLINK |                            \
                              SFVMK_DEBUG_EVQ    |                            \
                              SFVMK_DEBUG_TX     |                            \
+                             SFVMK_DEBUG_RX     |                            \
                              SFVMK_DEBUG_HW)
+#else
+#define ENABLE_IO_DEBUG_LOG 0
+
+#define SFVMK_DEBUG_DEFAULT (SFVMK_DEBUG_DRIVER |                            \
+                             SFVMK_DEBUG_UPLINK |                            \
+                             SFVMK_DEBUG_HW)
+#endif
 
 #define SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ...)                   \
   do {                                                                       \
@@ -100,16 +131,25 @@ typedef enum sfvmk_logLevel_e {
     }                                                                        \
   } while (0)
 
+
+#if ENABLE_IO_DEBUG_LOG
+#define  SFVMK_ADAPTER_DEBUG_IO(pAdapter, mask, lvl, fmt, ...)               \
+         SFVMK_ADAPTER_DEBUG(pAdapter, mask, lvl, fmt, ##__VA_ARGS__)
+#else
+#define  SFVMK_ADAPTER_DEBUG_IO(pAdapter, mask, lvl, fmt, ...)
+#endif
+
 /* Errors (never masked) */
 #define SFVMK_ADAPTER_ERROR(pAdapter, fmt, ...)                              \
   do {                                                                       \
-      vmk_WarningMessage("[%s] "fmt, (pAdapter) ?                            \
+      vmk_WarningMessage("%s:%d: [%s] " fmt "\n",                            \
+                         __FUNCTION__, __LINE__, (pAdapter) ?                \
                          vmk_NameToString(&pAdapter->devName) : "sfvmk",     \
                          ##__VA_ARGS__);                                     \
   } while (0)
 
 #define SFVMK_ERROR(fmt, ...)                                                \
-  vmk_WarningMessage(fmt, ##__VA_ARGS__)
+  vmk_WarningMessage("%s:%d: " fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 /* Debug macro for function entry and exit */
 #define SFVMK_ADAPTER_DEBUG_FUNC(pAdapter, mask, string, fmt, ...)           \

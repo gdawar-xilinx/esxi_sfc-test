@@ -1,9 +1,29 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "sfvmk_driver.h"
 #include "sfvmk_ut.h"
 #include "sfvmk_mgmt_interface.h"
@@ -17,7 +37,7 @@ sfvmk_modInfo_t sfvmk_modInfo = {
    .logThrottledID   = VMK_INVALID_LOG_HANDLE,
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
    .mgmtHandle       = NULL,
-   .vmkDevHashTable  = VMK_INVALID_HASH_HANDLE,
+   .vmkdevHashTable  = VMK_INVALID_HASH_HANDLE,
    .lock             = NULL
 };
 
@@ -34,14 +54,14 @@ sfvmk_modInfoCleanup(void)
     sfvmk_modInfo.driverID = NULL;
   }
 
-  if (sfvmk_modInfo.vmkDevHashTable != VMK_INVALID_HASH_HANDLE) {
-    if (vmk_HashDeleteAll(sfvmk_modInfo.vmkDevHashTable) != VMK_OK)
-      SFVMK_ERROR("Error in deleting vmkDevHashTable entries");
+  if (sfvmk_modInfo.vmkdevHashTable != VMK_INVALID_HASH_HANDLE) {
+    if (vmk_HashDeleteAll(sfvmk_modInfo.vmkdevHashTable) != VMK_OK)
+      SFVMK_ERROR("Error in deleting vmkdevHashTable entries");
 
-    if (vmk_HashIsEmpty(sfvmk_modInfo.vmkDevHashTable)) {
+    if (vmk_HashIsEmpty(sfvmk_modInfo.vmkdevHashTable)) {
       /* Free the hash table */
-      vmk_HashRelease(sfvmk_modInfo.vmkDevHashTable);
-      sfvmk_modInfo.vmkDevHashTable = VMK_INVALID_HASH_HANDLE;
+      vmk_HashRelease(sfvmk_modInfo.vmkdevHashTable);
+      sfvmk_modInfo.vmkdevHashTable = VMK_INVALID_HASH_HANDLE;
     }
   }
 
@@ -71,6 +91,128 @@ sfvmk_modInfoCleanup(void)
   }
 }
 
+/*! \brief Local function to calculate heap size requirement.
+**
+** \return: Calculated heap size in bytes.
+*/
+static vmk_ByteCount
+sfvmk_calcHeapSize(void)
+{
+  vmk_ByteCount maxSize = 0;
+  vmk_HeapAllocationDescriptor allocDesc[22];
+  VMK_ReturnStatus status;
+
+  allocDesc[0].size = vmk_LogHeapAllocSize();
+  allocDesc[0].alignment = 0;
+  allocDesc[0].count = 2;
+
+  allocDesc[1].size = vmk_LockDomainAllocSize();
+  allocDesc[1].alignment = 0;
+  allocDesc[1].count = 1;
+
+  allocDesc[2].size = vmk_HashGetAllocSize(SFVMK_MAX_ADAPTER);
+  allocDesc[2].alignment = 0;
+  allocDesc[2].count = 1;
+
+  allocDesc[3].size = vmk_HashGetAllocSize(SFVMK_MAX_FILTER);
+  allocDesc[3].alignment = 0;
+  allocDesc[3].count = SFVMK_MAX_ADAPTER;
+
+  /* For MCDI lock, adapter lock */
+  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[4].size, &allocDesc[4].alignment);
+  allocDesc[4].count = 2;
+
+  /* Binary semaphore at the module level */
+  allocDesc[5].size = vmk_SemaAllocSize((vmk_uint32 *)&allocDesc[5].alignment);
+  allocDesc[5].count = 1;
+
+  allocDesc[6].size = vmk_SpinlockAllocSize(VMK_SPINLOCK);
+  allocDesc[6].alignment = 0;
+  /* Per adapter - memBarLock, nicLock, uplinkLock, evqLock for each EVQ,
+   * txqLock for each TXQ.
+   */
+  allocDesc[6].count = (3 + SFVMK_MAX_EVQ + SFVMK_MAX_TXQ) * SFVMK_MAX_ADAPTER;
+
+  /* Space for helper thread */
+  allocDesc[7].size = vmk_WorldCreateAllocSize(&allocDesc[7].alignment);
+  allocDesc[7].count = 1;
+
+  allocDesc[8].size = sizeof(sfvmk_adapter_t);
+  allocDesc[8].alignment = 0;
+  allocDesc[8].count = SFVMK_MAX_ADAPTER;
+
+  allocDesc[9].size = sizeof(sfvmk_evq_t);
+  allocDesc[9].alignment = 0;
+  allocDesc[9].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+
+  allocDesc[10].size = sizeof(sfvmk_evq_t *);
+  allocDesc[10].alignment = sizeof(sfvmk_evq_t *);
+  allocDesc[10].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+
+  allocDesc[11].size = sizeof(vmk_IntrCookie);
+  allocDesc[11].alignment = 0;
+  allocDesc[11].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_INTR;
+
+  allocDesc[12].size = sizeof(sfvmk_rxq_t);
+  allocDesc[12].alignment = 0;
+  allocDesc[12].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+
+  allocDesc[13].size = sizeof(sfvmk_rxq_t *);
+  allocDesc[13].alignment = sizeof(sfvmk_rxq_t *);
+  allocDesc[13].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+
+  allocDesc[14].size = sizeof(sfvmk_rxSwDesc_t);
+  allocDesc[14].alignment = 0;
+  allocDesc[14].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ * EFX_RXQ_MAXNDESCS;
+
+  allocDesc[15].size = sizeof(sfvmk_txq_t);
+  allocDesc[15].alignment = 0;
+  allocDesc[15].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+
+  allocDesc[16].size = sizeof(sfvmk_txq_t *);
+  allocDesc[16].alignment = sizeof(sfvmk_txq_t *);
+  allocDesc[16].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+
+  allocDesc[17].size = sizeof(vmk_UplinkSharedQueueData);
+  allocDesc[17].alignment = 0;
+  allocDesc[17].count = SFVMK_MAX_ADAPTER * (SFVMK_MAX_RXQ * SFVMK_MAX_TXQ);
+
+  allocDesc[18].size = sizeof(sfvmk_filterDBEntry_t);
+  allocDesc[18].alignment = 0;
+  allocDesc[18].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
+
+  /* Allocaion done for both Signed and Unsigned Image type*/
+  allocDesc[19].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
+  allocDesc[19].alignment = 0;
+  allocDesc[19].count = 1;
+
+  status = vmk_MgmtGetStaticHeapRequired((vmk_MgmtApiSignature *)&sfvmk_mgmtSig,
+                                         1, 0, 0, &allocDesc[20].size);
+  if (status != VMK_OK) {
+    allocDesc[20].size = 0;
+    SFVMK_ERROR("Failed to determine management heap size: status:%s",
+                 vmk_StatusToString(status));
+  }
+
+  allocDesc[20].alignment = 0;
+  allocDesc[20].count = 1;
+
+  allocDesc[21].size = SFVMK_HWQ_STATS_BUFFER_SZ;
+  allocDesc[21].alignment = 0;
+  allocDesc[21].count = 1;
+
+  status = vmk_HeapDetermineMaxSize(allocDesc,
+                                    sizeof(allocDesc) / sizeof(allocDesc[0]),
+                                    &maxSize);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Failed to determine heap max size: status:%s",
+                 vmk_StatusToString(status));
+  }
+
+  /* Add 20% more for fragmentation */
+  return (maxSize *120)/100;
+}
+
 /*! \brief This is the driver module entry point that gets invoked
 **         automatically when this module is loaded.
 **
@@ -80,8 +222,8 @@ sfvmk_modInfoCleanup(void)
 int
 init_module(void)
 {
-  VMK_ReturnStatus status;
-  vmk_ByteCount byteCount;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_ByteCount heapSize = 0;
   vmk_LogProperties logProps;
   vmk_HeapCreateProps heapProps;
   vmk_LogThrottleProperties logThrottledProps;
@@ -89,39 +231,26 @@ init_module(void)
   vmk_MgmtProps mgmtProps;
   vmk_HashProperties hashProps;
 
-  /* TBD :  Memory for other modules needs to be added */
-  vmk_HeapAllocationDescriptor allocDesc[] = {
-      /* size, alignment, count */
-      { SFVMK_HEAP_EST, 1, 1},
-      { vmk_LogHeapAllocSize(), 1, 1 },
-      { vmk_LockDomainAllocSize(), 1, 1 },
-      { vmk_SpinlockAllocSize(VMK_SPINLOCK), 1, 2}
-   };
-
-  /* Populate sfvmk_ModInfo fields */
-
   /* 1. Driver Name */
   vmk_NameInitialize(&sfvmk_modInfo.driverName, SFVMK_DRIVER_NAME);
 
   /* 2. Heap */
-  status = vmk_HeapDetermineMaxSize(allocDesc,
-                                     sizeof(allocDesc) / sizeof(allocDesc[0]),
-                                     &byteCount);
-  if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to determine heap max size (%x)", status);
-     goto failed_max_heap_size;
+  heapSize = sfvmk_calcHeapSize();
+  if (!heapSize) {
+    SFVMK_ERROR("Failed to determine heap max size");
+    goto failed_max_heap_size;
   }
 
   heapProps.type = VMK_HEAP_TYPE_SIMPLE;
   vmk_NameCopy(&heapProps.name, &sfvmk_modInfo.driverName);
   heapProps.module = vmk_ModuleCurrentID;
   heapProps.initial = 0;
-  heapProps.max = byteCount;
+  heapProps.max = heapSize;
   heapProps.creationTimeoutMS = VMK_TIMEOUT_UNLIMITED_MS;
 
   status = vmk_HeapCreate(&heapProps, &sfvmk_modInfo.heapID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create heap (%x) for sfc_native driver", status);
+     SFVMK_ERROR("Failed to create heap (%x) for sfc_native driver", status);
      goto failed_heap_create;
   }
 
@@ -129,12 +258,12 @@ init_module(void)
   vmk_NameCopy(&logProps.name, &sfvmk_modInfo.driverName);
   logProps.module = vmk_ModuleCurrentID;
   logProps.heap = sfvmk_modInfo.heapID;
-  logProps.defaultLevel = 0;
+  logProps.defaultLevel = SFVMK_LOG_LEVEL_DEFAULT;
   logProps.throttle = NULL;
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register log component (%x)", status);
+     SFVMK_ERROR("Failed to register log component (%x)", status);
      goto failed_log_register;
   }
 
@@ -144,7 +273,7 @@ init_module(void)
 
   status = vmk_LogRegister(&logProps, &sfvmk_modInfo.logThrottledID);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to register throttled log component (%x)", status);
+     SFVMK_ERROR("Failed to register throttled log component (%x)", status);
      goto failed_throttled_log_register;
   }
 
@@ -154,7 +283,7 @@ init_module(void)
                                 &sfvmk_modInfo.driverName,
                                 &sfvmk_modInfo.lockDomain);
   if (status != VMK_OK) {
-     vmk_WarningMessage("Failed to create lock domain (%x)", status);
+     SFVMK_ERROR("Failed to create lock domain (%x)", status);
      goto failed_lock_domain_create;
   }
 
@@ -192,9 +321,9 @@ init_module(void)
   hashProps.acquire   = NULL;
   hashProps.release   = NULL;
 
-  status = vmk_HashAlloc(&hashProps, &sfvmk_modInfo.vmkDevHashTable);
+  status = vmk_HashAlloc(&hashProps, &sfvmk_modInfo.vmkdevHashTable);
   if (status != VMK_OK) {
-    SFVMK_ERROR("Initialization of sfvmk_vmkDevHashTable failed: %s",
+    SFVMK_ERROR("Initialization of sfvmk_vmkdevHashTable failed: (%s)",
                  vmk_StatusToString(status));
     goto failed_hash_init;
   }
@@ -202,8 +331,8 @@ init_module(void)
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
   if (status != VMK_OK) {
-    vmk_WarningMessage("Initialization of SFC driver failed %s",
-                       vmk_StatusToString(status));
+    SFVMK_ERROR("Initialization of SFC driver failed (%s)",
+                 vmk_StatusToString(status));
     goto failed_driver_register;
   }
 
@@ -217,8 +346,8 @@ init_module(void)
 
   status = vmk_MgmtInit(&mgmtProps, &sfvmk_modInfo.mgmtHandle);
   if (status != VMK_OK) {
-    SFVMK_ERROR("Initialization of mgmtProps failed: %s",
-                vmk_StatusToString(status));
+    SFVMK_ERROR("Initialization of mgmtProps failed: (%s)",
+                 vmk_StatusToString(status));
     goto failed_mgmt_init;
   }
 

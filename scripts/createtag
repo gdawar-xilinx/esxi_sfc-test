@@ -18,42 +18,87 @@ fail () { log "$@"; exit 1; }
 
 # Usage
 usage () {
-    err "Usage: mmaketag <branch> [<desired new tag>]"
+    err "Usage: createtag <sfvmk branch> <desired new tag> <firmware family> <v5 branch> [<v5 tag>]"
+    err "  Create tag on esxi_sfc and common code repo for sfvmk driver"
     err
-    err "  branch:"
+    err "  --sfvmk_branch="
     err
-    err "    The branch can be either 'default' 'sfvmk_dev_x'. If crossing branches,"
-    err "    mmaketag will take care to re-exec mmaketag on the target branch."
+    err "    The branch can be either 'default' 'sfvmk_dev_x'."
     err
-    err "  desired new tag:"
+    err "  --sfvmk_tag="
     err
     err "    The tag can be in the form of the following:"
-    err "      v1_1_m"
-    err "      v1_1_m_bbbb"
-    err "    Note that mmaketag will check that this tag does not already exist"
+    err "      v1.1.m.bbbb"
+    err "    Note that createtag will check that this tag does not already exist"
     err
+    err "  --fwfamily="
+    err "    The firmware family version, i.e."
+    err
+    err "    --fwfamily=v7_1_1_1000-internal"
+    err
+    err "  --v5_branch="
+    err
+    err "    The v5 branch name can be either 'default' or 'BRANCH_NAME'."
+    err
+    err "  --v5_tag="
+    err
+    err "    Tag for v5 repo, this could be optional. If v5 tag is not provided,"
+    err "    the script continues tagging the SFVMK with v5 tag present in Makefile"
+    err "    v4.13.1.xxxx"
+    err
+    err "    ./scripts/createtag --sfvmk_branch=sfvmk_dev_p2 --sfvmk_tag=v1.0.0.1 --v5_branch=default"
+    err "      --fwfamily=v7_1_1_1000-internal"
+    err
+    err "    ./scripts/createtag --sfvmk_branch=sfvmk_dev_p2 --sfvmk_tag=v1.0.0.2"
+    err "     --v5_branch=v4_13_1_sfvmk --v5_tag=v4.13.1.1002 --fwfamily=v7_1_1_1000-internal"
     exit 1
 }
-[ $# = 2 ] || usage
 
-branch=$1
-tag=${2:-}
-repo="esxi_sfc"
+sfvmk_repo="esxi_sfc"
 prompt=true
 changes_pushed=false
-
-echo -e "\n\n Creating tag : $tag on branch $branch"
+commoncode_repo=v5
+distfiles_repo=distfiles
+winutils_repo=winutils
+host_name="rpm-test1"
+current_host=$(hostname)
+TOP_DIR=$(pwd)
+v5_lasttag=
+tot_tagged=
+match_v5tag=
 
 # Functions
-
-checkrequiredargs() {
-    [ "${branch}" == "${branch/\-\-/X}" ] || \
-        fail "Please check -- arguments are first"
-    [ "${tag}" == "${tag/\-\-/X}" ] || \
-        fail "Please check -- arguments are first"
+strstr() {
+  [ "${1#*$2*}" = "$1" ] && return 1
+  return 0
 }
 
-tinderboxcheck() {
+checkRequiredArgs() {
+    local first_char
+
+    [ "${sfvmk_branch}" != "" ] || \
+        fail "Please check -- arguments Must specify --sfvmk_branch"
+    if [ "${sfvmk_tag}" == "" ]; then
+        fail "Please check -- arguments Must specify --sfvmk_tag"
+    else
+        first_char=$(echo "${sfvmk_tag}" | cut -c 1)
+        [ "${first_char}" != "v" ] && \
+           fail "Please check -- arguments, Inavlid --sfvmk_tag ${sfvmk_tag}"
+    fi
+
+    [ "${v5_branch}" != "" ] || \
+        fail "Please check -- arguments Must specify --v5_branch"
+    [ "${fwfamily}" != "" ] || \
+        fail "Please check -- arguments Must specify --fwfamily"
+    if [ "${v5_tag}" == "" ]; then
+        echo
+        echo "*** v5 tag is not provided, continue without v5 tag ***"
+        read -p "Press Ctrl+C to exit or press enter to proceed ..."
+        echo "Thanks, proceeding ..."
+    fi
+}
+
+tinderBoxCheck() {
     if $prompt; then
         # Manual check for now
         echo
@@ -63,108 +108,409 @@ tinderboxcheck() {
     fi
 }
 
-sanitychecks () {
-            # Check no local changes
-            lines=$(hg --noninteractive status | wc -l)
-            [ "${lines}" = 0 ] || fail "Repo ${repo} has local changes. Aborting"
+sanityChecks () {
+    # check for rpm-test1 host
+    strstr ${current_host} ${host_name} && echo current host is rpm_test1 || \
+    fail "current host is ${current_host} required host is ${host_name}"
 
-            # Check no outgoing commits
-            hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
-               fail "Repo ${repo} has outgoing changes"
+    # Check no local changes
+    lines=$(hg --noninteractive status | wc -l)
+    [ "${lines}" = 0 ] || fail "Repo ${sfvmk_repo} has local changes. Aborting"
 
-           # Check no applied mqueue patches - without needing mqueue extension
-            hg --noninteractive tags | grep qparent && \
-                fail "Repo ${repo} has mqueue patches applied. Aborting" || true
+    # Check no outgoing commits
+    hg --noninteractive outgoing | egrep '^no changes found' > /dev/null || \
+    fail "Repo ${sfvmk_repo} has outgoing changes"
+
+    # Check no applied mqueue patches - without needing mqueue extension
+    hg --noninteractive tags | grep qparent && \
+    fail "Repo ${sfvmk_repo} has mqueue patches applied. Aborting" || true
 }
 
-hgpull () {
+pullSfvmkRepo () {
     hg --noninteractive pull
 
     # We assume that newbranch already exists
     # This will leave esxi_sfc/build
-    log "Updating '${repo}' to branch '${branch}'"
-    hg --noninteractive update --clean ${branch}
+    log "Updating '${sfvmk_repo}' to branch '${sfvmk_branch}'"
+
+    lines=$(hg --noninteractive branches |grep ${sfvmk_branch} | wc -l)
+    if [ "${lines}" = 0 ]; then
+      fail "Branch ${sfvmk_branch} not found in repo ${sfvmk_repo}, exit."
+    fi
+
+    hg --noninteractive update --clean ${sfvmk_branch}
 }
 
-checktagexists() {
+checkTagExists() {
      echo "Checking Existing tags"
-     hg log -r "$tag" >/dev/null 2>&1
+     hg log -r "$sfvmk_tag" >/dev/null 2>&1
 }
 
-checklasttag() {
-     checktagexists  && \
-         fail "Error: $tag already exist !!!"
+checkSfvmkLastTag() {
+     checkTagExists  && \
+         fail "Error: $sfvmk_tag already exist !!!"
 
-     echo " Tag $tag does not exist in the repo : $repo"
+     echo " Tag $sfvmk_tag does not exist in the repo : $sfvmk_repo"
 }
 
-# Update the sfvmk.sc file in the repository $1 to ${tag}
-versionupdate () {
-    echo "updating ${repo} repo to ${tag}"
+getLastTag () {
+    local repo=$1
+    local branch=$2
 
+    cd ${repo}
+    hg --noninteractive log --branch ${branch} --rev "sort(tag(), '-date')" -l 1 --template "{tags}\n" 2>/dev/null
+    cd ${TOP_DIR}
+}
+
+isTopOfTreeTagged () {
+    local repo=$1
+    local branch=$2
+
+    cd ${repo}
+    tot_summary=$(hg --noninteractive parent | egrep summary: | tail -1); cd ${TOP_DIR}
+
+    tag="$(getLastTag ${repo} ${branch})"
+
+    if [[ $tot_summary == *$tag* ]] ; then
+      tot_tagged="yes"
+      return
+    fi
+
+    tot_tagged=""
+}
+
+# Update the sfvmk.sc file with new version number
+versionUpdate () {
     file=$(pwd)/native_drv/sfvmk.sc
-    ver=$tag
-    echo "tag: $tag, ver : $ver"
+    ver=$sfvmk_tag
     ver=${ver:1}
     ver="\"${ver}\""
+    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
     sed -i 's/\(driver_ver     = \)\(.*\)$/\1'${ver}'/' $file
+}
+
+# Update the buildtype in the Makefile to ${buildtype}
+buildtypeupdate () {
+    echo "updating BUILDTYPE as ${buildtype}"
+
+    file=$(pwd)/native_drv/Makefile
+    sed -i 's/\(BUILDTYPE     = \)\(.*\)$/\1'${buildtype}'/' $file
+}
+
+# Update the live-install/remove params in the sfvmk.sc file
+liveVibParamUpdate () {
+    if [ "$buildtype" = "beta" ]; then
+      livevibupdate="True"
+    else
+      livevibupdate="False"
+    fi
+
+    echo "updating live-install/remove params as ${livevibupdate} for ${buildtype} build"
+
+    file=$(pwd)/native_drv/sfvmk.sc
+    sed -i 's/\(\"live-install-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
+    sed -i 's/\(\"live-remove-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
+}
+
+# Update the sfreport utility version
+updateSfreport() {
+    file=$(pwd)/tools/sfreport.py
+    ver=$sfvmk_tag
+    ver=${ver:1}
+    ver="\"${ver}\""
+    echo "sfvmk_tag: $sfvmk_tag, ver : $ver"
+    sed -i 's/\(SFREPORT_VERSION = \)\(.*\)$/\1'${ver}'/' $file
+}
+
+# Update the V5_TAG params in the Makefile file
+updateV5Target () {
+    file=$(pwd)/native_drv/Makefile
+
+    echo "updating v5 target params for ${buildtype} build"
+
+    if [ "$buildtype" = "beta" ]; then
+      sed -i 's/\(V5_BRANCH\ *\=\ \)\(.*\)$/\1'${v5_branch}'/' $file
+    else
+      if [ "${v5_tag}" != "" ]; then
+        sed -i 's/\(V5_TAG\ *\=\ \)\(.*\)$/\1'${v5_tag}'/' $file
+      fi
+    fi
+}
+
+pullV5Repo () {
+    local lines
+
+    echo "cloning ${commoncode_repo} repository"
+    hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${commoncode_repo}
+    cd ${commoncode_repo}
+
+    lines=$(hg --noninteractive branches |grep ${v5_branch} | wc -l)
+    echo "check if branch ${v5_branch} is present or not"
+    if [ "${lines}" = 0 ]; then
+      cd ${TOP_DIR}; rm -rf ${TOP_DIR}/${commoncode_repo};
+      fail "Branch ${v5_branch} not found in repo ${commoncode_repo}, cleanup and exit."
+    fi
+
+    echo "Update repo ${commoncode_repo} to branch ${v5_branch}"
+    hg --noninteractive update -C ${v5_branch} ; cd ${TOP_DIR}
+
+    #Required by mmaketag script
+    echo "cloning ${distfiles_repo} repository"
+    hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${distfiles_repo}
+
+    #Required by mmaketag script
+    echo "cloning ${winutils_repo} repository"
+    hg --noninteractive --cwd ${TOP_DIR} clone /project/hg/incoming/${winutils_repo}
+}
+
+createV5Tag () {
+    cd ${commoncode_repo}/scripts ; export PATH=${PATH}:$(pwd) ; cd ..
+    echo "Add v5 tag ${v5_tag} for branch ${v5_branch}"
+    sh scripts/mmaketag --tagfor=vmware --firmwarefamily_tag ${fwfamily} custom ${v5_tag}
+    cd ${TOP_DIR}
+}
+
+removeV5Repo () {
+    echo "removing ${commoncode_repo} repository"
+    rm -rf ${TOP_DIR}/${commoncode_repo}
+
+    echo "removing ${distfiles_repo} repository"
+    rm -rf ${TOP_DIR}/${distfiles_repo}
+
+    echo "removing ${winutils_repo} repository"
+    rm -rf ${TOP_DIR}/${winutils_repo}
+}
+
+compareV5Tag () {
+    file=${TOP_DIR}/native_drv/Makefile
+    existing_tag=$(grep '\(V5_TAG\ *\=\)' $file | awk '{print $3}')
+
+    cd ${commoncode_repo}
+    last_tag=$(hg --noninteractive parent | egrep summary: | tail -1)
+    cd ${TOP_DIR}
+
+    if [[ $last_tag == *$existing_tag* ]]; then
+      match_v5tag="yes"
+      return
+    fi
+
+    match_v5tag=""
+}
+
+handleV5NoTag () {
+    compareV5Tag
+    if [[ ${match_v5tag} == *yes* ]]; then
+       echo "No changes after the last v5 tag. Continuing ...";
+    else
+       echo "There have been code commits after the last v5 tag.";
+       read -p 'Do you want to continue without tagging the latest changes? (Y/ Yes/ N / No): ' user_input
+       if [[ $user_input == *y*  ]] || [[ $user_input == *Y*  ]]; then
+         echo "Continuing without tagging v5"
+       else
+         removeV5Repo
+         fail "exit"
+       fi
+    fi
+
+    cd ${TOP_DIR}
+}
+
+# Validate if a new v5 tag is required or not.
+verifyV5Tag () {
+    # Find out if common code ToT is tagged or not
+    isTopOfTreeTagged ${commoncode_repo} ${v5_branch}
+    if [[ ${tot_tagged} == *yes* ]] ; then
+      echo "Top of the tree for ${commoncode_repo} is tagged"
+      if [ "${v5_tag}" != "" ]; then
+        echo "Top of tree is tagged, try without --v5_tag option"
+        removeV5Repo
+        exit 1
+      fi
+
+      # Compare v5 tag from ToT with SFVMK makefile
+      compareV5Tag
+      if [[ ${match_v5tag} == *yes* ]] ; then
+         # Find out if SFVMK repo ToT is tagged or not
+         tot_tagged=""
+         isTopOfTreeTagged . ${sfvmk_branch}
+         if [[ ${tot_tagged} == *yes* ]] ; then
+           echo "What are we tagging ? No change found in ${commoncode_repo}, ${sfvmk_repo}"
+           removeV5Repo
+           exit 1
+         else
+           echo "repo ${sfvmk_repo} top of tree is not tagged, continue tagging ${sfvmk_repo}"
+           cd ${TOP_DIR}
+           return
+         fi
+      fi
+
+      v5_lasttag="$(getLastTag ${commoncode_repo} ${v5_branch})"
+      if [ -z "${v5_lasttag}" ] ; then
+        removeV5Repo
+        fail "Last tag on ${commoncode_repo} not found"
+      fi
+    else
+      echo "Top of tree of branch ${v5_branch} is not tagged for repo ${commoncode_repo}"
+      if [ "${v5_tag}" == "" ]; then
+        handleV5NoTag
+      fi
+    fi
+
 }
 
 # Return true (via $?) if the working directory contains local changes
 checkworkingdir () {
-    local repo lines
-    repo="$1"
+    local sfvmk_repo lines
+    sfvmk_repo="$1"
     lines="$(hg --noninteractive status | wc -l)"
     test ${lines} -gt 0
 }
 
-commitversion () {
-    echo "repo ${repo} commit version ${tag}"
-    if checkworkingdir ${repo}; then
+commitVersion () {
+    echo "repo ${sfvmk_repo} commit version ${sfvmk_tag}"
+    if checkworkingdir ${sfvmk_repo}; then
         hg --noninteractive addremove
-        hg --noninteractive commit --message "Task 71858 : Update version numbers to ${tag}"
+        hg --noninteractive commit --message "Task 71858 : Update version numbers to ${sfvmk_tag}"
     fi
 
     # fail gracefully when it's a no-op, like hg commit already does
-    echo "repo ${repo} tag ${tag}"
-    if [ -z "$(hg --noninteractive tags | grep ${tag})" ]; then
-        hg --noninteractive tag ${tag}
+    echo "repo ${sfvmk_repo} sfvmk_tag ${sfvmk_tag}"
+    if [ -z "$(hg --noninteractive tags | grep ${sfvmk_tag})" ]; then
+        hg --noninteractive tag ${sfvmk_tag}
     fi
 }
 
 
-hgpush () {
-    local repo="$1" rev
+sfvmkHgPush () {
+    local sfvmk_repo="$1" rev
 
-    msg "push back ${repo} changes"
+    msg "push back ${sfvmk_repo} changes"
 
     hg --noninteractive push || true
 }
 
-maketag () {
-    commitversion
+makeSfvmkTag () {
+    commitVersion
 
     local answer=""
     until [ "$answer" = "y" -o "$answer" = "n" ]; do
         echo "You can explore the changes with 'hg outgoing -p'"
         echo "You can request a test of these changes here http://tinderbox/request"
-        read -p "Do you want to push the above tag ${tag} (y/n)" answer
+        read -p "Do you want to push the above tag ${sfvmk_tag} (y/n)" answer
     done
     if [ "$answer" = "y" ]; then
-           hgpush ${repo}
+           sfvmkHgPush ${sfvmk_repo}
        changes_pushed=true
-       msg "Changes have been pushed. Tag ${tag} was created."
+       msg "Changes have been pushed. Tag ${sfvmk_tag} was created."
     else
        fail "Please hg strip the outgoing commits from your repo"
     fi
 }
 
-# Invoke Functions to create tag
-checkrequiredargs
-tinderboxcheck
-sanitychecks
-hgpull
-checklasttag
-versionupdate
-maketag
+tagV5Repo () {
+    pullV5Repo
+    verifyV5Tag
+    if [ "${v5_tag}" != "" ]; then
+       createV5Tag
+    fi
+    removeV5Repo
+
+    v5_tag=${v5_lasttag}
+}
+
+bumpVersion () {
+    sfvmk_tag=$(echo $sfvmk_tag |awk -F. -v OFS=. 'NF==1{print ++$NF}; \
+                {$NF=sprintf("%0*d", length($NF), ($NF+1)); print}')
+}
+
+addSfvmkTag () {
+    echo "Updating sfvmk.sc ...."
+    versionUpdate
+    liveVibParamUpdate
+    echo "Updating Makefile ...."
+    buildtypeupdate
+    updateV5Target
+    echo -e "\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
+    makeSfvmkTag
+}
+
+updateAndTagSfvmk () {
+    buildtype='release'
+    echo "Updating sfreport.py  ...."
+    updateSfreport
+    addSfvmkTag
+
+    bumpVersion
+
+    buildtype='beta'
+    addSfvmkTag
+}
+
+sfvmk_branch=
+sfvmk_tag=
+v5_branch=
+v5_tag=
+fwfamily=
+buildtype=
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --sfvmk_branch=*)
+            sfvmk_branch=${1:15}
+            ;;
+        --sfvmk_branch)
+            sfvmk_branch=$2
+            shift
+            ;;
+        --sfvmk_tag=*)
+            sfvmk_tag=${1:12}
+            ;;
+        --sfvmk_tag)
+            sfvmk_tag=$2
+            shift
+            ;;
+        --v5_branch=*)
+            v5_branch=${1:12}
+            ;;
+        --v5_branch)
+            v5_branch=$2
+            shift
+            ;;
+        --v5_tag=*)
+            v5_tag=${1:9}
+            ;;
+        --v5_tag)
+            sfvmk_tag=$2
+            shift
+            ;;
+        --fwfamily=*)
+            fwfamily=${1:11}
+            ;;
+        --fwfamily)
+            fwfamily=$2
+            shift
+            ;;
+        -*)
+            usage
+            ;;
+         *)
+            break
+            ;;
+   esac
+   shift
+done
+
+# Invoke Functions to create v5 and sfvmk tags
+checkRequiredArgs
+tinderBoxCheck
+sanityChecks
+pullSfvmkRepo
+checkSfvmkLastTag
+
+# Create v5 Tag
+tagV5Repo
+
+# Create sfvmks Tags
+updateAndTagSfvmk
+
 ${changes_pushed} && log "Please update the correct !TEST! entry with details"

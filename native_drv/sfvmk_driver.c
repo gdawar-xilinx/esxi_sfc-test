@@ -1,18 +1,57 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "sfvmk_driver.h"
+
+/* Default number of NetQ supported */
+#define SFVMK_NETQ_COUNT_DEFAULT 8
+
+/* Default number of RSSQ supported */
+#define SFVMK_RSSQ_COUNT_DEFAULT 0
 
 /* Initialize module params with default values */
 sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
+  .netQCount = SFVMK_NETQ_COUNT_DEFAULT,
+  .vxlanOffload = VMK_TRUE,
+  .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
 };
 
 /* List of module parameters */
 VMK_MODPARAM_NAMED(debugMask, modParams.debugMask, uint, "Debug Logging Bit Masks");
+VMK_MODPARAM_NAMED(netQCount, modParams.netQCount, uint,
+                   "NetQ count(includes defQ) [Min:1 Max:15 Default:8]"
+                   "(invalid value sets netQCount to default value(8))");
+VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
+                   "RSSQ count [Min:1 (RSS disable) Max:4 Default:RSS disable]"
+                   "(invalid value of rssQCount disables RSS");
+VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
+                   "Enable / disable vxlan offload "
+                   "[0:Disable, 1:Enable (default)]");
+
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -33,7 +72,7 @@ static void sfvmk_forgetDevice(vmk_Device device);
 /*! \brief  Routine to check adapter's family, raise error if proper family
 ** is not found.
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_TRUE [success] VMK_FALSE [failure]
 */
@@ -50,6 +89,11 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_INFO,
+                      "PCI VendorID %x DevID %x",
+                      pAdapter->pciDeviceID.vendorID,
+                      pAdapter->pciDeviceID.deviceID);
+
   /* Check adapter's family */
   rc = efx_family(pAdapter->pciDeviceID.vendorID,
                   pAdapter->pciDeviceID.deviceID,
@@ -62,6 +106,7 @@ sfvmk_isDeviceSupported(sfvmk_adapter_t *pAdapter)
   /* Driver support only Medford Family */
   switch (pAdapter->efxFamily) {
   case EFX_FAMILY_MEDFORD:
+  case EFX_FAMILY_MEDFORD2:
     supported = VMK_TRUE;
     break;
   case EFX_FAMILY_SIENA:
@@ -82,7 +127,7 @@ done:
 
 /*! \brief  Routine to get pci device information such as vendor id , device ID
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
@@ -172,7 +217,7 @@ done:
 /*! \brief  Routine to create DMA engine.
 **
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
@@ -227,7 +272,7 @@ done:
 /*! \brief  Routine to destroy DMA engine.
 **
 **
-** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
 **
 ** \return: VMK_OK or VMK_FAILURE
 */
@@ -273,10 +318,17 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
-                                        pAdapter->bar.index, VMK_MAPATTRS_READWRITE |
+                                        pAdapter->bar.index,
+                                        VMK_MAPATTRS_READWRITE |
                                         VMK_MAPATTRS_UNCACHED,
                                         &pAdapter->bar.esbBase);
+#else
+  status = vmk_PCIMapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
+                                pAdapter->bar.index, NULL,
+                                &pAdapter->bar.esbBase);
+#endif
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_PCIMapIOResourceWithAttr for BAR%d failed status: %s",
@@ -358,6 +410,7 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
 {
   efx_drv_limits_t limits;
   VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 maxEvqCount;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
@@ -394,11 +447,85 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
    * Events for one (shared) TXQ_TYPE_IP_CKSUM TXQ
    * MCDI events
    * Error events from firmware/hardware
-   * TODO: calculation of EVQs when NETQ and RSS features are added */
+   */
+  pAdapter->numNetQs = modParams.netQCount;
+
+  if ((modParams.netQCount == 0) || (modParams.netQCount > SFVMK_MAX_NETQ_COUNT))
+    pAdapter->numNetQs = SFVMK_NETQ_COUNT_DEFAULT;
+
+  pAdapter->numRSSQs = modParams.rssQCount;
+  if (pAdapter->numRSSQs > SFVMK_MAX_RSSQ_COUNT)
+    pAdapter->numRSSQs = SFVMK_RSSQ_COUNT_DEFAULT;
+  else if (pAdapter->numRSSQs == 1)
+    pAdapter->numRSSQs = 0;
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
-  limits.edl_max_evq_count = MIN(limits.edl_max_rxq_count,
-                                 limits.edl_max_txq_count);
+  /* Max number of event q = netQCount +  (rssQCount + 1)
+   * There is one to one mapping between uplink queues and hardware queues
+   * a) for rss there are rssQCount hw queues per hardware queue
+   * b) also all the rss hardware queues need to be contiguous
+   * to allow any uplink queue to support RSSQ and still support (a) and (b)
+   * rssQCount RSSQ's are created at the end of hardware queues in addition
+   * to one HW queue corresponding to the uplink RSS queue
+   *
+   * As of now, Hw queue corresponding to the uplink RSS queue is used
+   * for transmitting pkts on RSS Q.
+   *
+   *         ___________________                _____________________
+   *         |                 |                |                   |
+   *         |                 | One to One     |                   |
+   *         |                 | mapping betwn  |                   |
+   *         | Uplink Qs       | Uplink Q index |  Hardware Qs      |
+   *         |                 | & Hw Q index   | (EvQ, TxQ, RxQ)   |
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         | Uplink Q for RSS| <--------->    | HW Q for RSS (used|for Tx only)
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         |                 |                |                   |
+   *         -------------------                | - - - - - - - - - | <-- end of 1 to 1 correspondance
+   *                                            |   RSS Q #1        |
+   *                                            |   RSS Q #2        |
+   *                                            |                   |
+   *                                            |                   |
+   *                                            |                   |
+   *                                            |   RSS Q #rssQCount|
+   *                                            ---------------------
+   *
+   *
+   *
+   * In the corner case of RSS queue being created on the last uplink queue
+   * one hardware queue can be saved but currently this case is not optimized
+   */
+  maxEvqCount = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
+
+  /* Compute EVQ count based on netQCount */
+  if (maxEvqCount <= pAdapter->numNetQs) {
+    /* Can't support RSS as available event queue is less than netQCount
+     * also netQCount gets limited by the number of event queue available
+     */
+    pAdapter->numNetQs = maxEvqCount;
+    pAdapter->numRSSQs = 0;
+    limits.edl_max_evq_count = maxEvqCount;
+  } else {
+    limits.edl_max_evq_count = pAdapter->numNetQs;
+  }
+
+  /* Compute EVQ count if RSS support is required */
+  if (pAdapter->numRSSQs) {
+    /* If RSS is enabled there should be atleast three more EVQs to support RSS
+     * break up of 3 additional event queues
+     * 1 event queue corresponding to additional NetQ for RSSQ
+     * 2 event queues as RSS as a feature is useful only when there
+     * are at least 2 RSS Qs */
+    if ((maxEvqCount - pAdapter->numNetQs) < 3) {
+      pAdapter->numRSSQs = 0;
+    } else {
+      limits.edl_max_evq_count = MIN(maxEvqCount, (limits.edl_max_evq_count +
+                                     modParams.rssQCount + 1));
+    }
+  }
+
   pAdapter->numEvqsDesired = limits.edl_max_evq_count;
 
   limits.edl_min_rxq_count = limits.edl_min_evq_count;
@@ -426,7 +553,7 @@ done:
 **
 ** \return: none
 */
-static void
+void
 sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter)
 {
   vmk_UplinkDriverInfo *pDrvInfo;
@@ -498,10 +625,9 @@ sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
   vmk_NameFormat(&props.name, "%s-helper",
                  vmk_NameToString(&sfvmk_modInfo.driverName));
   props.heap = sfvmk_modInfo.heapID;
-  props.useIrqSpinlock = VMK_TRUE;
   props.preallocRequests = VMK_FALSE;
   props.blockingSubmit = VMK_FALSE;
-  props.maxRequests = 8;
+  props.maxRequests = 16;
   props.mutables.minWorlds = 0;
   props.mutables.maxWorlds = 1;
   props.mutables.maxIdleTime = 0;
@@ -538,7 +664,7 @@ sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter)
 
 /* \brief  Handle packet completion. The function works in netPoll context.
 **
-** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
 ** \param[in]  pPkt     pointer to pkt
 **
 ** \return: None
@@ -551,10 +677,26 @@ sfvmk_pktReleaseNetPoll(sfvmk_pktCompCtx_t *pCompCtx,
    vmk_NetPollQueueCompPkt(pCompCtx->netPoll, pPkt);
 }
 
+/* \brief  Handle packet completion. The function works in panic context.
+**
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
+** \param[in]  pPkt     pointer to pkt
+**
+** \return: None
+*/
+static void
+sfvmk_pktReleasePanic(sfvmk_pktCompCtx_t *pCompCtx,
+                      vmk_PktHandle *pPkt)
+{
+   VMK_ASSERT_EQ(pCompCtx->type, SFVMK_PKT_COMPLETION_PANIC);
+   vmk_PktReleasePanic(pPkt);
+}
+
+
 /* \brief  Handle packet release request. The function works
 **         in Others (other than netPoll and panic) context.
 **
-** \param[in]  pCompCtx Pointer to context info (netPoll, Others)
+** \param[in]  pCompCtx Pointer to context info (netPoll, panic, Others)
 ** \param[in]  pPkt     pointer to pkt
 **
 ** \return: None
@@ -569,14 +711,15 @@ sfvmk_pktReleaseOthers(sfvmk_pktCompCtx_t *pCompCtx,
 
 const sfvmk_pktOps_t sfvmk_packetOps[SFVMK_PKT_COMPLETION_MAX] = {
   [SFVMK_PKT_COMPLETION_NETPOLL] = { sfvmk_pktReleaseNetPoll },
-  [SFVMK_PKT_COMPLETION_OTHERS] = { sfvmk_pktReleaseOthers },
+  [SFVMK_PKT_COMPLETION_PANIC]   = { sfvmk_pktReleasePanic },
+  [SFVMK_PKT_COMPLETION_OTHERS]  = { sfvmk_pktReleaseOthers },
 };
 
 /*! \brief  Routine to set bus mastering mode
 **
 ** \param[in]  pAdapter Pointer to sfvmk_adapter_t
 **
-** \return: VMK_OK on success or error code otherwise
+** \return: VMK_OK [success] or error code [failure]
 */
 static VMK_ReturnStatus
 sfvmk_setBusMaster(sfvmk_adapter_t *pAdapter)
@@ -621,6 +764,99 @@ done:
   return status;
 }
 
+#define SFVMK_DEFAULT_VXLAN_PORT_NUM 8472
+
+/*! \brief Initialize and add tunnel port
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+static VMK_ReturnStatus
+sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  uint16_t vxlanPortNum = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  status = efx_tunnel_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  /* Configure default vxlan udp port number */
+  if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
+    /* Get default vxlan port number */
+    vxlanPortNum = (vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) ?
+                    vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) :
+                    SFVMK_DEFAULT_VXLAN_PORT_NUM);
+
+    status = efx_tunnel_config_udp_add(pAdapter->pNic,
+                                       vxlanPortNum,
+                                       EFX_TUNNEL_PROTOCOL_VXLAN);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_add [vxlan] failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_port_add;
+    }
+
+    pAdapter->vxlanUdpPort = vxlanPortNum;
+  }
+
+  pAdapter->startIOTunnelReCfgReqd = VMK_TRUE;
+
+  status = VMK_OK;
+  goto done;
+
+failed_tunnel_port_add:
+  efx_tunnel_fini(pAdapter->pNic);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  return status;
+}
+
+/*! \brief  Clear out tunnel configuration
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+static void
+sfvmk_tunnelFini(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* Remove vxlan port number if already configured */
+  if (pAdapter->vxlanUdpPort) {
+    status = efx_tunnel_config_udp_remove(pAdapter->pNic,
+                                          pAdapter->vxlanUdpPort,
+                                          EFX_TUNNEL_PROTOCOL_VXLAN);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_remove (%d) failed status: %s",
+                           pAdapter->vxlanUdpPort, vmk_StatusToString(status));
+    }
+  }
+
+  efx_tunnel_fini(pAdapter->pNic);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -646,6 +882,7 @@ sfvmk_attachDevice(vmk_Device dev)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_adapter_t *pAdapter = NULL;
+  const efx_nic_cfg_t *pNicCfg = NULL;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -721,15 +958,32 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 
   /* Probe  NIC and build the configuration data area. */
-  if ((status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED)) != 0) {
+  status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED);
+  if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
                         vmk_StatusToString(status));
-
-    if ((status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE)) != 0) {
+    status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE);
+    if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
                           vmk_StatusToString(status));
       goto failed_nic_probe;
     }
+  }
+
+  /* Initialize NVRAM. */
+  status = efx_nvram_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nvram_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_nvram_init;
+  }
+
+  /* Initialize VPD. */
+  status = efx_vpd_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_vpd_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_vpd_init;
   }
 
   /* Reset NIC. */
@@ -800,6 +1054,27 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_rx_init;
   }
 
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto failed_nic_cfg_get;
+  }
+
+  /* Prepare bit mask for supported encap offloads */
+  if (pNicCfg->enc_tunnel_encapsulations_supported) {
+    if (modParams.vxlanOffload)
+      pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
+  }
+
+  if (pAdapter->isTunnelEncapSupported) {
+    status = sfvmk_tunnelInit(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_init;
+    }
+  }
+
   status = sfvmk_mutexInit("adapterLock", &pAdapter->lock);
   if(status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mutexInit failed status %s",
@@ -834,6 +1109,9 @@ sfvmk_attachDevice(vmk_Device dev)
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
+  /* Initialize startIO completion event */
+  pAdapter->startIO_compl_event = (vmk_WorldEventID)&pAdapter->startIO_compl_event;
+
   goto done;
 
 failed_create_helper:
@@ -845,6 +1123,11 @@ failed_uplinkData_init:
   pAdapter->lock = NULL;
 
 failed_mutex_init:
+  if (pAdapter->isTunnelEncapSupported)
+    sfvmk_tunnelFini(pAdapter);
+
+failed_nic_cfg_get:
+failed_tunnel_init:
   sfvmk_rxFini(pAdapter);
 
 failed_rx_init:
@@ -866,6 +1149,12 @@ failed_get_vi_pool:
 failed_nic_init:
 failed_set_resource_limit:
 failed_nic_reset:
+  efx_vpd_fini(pAdapter->pNic);
+
+failed_vpd_init:
+  efx_nvram_fini(pAdapter->pNic);
+
+failed_nvram_init:
   efx_nic_unprobe(pAdapter->pNic);
 
 failed_nic_probe:
@@ -1044,6 +1333,8 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_mutexDestroy(pAdapter->lock);
   pAdapter->lock = NULL;
 
+  if (pAdapter->isTunnelEncapSupported)
+    sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);
   /* Deinit port */
@@ -1061,6 +1352,8 @@ sfvmk_detachDevice(vmk_Device dev)
 
   /* Tear down common code subsystems. */
   if (pAdapter->pNic != NULL) {
+    efx_nvram_fini(pAdapter->pNic);
+    efx_vpd_fini(pAdapter->pNic);
     efx_nic_reset(pAdapter->pNic);
     efx_nic_unprobe(pAdapter->pNic);
   }
@@ -1096,7 +1389,6 @@ done:
 static VMK_ReturnStatus
 sfvmk_quiesceDevice(vmk_Device dev)
 {
-  /* TODO: functinality will be added along with startDevice implementation */
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
   return VMK_OK;

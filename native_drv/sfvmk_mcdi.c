@@ -1,9 +1,28 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
 
 #include "efx_mcdi.h"
 #include "sfvmk_driver.h"
@@ -37,7 +56,7 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 /*! \brief Routine for polling mcdi response.
 **
 ** \param[in] pAdapter  pointer to sfvmk_adapter_t
-** \param[in] timeoutUS timeout period in mirco seconds
+** \param[in] timeoutUS timeout period in microseconds
 **
 ** \return: void
 */
@@ -74,9 +93,10 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
     }
 
     status = vmk_WorldSleep(delayUS);
-    if ((status == VMK_DEATH_PENDING)) {
+    if (status == VMK_DEATH_PENDING) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
                           vmk_StatusToString(status));
+      /* World is dying */
       return;
     }
 
@@ -97,8 +117,8 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
 
 /*! \brief Routine for sending mcdi cmd.
 **
-** \param[in] arg    pointer to sfvmk_adapter_t
-** \param[in] pEmrp  pointer to efx_mcdi_req_t
+** \param[in] arg      pointer to sfvmk_adapter_t
+** \param[in] pEmrp    pointer to efx_mcdi_req_t
 **
 ** \return: void
 */
@@ -179,7 +199,7 @@ done:
 
 /*! \brief Routine to post MCDI user request
 **
-** \param[in] pAdapter adapter pointer to sfvmk_adapter_t
+** \param[in] pAdapter pAdapter  pointer to sfvmk_adapter_t
 ** \param[in] pEmReq  mcdi command request
 **
 ** \return: VMK_OK [success],
@@ -334,6 +354,7 @@ sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter)
   pMcdi = &pAdapter->mcdi;
 
   return pMcdi->mcLogging;
+
 }
 
 /*! \brief Routine for setting MC Log variable state

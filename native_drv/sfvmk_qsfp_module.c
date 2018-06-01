@@ -26,7 +26,7 @@
 
 #include "sfvmk_driver.h"
 
-/* SFP Module definitions defined in SFF-8024 */
+/* SFP Module */
 #define SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_SFP_BASE                 0xA0
 
 #define SFP_A0_IDENTIFIER                                             0
@@ -59,7 +59,7 @@
 
 #define SFP_MODULE_PAGE_0_SIZE                                      128
 
-/* QSFP Module definitions defined in SFF-8024 */
+/* QSFP Module */
 #define SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_QSFP_BASE                 0xA0
 #define QSFP_A0_HIGH_PAGE_START                                      128
 #define QSFP_A0_LOW_PAGE_SIZE                                        128
@@ -119,6 +119,7 @@
 #define     QSFP_A0_PAGE0_DEVICE_TECH_TX_TECH_COPPER_LINEAR             15
 
 /*! \brief read qsfp module's eeprom data to get the cable type
+**  used algorithms from mc/drivers/qsfp_plus.c
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t
 **
@@ -133,8 +134,8 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
   /* Read low and high both pages */
   status = efx_phy_module_get_info(pAdapter->pNic,
                                    SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_QSFP_BASE,
-				   0,
-                                   (QSFP_A0_LOW_PAGE_SIZE + QSFP_A0_HIGH_PAGE_SIZE -1),
+                                   0,
+                                   (QSFP_A0_LOW_PAGE_SIZE + QSFP_A0_HIGH_PAGE_SIZE - 1),
                                    &qsfpData[0]);
   if (status != VMK_OK) {
     return VMK_UPLINK_CABLE_TYPE_OTHER;
@@ -167,11 +168,6 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
     case QSFP_A0_PAGE0_DEVICE_TECH_TX_TECH_COPPER_NEAR_LIMITING:
     case QSFP_A0_PAGE0_DEVICE_TECH_TX_TECH_COPPER_LINEAR:
       return VMK_UPLINK_CABLE_TYPE_DA;
-
-    default:
-      /* Cable type could not get decoded from DEVICE_TECH
-       * data, read further data to decode it */
-      break;
   }
 
   if (pQsfpHighPageData[QSFP_A0_PAGE0_10G_40G_ETH_COMPLIANCE] &
@@ -199,13 +195,13 @@ vmk_UplinkCableType sfvmk_decodeQsfpCableType(sfvmk_adapter_t *pAdapter)
       return VMK_UPLINK_CABLE_TYPE_DA;
   }
 
-  /* TBD: -Bug72898- Cable type could not get detected,
-   * lookup into quirk table */
+  /* TODO: Bug72898: Cable type could not get detected, lookup into quirk table */
 
   return VMK_UPLINK_CABLE_TYPE_OTHER;
 }
 
 /*! \brief read sfp module's eeprom data to get the cable type
+**  used algorithms from mc/drivers/qsfp_plus.c
 **
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
 **
@@ -219,7 +215,8 @@ vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter)
   status = efx_phy_module_get_info(pAdapter->pNic,
                                    SFVMK_EFX_PHY_MEDIA_INFO_DEV_ADDR_SFP_BASE,
                                    0,
-                                   SFP_MODULE_PAGE_0_SIZE, &sfpData[0]);
+                                   SFP_MODULE_PAGE_0_SIZE,
+                                   &sfpData[0]);
   if (status != VMK_OK) {
     return VMK_UPLINK_CABLE_TYPE_OTHER;
   }
@@ -264,7 +261,7 @@ vmk_UplinkCableType sfvmk_decodeSfpCableType(sfvmk_adapter_t *pAdapter)
       (1 << SFP_A0_COMPLIANCE_1000BASE_T))
     return VMK_UPLINK_CABLE_TYPE_TP;
 
-  /* TBD: Cable type could not get detected, lookup into quirk table */
+  /* TODO: Cable type could not get detected, lookup into quirk table */
 
   return VMK_UPLINK_CABLE_TYPE_OTHER;
 }

@@ -1,17 +1,37 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "sfvmk_driver.h"
 
 /*! \brief It creates a spin lock with specified name and lock rank.
 **
-** \param[in]  pAdapter   pointer to sfvmk_adapter_t
-** \param[in]  pLockName  pointer to brief name for the spinlock
-** \param[in]  rank       lock rank
-** \param[out] pLock      pointer to vmk_Lock
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[in]  pLockName brief name for the spinlock
+** \param[in]  rank      lock rank
+** \param[out] pLock     lock pointer to create
 **
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
@@ -176,7 +196,7 @@ done:
 **
 ** \param[in]  dmaEngine  dma engine to be used
 ** \param[in]  size       size of the memory
-** \param[out] pIoAddr    pointer to dma addressable memory
+** \param[out] pIoAddr    dma addressable memory
 **
 ** \return: kernel virtual address of the dmaable memory
 */

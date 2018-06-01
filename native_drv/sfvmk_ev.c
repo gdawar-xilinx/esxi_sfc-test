@@ -1,9 +1,29 @@
-/*************************************************************************
- * Copyright (c) 2017 Solarflare Communications Inc. All rights reserved.
- * Use is subject to license terms.
+/*
+ * Copyright (c) 2017, Solarflare Communications Inc.
+ * All rights reserved.
  *
- * -- Solarflare Confidential
- ************************************************************************/
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 #include "sfvmk_driver.h"
 
 /* EVQ budget (in descriptors) to allow for MCDI and Rx/Tx error events. */
@@ -73,8 +93,6 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   const efx_nic_cfg_t *pNicCfg;
   VMK_ReturnStatus status;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
-
   VMK_ASSERT_NOT_NULL(pEvq);
 
   vmk_SpinlockAssertHeldByWorld(pEvq->lock);
@@ -127,17 +145,15 @@ sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags
   }
 
   pEvq->rxDone++;
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_DBG,
-                      "pending %u, completed %u", pRxq->pending, pRxq->completed);
+  SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_IO,
+                         "pending %u, completed %u", pRxq->pending, pRxq->completed);
 
   if (pRxq->pending - pRxq->completed >= SFVMK_RX_BATCH)
     sfvmk_evqComplete(pEvq);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
-  return (pEvq->rxDone >= SFVMK_EV_BATCH);
+  return (pEvq->rxDone >= pEvq->rxBudget);
 
 fail:
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return VMK_TRUE;
 }
 
@@ -163,7 +179,6 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
     .type = SFVMK_PKT_COMPLETION_NETPOLL,
   };
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
   pEvq = (sfvmk_evq_t *)arg;
   VMK_ASSERT_NOT_NULL(pEvq);
 
@@ -171,6 +186,15 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   pAdapter = pEvq->pAdapter;
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pAdapter->ppTxq);
+
+  /* Process only default transmit queue when system is in panic state */
+  if (VMK_UNLIKELY(vmk_SystemCheckState(VMK_SYSTEM_STATE_PANIC) == VMK_TRUE) &&
+     (pEvq != pAdapter->ppEvq[0])) {
+    SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
+                           "System in panic state, returning");
+    status = VMK_FALSE;
+    goto done;
+  }
 
   pTxq = pAdapter->ppTxq[pEvq->index];
   VMK_ASSERT_NOT_NULL(pTxq);
@@ -189,7 +213,6 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   delta = (stop >= id) ? (stop - id) : (pTxq->numDesc - id + stop);
   pTxq->pending += delta;
 
-  /* this is executed with pEvq->lock held within sfvmk_evqPoll */
   pEvq->txDone++;
 
   if (pTxq->pending - pTxq->completed >= SFVMK_TX_BATCH) {
@@ -201,12 +224,10 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   status = (pEvq->txDone >= SFVMK_EV_BATCH);
 
 done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ, "txDone[%u]",
-                                pEvq->txDone);
   return status;
 }
 
-/*! \brief Gets called when initilized event comes for an eventQ.
+/*! \brief Gets called when initialized event comes for an eventQ.
 **
 ** \param[in] arg        Pointer to eventQ
 **
@@ -232,8 +253,8 @@ sfvmk_evInitialized(void *arg)
 
   pEvq->state = SFVMK_EVQ_STATE_STARTED;
 
-  SFVMK_ADAPTER_DEBUG(pEvq->pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_INFO,
-                      "EventQ is started");
+  SFVMK_ADAPTER_DEBUG(pEvq->pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_DBG,
+                      "EventQ %u is started", pEvq->index);
 
   return VMK_FALSE;
 
@@ -282,8 +303,6 @@ sfvmk_evException(void *arg, uint32_t code, uint32_t data)
                       (code == EFX_EXCEPTION_TX_ERROR) ? "TX_ERROR" :
                       (code == EFX_EXCEPTION_EV_ERROR) ? "EV_ERROR" :
                       "UNKNOWN");
-
-
 
   if (code != EFX_EXCEPTION_UNKNOWN_SENSOREVT) {
     if ((status = sfvmk_scheduleReset(pEvq->pAdapter)) != VMK_OK) {
@@ -438,7 +457,7 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 ** \param[in] arg        Pointer to event queue
 ** \param[in] txqIndex   TXQ index
 **
-** \return: VMK_FALSE success
+** \return: VMK_FALSE [success]
 */
 static boolean_t
 sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
@@ -466,6 +485,7 @@ sfvmk_evTxqFlushDone(void *arg, uint32_t txqIndex)
 
 fail:
   return VMK_TRUE;
+
 }
 
 /*! \brief Gets called when a SW event comes
@@ -518,8 +538,6 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
 
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
-
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
     status = VMK_BAD_PARAM;
@@ -534,14 +552,14 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
     goto done;
   }
 
+  pEvq->rxDone = 0;
+  pEvq->txDone = 0;
+
   /* Poll the queue */
   efx_ev_qpoll(pEvq->pCommonEvq, &pEvq->readPtr, &sfvmk_evCallbacks, pEvq);
-  pEvq->rxDone = 0;
 
   /* Perform any pending completion processing */
   sfvmk_evqComplete(pEvq);
-
-  pEvq->txDone = 0;
 
   /* Re-prime the event queue for interrupts */
   status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
@@ -554,7 +572,6 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
 done:
   vmk_SpinlockUnlock(pEvq->lock);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return status;
 }
 
@@ -572,8 +589,6 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
   sfvmk_pktCompCtx_t compCtx = {
     .type = SFVMK_PKT_COMPLETION_NETPOLL,
   };
-
-  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_EVQ);
 
   VMK_ASSERT_NOT_NULL(pEvq);
 
@@ -594,10 +609,8 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
 
   vmk_SpinlockLock(pTxq->lock);
   if (VMK_UNLIKELY(pTxq->state != SFVMK_TXQ_STATE_STARTED)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid TXQ state[%d]", pTxq->state);
     goto done;
   }
-
   if (pTxq->pending != pTxq->completed) {
     compCtx.netPoll = pEvq->netPoll;
     sfvmk_txqComplete(pTxq, pEvq, &compCtx);
@@ -606,7 +619,6 @@ void sfvmk_evqComplete(sfvmk_evq_t *pEvq)
 done:
   vmk_SpinlockUnlock(pTxq->lock);
 
-  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_EVQ);
   return;
 }
 
@@ -959,6 +971,7 @@ sfvmk_evqInit(sfvmk_adapter_t *pAdapter, unsigned int qIndex)
     goto failed_create_lock;
   }
 
+  pEvq->panicPktList = NULL;
   pAdapter->ppEvq[qIndex] = pEvq;
   pEvq->state = SFVMK_EVQ_STATE_INITIALIZED;
 
@@ -1061,6 +1074,7 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
   /* Setting default event moderation */
   pAdapter->intrModeration = SFVMK_MODERATION_USEC;
 
+  /* Setting default rx & tx ring params */
   pAdapter->numRxqBuffDesc = SFVMK_NUM_RXQ_DESC;
   pAdapter->numTxqBuffDesc = SFVMK_NUM_TXQ_DESC;
 
@@ -1079,6 +1093,9 @@ sfvmk_evInit(sfvmk_adapter_t *pAdapter)
 failed_evq_init:
   while (qIndex > 0)
     sfvmk_evqFini(pAdapter, --qIndex);
+
+  vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->ppEvq);
+  pAdapter->ppEvq = NULL;
 
 failed_evq_alloc:
   pAdapter->numEvqsAllocated = 0;
@@ -1128,3 +1145,54 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
 }
 
+/*! \brief  Fucntion to configure evq interrupt moderation
+**
+** \param[in]  pAdapter     pointer to sfvmk_adapter_t
+** \param[in]  qIndex       event queue index
+** \param[in]  uSec         interrupt moderaion value in uSec
+**
+** \return:    VMK_OK or error code
+*/
+VMK_ReturnStatus
+sfvmk_evqModerate(sfvmk_adapter_t *pAdapter,
+                  unsigned int qIndex,
+                  unsigned int uSec)
+{
+  sfvmk_evq_t *pEvq = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  VMK_ASSERT_LT(qIndex, pAdapter->numEvqsAllocated);
+
+  if (pAdapter->ppEvq != NULL)
+    pEvq = pAdapter->ppEvq[qIndex];
+
+  if (pEvq == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL event queue ptr");
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  if (pEvq->state != SFVMK_EVQ_STATE_STARTED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid EVQ state(%u)", pEvq->state);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  status = efx_ev_qmoderate(pEvq->pCommonEvq, uSec);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_qmoderate failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ);
+
+  return status;
+}

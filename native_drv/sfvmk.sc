@@ -10,22 +10,30 @@
 # identification section
 #
 
+from devkitUtilities import IsDevKit
+inbox = not IsDevKit()
+
 driver_name    = "sfvmk"
-driver_ver     = "0.0.0.2"
+driver_ver     = "1.0.0.1005"
 driver_ver_hex = "0x" + ''.join('%02x' % int(i) for i in driver_ver.split('.'))
 
 sfvmk_identification = {
    "name"            : driver_name,
    "module type"     : "device driver",
    "binary compat"   : "yes",
-   "summary"         : "Network driver for Solarflare Ethernet Controller",
-   "description"     : "Native Network Driver for Solarflare SFC9240 Controller",
+   "summary"         : "Networking driver for Solarflare XtremeScale SFC9xxx Ethernet Controller",
+   "description"     : "Networking driver for Solarflare XtremeScale SFC9xxx Ethernet Controller",
    "version"         : driver_ver,
    "license"         : VMK_MODULE_LICENSE_BSD,
-   "vendor"          : "Solarflare",
-   "vendor_code"     : "SFC",
-   "vendor_email"    : "support@solarflare.com",
+   "vendor"          : "VMware" if inbox else "Solarflare",
+   "vendor_code"     : "VMW" if inbox else "SFC",
+   "vendor_email"    : "support@vmware.com" if inbox else "support@solarflare.com",
 }
+
+# Version bump is inbox driver only.
+if inbox:
+   sfvmk_identification['version_bump'] = 1
+
 #
 # Build the Driver Module
 #
@@ -39,14 +47,18 @@ module_def = {
                          "sfvmk_tx.c",
                          "sfvmk_rx.c",
                          "sfvmk_qsfp_module.c",
+                         "sfvmk_filter.c",
                          "sfvmk_uplink.c",
                          "sfvmk_port.c",
                          "sfvmk_utils.c",
                          "sfvmk_ut.c",
+                         "sfvmk_vpd.c",
                          "sfvmk_mgmt_interface.c",
                          "sfvmk_mgmt.c",
+                         "sfvmk_update.c",
                          "imported/ef10_ev.c",
                          "imported/ef10_filter.c",
+                         "imported/ef10_image.c",
                          "imported/ef10_intr.c",
                          "imported/ef10_mac.c",
                          "imported/ef10_mcdi.c",
@@ -77,6 +89,8 @@ module_def = {
 			 "imported/hunt_nic.c",
 			 "imported/mcdi_mon.c",
 			 "imported/medford_nic.c",
+			 "imported/medford2_nic.c",
+                         "imported/efx_tunnel.c",
                        ],
    "includes"        : [
                          "./imported",
@@ -124,8 +138,7 @@ sfvmk_vib_def = {
              ],
       "conflicts":
              [
-#                 {'name': 'FirstConflict'},
-#                 {'name': 'SecondConflict','relation': '>>','version': '1.2.3.4'}
+#                 {'name': 'FirstConflict'}
              ],
 
        "maintenance-mode": {'on-remove':True, 'on-install':'True'},

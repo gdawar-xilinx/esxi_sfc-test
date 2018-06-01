@@ -790,21 +790,26 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  /* Get default vxlan port number */
-  vxlanPortNum = (vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) ?
-                  vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) :
-                  SFVMK_DEFAULT_VXLAN_PORT_NUM);
+  /* Configure default vxlan udp port number */
+  if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
+    /* Get default vxlan port number */
+    vxlanPortNum = (vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) ?
+                    vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) :
+                    SFVMK_DEFAULT_VXLAN_PORT_NUM);
 
-  status = efx_tunnel_config_udp_add(pAdapter->pNic,
-                                     vxlanPortNum,
-                                     EFX_TUNNEL_PROTOCOL_VXLAN);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_tunnel_config_udp_add failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_tunnel_port_add;
+    status = efx_tunnel_config_udp_add(pAdapter->pNic,
+                                       vxlanPortNum,
+                                       EFX_TUNNEL_PROTOCOL_VXLAN);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_add [vxlan] failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_port_add;
+    }
+
+    pAdapter->vxlanUdpPort = vxlanPortNum;
   }
 
-  pAdapter->vxlanUdpPort = vxlanPortNum;
   pAdapter->startIOTunnelReCfgReqd = VMK_TRUE;
 
   status = VMK_OK;
@@ -1055,9 +1060,11 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_nic_cfg_get;
   }
 
-  pAdapter->isTunnelEncapSupported = ((pNicCfg->enc_tunnel_encapsulations_supported &&
-                                      modParams.vxlanOffload) ?
-                                      VMK_TRUE : VMK_FALSE);
+  /* Prepare bit mask for supported encap offloads */
+  if (pNicCfg->enc_tunnel_encapsulations_supported) {
+    if (modParams.vxlanOffload)
+      pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
+  }
 
   if (pAdapter->isTunnelEncapSupported) {
     status = sfvmk_tunnelInit(pAdapter);

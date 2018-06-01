@@ -79,6 +79,9 @@
 
 #define SFVMK_RSS_HASH_KEY_SIZE       40
 
+/* Bit Masks for Encap offload features */
+#define SFVMK_VXLAN_OFFLOAD           1 << 0
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -564,7 +567,9 @@ typedef struct sfvmk_adapter_s {
 
   /* VxLAN UDP port number */
   vmk_uint16                 vxlanUdpPort;
-  vmk_Bool                   isTunnelEncapSupported;
+  /* Bit Mask for supported Encap offloads */
+  vmk_uint8                  isTunnelEncapSupported;
+
   vmk_Bool                   startIOTunnelReCfgReqd;
 
   /* Event for startIO completion */

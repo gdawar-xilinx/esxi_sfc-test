@@ -1929,8 +1929,8 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "Dynamic RSS capability not registered");
   }
 
-  if (pAdapter->isTunnelEncapSupported) {
-    /* Register capability for encap offload   */
+  /* Register capability for vxlan offload */
+  if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
                                    VMK_UPLINK_CAP_VXLAN_OFFLOAD,
@@ -1944,6 +1944,10 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                           vmk_StatusToString(status));
       goto done;
     }
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "VXLAN Offload capability not registered : "
+                        "not supported by hw or feature is disabled");
   }
 
   /* Register capability for pause param configuration */
@@ -3195,7 +3199,7 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_MAC_ONLY |
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VLANMAC;
 
-  if (pAdapter->isTunnelEncapSupported) {
+  if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
     pQueueInfo->supportedRxQueueFilterClasses |=
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
   }

@@ -307,7 +307,7 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
       break;
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
-      if (pAdapter->isTunnelEncapSupported) {
+      if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
         status = sfvmk_prepareVXLANFilterRule(pAdapter, pRxq,
                                               pFilter->vxlanFilterInfo,
                                               flags, pFdbEntry);

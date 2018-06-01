@@ -17,7 +17,7 @@ import optparse
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
-SFREPORT_VERSION = "1.0.0.1004"
+SFREPORT_VERSION = "2.0.0.0000"
 
 def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """

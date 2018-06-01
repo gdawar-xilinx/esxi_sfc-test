@@ -302,6 +302,10 @@ const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
 static VMK_ReturnStatus sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie,
                                               vmk_uint16 portNumNBO);
 
+static VMK_ReturnStatus sfvmk_tunnelPortUpdate(vmk_AddrCookie cookie,
+                                               vmk_uint16 portNumNBO,
+                                               efx_tunnel_protocol_t encapType);
+
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
 static vmk_UplinkVXLANOffloadParams sfvmk_vxlanOffloadOps = {
    .vxlanPortUpdate = sfvmk_vxlanPortUpdate,
@@ -4779,18 +4783,22 @@ done:
   return status;
 }
 
-/*! \brief uplink callback function to configugre VXLAN UDP port number.
+/*! \brief uplink callback function to configure tunnel UDP port number.
 **
 ** \param[in]  cookie       pointer to sfvmk_adapter_t
-** \param[in]  portNumNBO   VXLAN UDP port number in network byte order
+** \param[in]  portNumNBO   Encap UDP port number in network byte order
+** \param[in]  tunnelType   pointer to efx_tunnel_protocol_t
 **
 ** \return: VMK_OK on success or error code
 **
 */
 static VMK_ReturnStatus
-sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
+sfvmk_tunnelPortUpdate(vmk_AddrCookie cookie,
+                      vmk_uint16 portNumNBO,
+                      efx_tunnel_protocol_t tunnelType)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  vmk_uint16 *pTunnelUdpPortNum = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -4802,22 +4810,30 @@ sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
   }
   vmk_MutexLock(pAdapter->lock);
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "sfvmk_vxlanPortUpdate: New port num :%u Current port: %u",
-                      vmk_BE16ToCPU(portNumNBO), pAdapter->vxlanUdpPort);
+  if (tunnelType == EFX_TUNNEL_PROTOCOL_VXLAN)
+    pTunnelUdpPortNum = &(pAdapter->vxlanUdpPort);
+  else {
+    status = VMK_NOT_SUPPORTED;
+    goto failed_tunnel_type_unsupported;
+  }
 
-  if (pAdapter->vxlanUdpPort == vmk_BE16ToCPU(portNumNBO)) {
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "sfvmk_tunnelPortUpdate: Tunnel Type: %d"
+                      "New tunnel port num :%u Current tunnel port num : %u",
+                       tunnelType, vmk_BE16ToCPU(portNumNBO), *pTunnelUdpPortNum);
+
+  if (*pTunnelUdpPortNum == vmk_BE16ToCPU(portNumNBO)) {
     SFVMK_ADAPTER_ERROR(pAdapter,
-                        "No change in vxlan port number (new:%u) (old:%u)",
-                        vmk_BE16ToCPU(portNumNBO), pAdapter->vxlanUdpPort);
+                        "No change in tunnel UDP port number (new:%u) (old:%u)",
+                        vmk_BE16ToCPU(portNumNBO), *pTunnelUdpPortNum);
     goto tunnel_port_exist;
   }
 
-  if (pAdapter->vxlanUdpPort != 0) {
+  if (*pTunnelUdpPortNum != 0) {
     /* Remove Existing port number before updating new one */
     status = efx_tunnel_config_udp_remove(pAdapter->pNic,
-                                          pAdapter->vxlanUdpPort,
-                                          EFX_TUNNEL_PROTOCOL_VXLAN);
+                                          *pTunnelUdpPortNum,
+                                          tunnelType);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter,
                           "efx_tunnel_config_udp_remove failed status: %s",
@@ -4828,7 +4844,7 @@ sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
 
   status = efx_tunnel_config_udp_add(pAdapter->pNic,
 	                             vmk_BE16ToCPU(portNumNBO),
-                                     EFX_TUNNEL_PROTOCOL_VXLAN);
+                                     tunnelType);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "efx_tunnel_config_udp_add (%u) failed status: %s",
@@ -4846,22 +4862,26 @@ sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
     /* Remove added port before exit */
     efx_tunnel_config_udp_remove(pAdapter->pNic,
                                  vmk_BE16ToCPU(portNumNBO),
-                                 EFX_TUNNEL_PROTOCOL_VXLAN);
+                                 tunnelType);
 
-    /* Reset Vxlan port number from adapter data structure as well */
-    pAdapter->vxlanUdpPort = 0;
+    /* Reset tunnel port number from adapter data structure as well */
+    *pTunnelUdpPortNum = 0;
+
     goto failed_tunnel_recfg;
   }
 
-  pAdapter->vxlanUdpPort = vmk_BE16ToCPU(portNumNBO);
-  pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
+  *pTunnelUdpPortNum = vmk_BE16ToCPU(portNumNBO);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "sfvmk_vxlanPortUpdate: Updated VxLAN Port number :%u",
-                      pAdapter->vxlanUdpPort);
+                      "sfvmk_tunnelPortUpdate: Updated tunnel port number :%u",
+                      *pTunnelUdpPortNum);
+
+  pAdapter->startIOTunnelReCfgReqd = VMK_FALSE;
+
 tunnel_port_exist:
   status = VMK_OK;
 
+failed_tunnel_type_unsupported:
 failed_tunnel_port_remove:
 failed_tunnel_port_cfg:
 failed_tunnel_recfg:
@@ -4871,6 +4891,20 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
+}
+
+/*! \brief uplink callback function to configure VXLAN UDP port number.
+**
+** \param[in]  cookie       pointer to sfvmk_adapter_t
+** \param[in]  portNumNBO   VXLAN UDP port number in network byte order
+**
+** \return: VMK_OK on success or error code
+**
+*/
+static VMK_ReturnStatus
+sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
+{
+  return sfvmk_tunnelPortUpdate(cookie, portNumNBO, EFX_TUNNEL_PROTOCOL_VXLAN);
 }
 
 /*! \brief uplink callback function to run self tests

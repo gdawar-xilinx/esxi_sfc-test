@@ -318,11 +318,17 @@ sfvmk_mapBAR(sfvmk_adapter_t *pAdapter)
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   status = vmk_PCIMapIOResourceWithAttr(vmk_ModuleCurrentID, pAdapter->pciDevice,
                                         pAdapter->bar.index,
                                         VMK_MAPATTRS_READWRITE |
                                         VMK_MAPATTRS_UNCACHED,
                                         &pAdapter->bar.esbBase);
+#else
+  status = vmk_PCIMapIOResource(vmk_ModuleCurrentID, pAdapter->pciDevice,
+                                pAdapter->bar.index, NULL,
+                                &pAdapter->bar.esbBase);
+#endif
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_PCIMapIOResourceWithAttr for BAR%d failed status: %s",
@@ -442,16 +448,16 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
    * MCDI events
    * Error events from firmware/hardware
    */
+  pAdapter->numNetQs = modParams.netQCount;
 
   if ((modParams.netQCount == 0) || (modParams.netQCount > SFVMK_MAX_NETQ_COUNT))
-    modParams.netQCount = SFVMK_NETQ_COUNT_DEFAULT;
+    pAdapter->numNetQs = SFVMK_NETQ_COUNT_DEFAULT;
 
-  if (modParams.rssQCount > SFVMK_MAX_RSSQ_COUNT)
-    modParams.rssQCount = SFVMK_RSSQ_COUNT_DEFAULT;
-  else if (modParams.rssQCount == 1)
-    modParams.rssQCount = 0;
-
-  pAdapter->numNetQs = modParams.netQCount;
+  pAdapter->numRSSQs = modParams.rssQCount;
+  if (pAdapter->numRSSQs > SFVMK_MAX_RSSQ_COUNT)
+    pAdapter->numRSSQs = SFVMK_RSSQ_COUNT_DEFAULT;
+  else if (pAdapter->numRSSQs == 1)
+    pAdapter->numRSSQs = 0;
 
   limits.edl_min_evq_count = SFVMK_MIN_EVQ_COUNT;
   /* Max number of event q = netQCount +  (rssQCount + 1)
@@ -494,26 +500,26 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   maxEvqCount = MIN(limits.edl_max_rxq_count, limits.edl_max_txq_count);
 
   /* Compute EVQ count based on netQCount */
-  if (maxEvqCount <= modParams.netQCount) {
+  if (maxEvqCount <= pAdapter->numNetQs) {
     /* Can't support RSS as available event queue is less than netQCount
      * also netQCount gets limited by the number of event queue available
      */
-    modParams.netQCount = maxEvqCount;
+    pAdapter->numNetQs = maxEvqCount;
+    pAdapter->numRSSQs = 0;
     limits.edl_max_evq_count = maxEvqCount;
-    modParams.rssQCount = 0;
   } else {
-    limits.edl_max_evq_count = modParams.netQCount;
+    limits.edl_max_evq_count = pAdapter->numNetQs;
   }
 
   /* Compute EVQ count if RSS support is required */
-  if (modParams.rssQCount) {
+  if (pAdapter->numRSSQs) {
     /* If RSS is enabled there should be atleast three more EVQs to support RSS
      * break up of 3 additional event queues
      * 1 event queue corresponding to additional NetQ for RSSQ
      * 2 event queues as RSS as a feature is useful only when there
      * are at least 2 RSS Qs */
-    if ((maxEvqCount - limits.edl_max_evq_count) < 3) {
-      modParams.rssQCount = 0;
+    if ((maxEvqCount - pAdapter->numNetQs) < 3) {
+      pAdapter->numRSSQs = 0;
     } else {
       limits.edl_max_evq_count = MIN(maxEvqCount, (limits.edl_max_evq_count +
                                      modParams.rssQCount + 1));

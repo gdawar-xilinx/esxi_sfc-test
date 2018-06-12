@@ -4083,12 +4083,13 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   vmk_MutexLock(pAdapter->lock);
-  VMK_ASSERT(pAdapter->filterDBHashTable != VMK_INVALID_HASH_HANDLE);
 
   if (qidVal == 0) {
     /* Do not commit filters to default queue */
     goto done;
   }
+
+  VMK_ASSERT(pAdapter->filterDBHashTable != VMK_INVALID_HASH_HANDLE);
 
   pQueueInfo = &pAdapter->uplink.queueInfo;
   pQueueData = &pQueueInfo->queueData[0];

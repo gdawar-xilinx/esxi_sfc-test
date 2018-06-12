@@ -534,6 +534,9 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   }
 
   /* Setting flow control */
+  /* By default enable rx and tx flow control */
+  pPort->fcRequested |= EFX_FCNTL_GENERATE | EFX_FCNTL_RESPOND;
+
   status = efx_mac_fcntl_set(pNic, pPort->fcRequested, B_TRUE);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_fcntl failed status: %s",

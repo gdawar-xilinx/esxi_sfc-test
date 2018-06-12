@@ -33,9 +33,8 @@
 #define SFVMK_EVQ_START_POLL_TIME_USEC   VMK_USEC_PER_MSEC
 #define SFVMK_EVQ_START_TIME_OUT_USEC    (200 *  VMK_USEC_PER_MSEC)
 
-/* TODO: Needs to revisit when dynamic interrupt moderation support
- * is added and performance tuning is done */
-#define SFVMK_MODERATION_USEC         30
+/* Default static interrupt moderation value */
+#define SFVMK_MODERATION_USEC         60
 
 /* Number of RX desc processed per batch */
 #define SFVMK_RX_BATCH                128

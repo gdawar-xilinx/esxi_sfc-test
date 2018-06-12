@@ -4309,7 +4309,7 @@ sfvmk_addUplinkFilter(sfvmk_adapter_t *pAdapter,
 /*! \brief remove uplink filter
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-** \param[in]  qidVal   Queue ID value
+** \param[in]  qidVal   Uplink queue ID value
 **
 ** \return: void
 **

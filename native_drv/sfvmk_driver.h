@@ -31,7 +31,7 @@
 #include "efx.h"
 
 /* Default number of descriptors required for RXQs */
-#define SFVMK_NUM_RXQ_DESC 1024
+#define SFVMK_NUM_RXQ_DESC 512
 
 /* Default number of descriptors required for TXQs */
 #define SFVMK_NUM_TXQ_DESC 1024

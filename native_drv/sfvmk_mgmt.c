@@ -761,9 +761,9 @@ sfvmk_mgmtIntrModerationCallback(vmk_MgmtCookies        *pCookies,
        * different rx and tx event types. Only txUsecs parameter
        * is being used for both rx & tx queue interrupt moderation
        * conifguration */
-      vmk_MutexLock(pAdapter->lock);
+      sfvmk_MutexLock(pAdapter->lock);
       pIntrMod->txUsecs = pIntrMod->rxUsecs = pAdapter->intrModeration;
-      vmk_MutexUnlock(pAdapter->lock);
+      sfvmk_MutexUnlock(pAdapter->lock);
       break;
 
     default:

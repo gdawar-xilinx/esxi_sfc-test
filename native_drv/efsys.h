@@ -359,11 +359,16 @@ typedef struct efsys_mem_s {
 /* PCI BAR access */
 
 typedef struct efsys_bar_s {
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   vmk_MappedResourceAddress esbBase;
+#else
+  vmk_VA                    esbBase;
+#endif
   vmk_Lock                  esbLock;
   vmk_uint32                index;
 } efsys_bar_t;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 #define EFSYS_BAR_READD(_esbp, _offset, _edp, _lock)                    \
   do {                                                                  \
     if(_lock)                                                           \
@@ -410,14 +415,6 @@ typedef struct efsys_bar_s {
                                 (_eqp)->eq_u64[0]);                     \
   } while (B_FALSE)
 
-/* TODO: EFSYS_BAR_WC_WRITEQ  implementation  is incomplete
-  will cause failure in PIO write in TX path */
-#define EFSYS_BAR_WC_WRITEQ(_esbp, _offset, _eqp)                       \
-  do {                                                                  \
-      SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                         \
-  } while (B_FALSE)
-
-
 #define EFSYS_BAR_WRITEO(_esbp, _offset, _eop, _lock)                   \
   do {                                                                  \
     if(_lock)                                                           \
@@ -430,7 +427,67 @@ typedef struct efsys_bar_s {
       vmk_SpinlockUnlock((_esbp)->esbLock);                             \
   } while (B_FALSE)
 
+#else
+#define EFSYS_BAR_READD(_esbp, _offset, _edp, _lock)                    \
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    (_edp)->ed_u32[0] = *(vmk_uint32 *)((_esbp->esbBase) + (_offset));  \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock((_esbp)->esbLock);                             \
+  } while (B_FALSE)
 
+#define EFSYS_BAR_READQ(_esbp, _offset, _eqp)                           \
+  do {                                                                  \
+    SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                           \
+    (_eqp)->eq_u64[0] = *(vmk_uint64 *)((_esbp->esbBase) + (_offset));  \
+  } while (B_FALSE)
+
+#define EFSYS_BAR_READO(_esbp, _offset, _eop, _lock)                    \
+  do {                                                                  \
+    SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                           \
+    if(_lock)                                                           \
+      vmk_SpinlockLock((_esbp)->esbLock);                               \
+    (_eop)->eo_u64[0] = *(vmk_uint64 *)((_esbp->esbBase) + (_offset));  \
+    (_eop)->eo_u64[1] = *(vmk_uint64 *)((_esbp->esbBase) + (_offset) +  \
+                         sizeof(vmk_uint64));                           \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock((_esbp)->esbLock);                             \
+  } while (B_FALSE)
+
+#define EFSYS_BAR_WRITED(_esbp, _offset, _edp, _lock)                   \
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock((_esbp)->esbLock);                               \
+    *(vmk_uint32 *)((_esbp->esbBase) + (_offset)) = (_edp)->ed_u32[0];  \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock((_esbp)->esbLock);                             \
+  } while (B_FALSE)
+
+#define EFSYS_BAR_WRITEQ(_esbp, _offset, _eqp)                          \
+  do {                                                                  \
+    *(vmk_uint64 *)((_esbp->esbBase) + (_offset)) = (_eqp)->eq_u64[0];  \
+  } while (B_FALSE)
+
+#define EFSYS_BAR_WRITEO(_esbp, _offset, _eop, _lock)                   \
+  do {                                                                  \
+    if(_lock)                                                           \
+      vmk_SpinlockLock(_esbp->esbLock);                                 \
+    *(vmk_uint64 *)((_esbp->esbBase) + (_offset)) = (_eop)->eo_u64[0];  \
+    *(vmk_uint64 *)((_esbp->esbBase) + (_offset) +                      \
+                    sizeof(vmk_uint64)) = (_eop)->eo_u64[1];            \
+    if(_lock)                                                           \
+      vmk_SpinlockUnlock((_esbp)->esbLock);                             \
+  } while (B_FALSE)
+
+#endif
+
+/* TODO: EFSYS_BAR_WC_WRITEQ  implementation  is incomplete
+  will cause failure in PIO write in TX path */
+#define EFSYS_BAR_WC_WRITEQ(_esbp, _offset, _eqp)                       \
+  do {                                                                  \
+      SFVMK_UNREFERENCED_LOCAL_VARIABLE(_esbp);                         \
+  } while (B_FALSE)
 
 /* Use the standard octo-word write for doorbell writes */
 #define EFSYS_BAR_DOORBELL_WRITEO(_esbp, _offset, _eop)                 \

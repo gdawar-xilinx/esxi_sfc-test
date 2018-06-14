@@ -322,6 +322,7 @@ static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
 };
 #endif
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 /****************************************************************************
  *               vmk_UplinkAdvertisedModesOps Handlers                      *
  ****************************************************************************/
@@ -340,6 +341,7 @@ const static vmk_UplinkAdvertisedModesOps sfvmk_advModesOps = {
   .setAdvertisedModes  = sfvmk_advModesSet,
 };
 
+#endif
 /****************************************************************************
  *               vmk_UplinkPauseParamsOps Handlers                          *
  ****************************************************************************/
@@ -523,14 +525,14 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   if (pAdapter->state != SFVMK_ADAPTER_STATE_REGISTERED) {
-    vmk_MutexUnlock(pAdapter->lock);
+    sfvmk_MutexUnlock(pAdapter->lock);
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter is not quiesced yet");
     status = VMK_FAILURE;
     goto done;
   }
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   if (pAdapter->uplink.handle == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Not associated with uplink");
@@ -842,7 +844,7 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 
   /* Not checking MTU validity as it is done by vmkernel itself */
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   sfvmk_sharedAreaBeginWrite(&pAdapter->uplink);
   pAdapter->uplink.sharedData.mtu = mtu;
@@ -875,7 +877,7 @@ sfvmk_uplinkMTUSet(vmk_AddrCookie cookie, vmk_uint32 mtu)
 
 failed_quiesce_io:
 failed_start_io:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -907,12 +909,12 @@ sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState state)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) {
     status = sfvmk_setMacFilter(pAdapter, state);
     if (status != VMK_OK) {
-      vmk_MutexUnlock(pAdapter->lock);
+      sfvmk_MutexUnlock(pAdapter->lock);
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setMacFilter(%d) failed status: %s",
                           state, vmk_StatusToString(status));
       goto done;
@@ -923,7 +925,7 @@ sfvmk_uplinkStateSet(vmk_AddrCookie cookie, vmk_UplinkState state)
   pAdapter->uplink.sharedData.state = state;
   sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
 
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   status = VMK_OK;
 
@@ -957,7 +959,7 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
 
   vmk_Memset(pNicStats, 0, sizeof(*pNicStats));
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   status = sfvmk_macStatsUpdate(pAdapter);
   if (status != VMK_OK) {
@@ -1003,7 +1005,7 @@ sfvmk_uplinkStatsGet(vmk_AddrCookie cookie, vmk_UplinkStats *pNicStats)
   status = VMK_OK;
 
 failed_stats_update:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1315,7 +1317,7 @@ sfvmk_privStatsGet(vmk_AddrCookie cookie,
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   status = sfvmk_macStatsUpdate(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Stats sync failed with error %s",
@@ -1334,7 +1336,7 @@ sfvmk_privStatsGet(vmk_AddrCookie cookie,
 
 failed_stats_sync:
 failed_stats_update:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1422,7 +1424,7 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
@@ -1444,7 +1446,7 @@ sfvmk_uplinkReset(vmk_AddrCookie cookie)
 
 failed_quiesce_io:
 failed_start_io:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1473,9 +1475,9 @@ static VMK_ReturnStatus sfvmk_getCableType(vmk_AddrCookie cookie,
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   mediumType = pAdapter->port.mediumType;
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   switch (mediumType) {
     case EFX_PHY_MEDIA_QSFP_PLUS:
@@ -1645,7 +1647,7 @@ sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
     goto end;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   /* Handle Link down request */
   if (pLinkStatus->state == VMK_LINK_STATE_DOWN) {
@@ -1692,7 +1694,7 @@ sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
 
 quiesceio_done:
 startio_done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 end:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1909,6 +1911,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* Register advertise modes capability */
   status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                  VMK_UPLINK_CAP_ADVERTISE_MODES,
@@ -1918,6 +1921,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         vmk_StatusToString(status));
     goto done;
   }
+#endif
 
   /* Register dynamic RSS capability */
   if (sfvmk_isRSSEnable(pAdapter)) {
@@ -2145,7 +2149,7 @@ sfvmk_ringParamsSet(vmk_AddrCookie cookie,
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
@@ -2171,7 +2175,7 @@ sfvmk_ringParamsSet(vmk_AddrCookie cookie,
 
 failed_quiesce_io:
 failed_start_io:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -2227,7 +2231,7 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);
@@ -2251,7 +2255,7 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
   }
 
 start_io_done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -2412,14 +2416,14 @@ sfvmk_uplinkQuiesceIO(vmk_AddrCookie cookie)
     return VMK_BAD_PARAM;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Uplink Quiesce IO failed with status: %s",
                         vmk_StatusToString(status));
   }
 
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
@@ -2507,9 +2511,11 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap)
   if (efxPhyCap == EFX_PHY_CAP_DEFAULT) {
     pSupportedModes = pAdapter->uplink.supportedModes;
     pCount = &pAdapter->uplink.numSupportedModes;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   } else if (efxPhyCap == EFX_PHY_CAP_CURRENT) {
     pSupportedModes = pAdapter->uplink.advertisedModes;
     pCount = &pAdapter->uplink.numAdvertisedModes;
+#endif
   } else {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid efxPhyCap [%u] value", efxPhyCap);
     goto done;
@@ -2829,7 +2835,7 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
               VMK_UPLINK_QUEUE_FEAT_RSS_DYN)) {
     vmk_uint32 hwQueueIndex = sfvmk_getRSSQStartIndex(pAdapter);
 
-    vmk_MutexLock(pAdapter->lock);
+    sfvmk_MutexLock(pAdapter->lock);
     efx_mac_filter_default_rxq_clear(pAdapter->pNic);
 
     VMK_ASSERT_NOT_NULL(pAdapter->ppRxq);
@@ -2841,10 +2847,10 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_filter_default_rxq_set failed status: %s",
                           vmk_StatusToString(status));
-      vmk_MutexUnlock(pAdapter->lock);
+      sfvmk_MutexUnlock(pAdapter->lock);
       goto done;
     }
-    vmk_MutexUnlock(pAdapter->lock);
+    sfvmk_MutexUnlock(pAdapter->lock);
 
     pAdapter->uplink.rssUplinkQueue = queueIndex;
   }
@@ -3674,7 +3680,7 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   if ((qIndex == pAdapter->uplink.rssUplinkQueue) &&
       (pAdapter->rssInit) &&
       (pAdapter->state == SFVMK_ADAPTER_STATE_STARTED)) {
@@ -3696,7 +3702,7 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
     /* Uplink RSS queue will never be on default RxQ Index */
     pAdapter->uplink.rssUplinkQueue = pAdapter->defRxqIndex;
   }
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   sfvmk_sharedAreaBeginWrite(pUplink);
   pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;
@@ -3996,7 +4002,7 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   /* Nothing to do if adapter is down already and filters were all gone */
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
@@ -4038,7 +4044,7 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   sfvmk_freeFilterRule(pAdapter, pFdbEntry);
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 end:
   return status;
@@ -4082,7 +4088,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (qidVal == 0) {
     /* Do not commit filters to default queue */
@@ -4156,7 +4162,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
 free_filter_rule:
   sfvmk_freeFilterRule(pAdapter, pFdbEntry);
 done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 end:
   return status;
@@ -4366,7 +4372,7 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceIO failed with error %s",
@@ -4400,7 +4406,7 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_startIO failed");
 
 end:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
@@ -4473,7 +4479,7 @@ sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   /* Firmware doesn't support different moderation settings for
    * different queues, so apply same config to all queues */
@@ -4482,14 +4488,14 @@ sfvmk_configIntrModeration(sfvmk_adapter_t *pAdapter,
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evqModerate failed status: %s",
                           vmk_StatusToString(status));
-      vmk_MutexUnlock(pAdapter->lock);
+      sfvmk_MutexUnlock(pAdapter->lock);
       goto done;
     }
   }
 
   pAdapter->intrModeration = moderation;
 
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                       "Configured static interupt moderation to %d (us)",
@@ -4578,9 +4584,9 @@ sfvmk_coalesceParamsGet(vmk_AddrCookie cookie,
   /* Firmware doesn't support different moderation settings for
    * different rx and tx event types. Only txUsecs parameter is being
    * used for both rx & tx queue interrupt moderation conifguration */
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   pParams->txUsecs = pParams->rxUsecs = pAdapter->intrModeration;
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   status = VMK_OK;
 
@@ -4809,7 +4815,7 @@ sfvmk_tunnelPortUpdate(vmk_AddrCookie cookie,
     status = VMK_FAILURE;
     goto done;
   }
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (tunnelType == EFX_TUNNEL_PROTOCOL_VXLAN)
     pTunnelUdpPortNum = &(pAdapter->vxlanUdpPort);
@@ -4886,7 +4892,7 @@ failed_tunnel_type_unsupported:
 failed_tunnel_port_remove:
 failed_tunnel_port_cfg:
 failed_tunnel_recfg:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -5103,7 +5109,7 @@ sfvmk_rssStateInit(vmk_AddrCookie cookie,
   VMK_ASSERT_NOT_NULL(pRssHashKey);
   VMK_ASSERT_NOT_NULL(pRssIndTable);
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (!sfvmk_isRSSEnable(pAdapter)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not enabled");
@@ -5139,7 +5145,7 @@ sfvmk_rssStateInit(vmk_AddrCookie cookie,
   pAdapter->rssInit = VMK_TRUE;
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -5167,7 +5173,7 @@ sfvmk_rssIndTableUpdate(vmk_AddrCookie cookie,
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pRssIndTable);
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (!sfvmk_isRSSEnable(pAdapter)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "RSS is not enabled");
@@ -5198,14 +5204,14 @@ sfvmk_rssIndTableUpdate(vmk_AddrCookie cookie,
   }
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;
 }
 
-
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 /*! \brief uplink callback function to get advertised modes
 **
 ** \param[in]        cookie     pointer to sfvmk_adapter_t
@@ -5267,7 +5273,7 @@ sfvmk_advModesSet(vmk_AddrCookie cookie,
 
   return VMK_NOT_SUPPORTED;
 }
-
+#endif
 /*! \brief uplink callback function to retrieve pause params.
 **
 ** \param[in]  cookie    pointer to sfvmk_adapter_t
@@ -5297,7 +5303,7 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
 
   pPort = &pAdapter->port;
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
@@ -5331,7 +5337,7 @@ sfvmk_pauseParamGet(vmk_AddrCookie cookie,
   status = VMK_OK;
 
 failed_adapter_state:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -5365,7 +5371,7 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams pParams)
 
   pPort = &pAdapter->port;
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
@@ -5397,7 +5403,7 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams pParams)
 
 failed_adapter_state:
 failed_mac_fcntl_set:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -5508,7 +5514,7 @@ sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter,
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   pCurr = pStart;
   maxRxQueues = sfvmk_getMaxRxHardwareQueues(pAdapter);
   maxTxQueues = sfvmk_getMaxTxHardwareQueues(pAdapter);
@@ -5551,7 +5557,7 @@ sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter,
   }
 
 done:
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return (pCurr - pStart);
 }

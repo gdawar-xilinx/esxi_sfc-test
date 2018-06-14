@@ -28,6 +28,14 @@
 
 #define SFVMK_STATS_UPDATE_WAIT_USEC  VMK_USEC_PER_MSEC
 
+#ifndef VMK_LINK_SPEED_25000_MBPS
+#define VMK_LINK_SPEED_25000_MBPS     25000
+#endif
+
+#ifndef VMK_LINK_SPEED_50000_MBPS
+#define VMK_LINK_SPEED_50000_MBPS     50000
+#endif
+
 const vmk_uint32 sfvmk_linkBaudrate[EFX_LINK_NMODES] = {
   [EFX_LINK_10HDX] = VMK_LINK_SPEED_10_MBPS,
   [EFX_LINK_10FDX] = VMK_LINK_SPEED_10_MBPS,
@@ -36,8 +44,8 @@ const vmk_uint32 sfvmk_linkBaudrate[EFX_LINK_NMODES] = {
   [EFX_LINK_1000HDX] = VMK_LINK_SPEED_1000_MBPS,
   [EFX_LINK_1000FDX] = VMK_LINK_SPEED_1000_MBPS,
   [EFX_LINK_10000FDX] = VMK_LINK_SPEED_10000_MBPS,
-  [EFX_LINK_25000FDX] = VMK_LINK_SPEED_25000_MBPS,
   [EFX_LINK_40000FDX] = VMK_LINK_SPEED_40000_MBPS,
+  [EFX_LINK_25000FDX] = VMK_LINK_SPEED_25000_MBPS,
   [EFX_LINK_50000FDX] = VMK_LINK_SPEED_50000_MBPS,
   [EFX_LINK_100000FDX] = VMK_LINK_SPEED_100000_MBPS
 };
@@ -111,12 +119,12 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
       advertisedCapabilities |= 1 << EFX_PHY_CAP_50000FDX;
       break;
 
-    case VMK_LINK_SPEED_40000_MBPS:
-      advertisedCapabilities |= 1 << EFX_PHY_CAP_40000FDX;
-      break;
-
     case VMK_LINK_SPEED_25000_MBPS:
       advertisedCapabilities |= 1 << EFX_PHY_CAP_25000FDX;
+      break;
+
+    case VMK_LINK_SPEED_40000_MBPS:
+      advertisedCapabilities |= 1 << EFX_PHY_CAP_40000FDX;
       break;
 
     case VMK_LINK_SPEED_10000_MBPS:
@@ -221,9 +229,9 @@ void sfvmk_macLinkUpdateHelper(vmk_AddrCookie data)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->lock);
+  sfvmk_MutexLock(pAdapter->lock);
   sfvmk_macLinkUpdate(pAdapter);
-  vmk_MutexUnlock(pAdapter->lock);
+  sfvmk_MutexUnlock(pAdapter->lock);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
@@ -782,6 +790,11 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
 }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#define SFVMK_UPDATE_MEDIA(a, b)  (a) = (b)
+#else
+#define SFVMK_UPDATE_MEDIA(a, b)
+#endif
 /*! \brief  Get the PHY advertised capabilities
 **
 ** \param[in]   pAdapter          pointer to sfvmk_adapter_t
@@ -812,69 +825,69 @@ sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
       case EFX_PHY_CAP_10HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_10FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_100HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_100FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_1000HDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_HALF;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_1000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_1000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
         break;
 
       case EFX_PHY_CAP_10000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_10000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_T;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_T);
+        break;
+
+      case EFX_PHY_CAP_40000FDX:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
       case EFX_PHY_CAP_25000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_25000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
         /* TODO Will change when a proper link media type is provided by vmware */
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
-        break;
-
-      case EFX_PHY_CAP_40000FDX:
-        pSupportedModes[index].speed = VMK_LINK_SPEED_40000_MBPS;
-        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
       case EFX_PHY_CAP_50000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_50000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
         /* TODO Will change when a proper link media type is provided by vmware */
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
       case EFX_PHY_CAP_100000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
-        pSupportedModes[index].media = VMK_LINK_MEDIA_BASE_CR4;
+        SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
       default:

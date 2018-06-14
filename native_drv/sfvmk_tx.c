@@ -1091,7 +1091,11 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
 
   pXmitInfo->pOrigPkt = pkt;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   if (vmk_PktIsInnerOffload(pkt)  &&
+#else
+  if (vmk_PktIsEncapsulatedFrame(pkt) &&
+#endif
       (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
     pExpectHdrList = sfvmk_encapTsoHdrList;
   }
@@ -1644,70 +1648,77 @@ VMK_ReturnStatus
 sfvmk_populateTxDescriptor(sfvmk_txq_t *pTxq,
                            sfvmk_xmitInfo_t *pXmitInfo)
 {
-   VMK_ReturnStatus status = VMK_FAILURE;
-   sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
-   vmk_uint32 txMapId = (pTxq->added) & pTxq->ptrMask;
-   vmk_Bool isCso = VMK_FALSE;
-   vmk_Bool isEncapCso = VMK_FALSE;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_adapter_t *pAdapter = pTxq->pAdapter;
+  vmk_uint32 txMapId = (pTxq->added) & pTxq->ptrMask;
+  vmk_Bool isCso = VMK_FALSE;
+  vmk_Bool isEncapCso = VMK_FALSE;
 
-   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
-   VMK_ASSERT(pTxq->nPendDesc == 0);
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
+  VMK_ASSERT(pTxq->nPendDesc == 0);
 
-   /* VLAN handling */
-   sfvmk_txMaybeInsertTag(pTxq, pXmitInfo, &txMapId);
+  /* VLAN handling */
+  sfvmk_txMaybeInsertTag(pTxq, pXmitInfo, &txMapId);
 
-   if ((vmk_PktIsInnerOffload(pXmitInfo->pXmitPkt) == VMK_TRUE) &&
-       (pAdapter->isTunnelEncapSupported)) {
-     isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
-             vmk_PktIsMustOuterCsum(pXmitInfo->pXmitPkt);
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  if ((vmk_PktIsInnerOffload(pXmitInfo->pXmitPkt) == VMK_TRUE) &&
+      (pAdapter->isTunnelEncapSupported)) {
+    isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+            vmk_PktIsMustOuterCsum(pXmitInfo->pXmitPkt);
+    isEncapCso = vmk_PktIsInnerLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+                 vmk_PktIsMustInnerCsum(pXmitInfo->pXmitPkt);
+#else
+  if ((vmk_PktIsEncapsulatedFrame(pXmitInfo->pXmitPkt) == VMK_TRUE) &&
+      (pAdapter->isTunnelEncapSupported)) {
+    isEncapCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt)||
+                 vmk_PktIsMustCsum(pXmitInfo->pXmitPkt);
+    /* Not supported in ESXI 6.0 */
+    isCso = 0;
+#endif
+  } else {
+    isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
+            vmk_PktIsMustCsum(pXmitInfo->pXmitPkt);
+    isEncapCso = 0;
+  }
 
-     isEncapCso = vmk_PktIsInnerLargeTcpPacket(pXmitInfo->pXmitPkt) ||
-                  vmk_PktIsMustInnerCsum(pXmitInfo->pXmitPkt);
-   }
-   else {
-     isCso = vmk_PktIsLargeTcpPacket(pXmitInfo->pXmitPkt) ||
-             vmk_PktIsMustCsum(pXmitInfo->pXmitPkt);
-     isEncapCso = 0;
-   }
-
-   if ((pTxq->isCso != isCso) || (pTxq->isEncapCso != isEncapCso)) {
-     sfvmk_txCreateCsumDesc(pTxq, isCso, isEncapCso);
-     pTxq->isCso = isCso;
-     pTxq->isEncapCso = isEncapCso;
-     /* for option descriptors, make sure txqComplete doesn't try clean-up */
-     vmk_Memset(&pTxq->pTxMap[txMapId], 0, sizeof(sfvmk_txMapping_t));
-     txMapId = (txMapId + 1) & pTxq->ptrMask;
-   }
+  if ((pTxq->isCso != isCso) || (pTxq->isEncapCso != isEncapCso)) {
+    sfvmk_txCreateCsumDesc(pTxq, isCso, isEncapCso);
+    pTxq->isCso = isCso;
+    pTxq->isEncapCso = isEncapCso;
+    /* for option descriptors, make sure txqComplete doesn't try clean-up */
+    vmk_Memset(&pTxq->pTxMap[txMapId], 0, sizeof(sfvmk_txMapping_t));
+    txMapId = (txMapId + 1) & pTxq->ptrMask;
+  }
 
    /* TSO handling*/
-   if ((pXmitInfo->offloadFlag & SFVMK_TX_TSO) ||
-       (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
-     status = sfvmk_txHwTso(pTxq, pXmitInfo, &txMapId);
-     if (status != VMK_OK) {
-       SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx TSO failed: %s",
-                           pXmitInfo->pXmitPkt, vmk_StatusToString(status));
-       goto done;
-      }
-   } else {
-     status = sfvmk_txNonTsoPkt(pTxq, pXmitInfo->pXmitPkt, &txMapId);
-     if (status != VMK_OK) {
-       SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx failed: %s",
-                           pXmitInfo->pXmitPkt, vmk_StatusToString(status));
-       goto done;
-     }
-   }
+  if ((pXmitInfo->offloadFlag & SFVMK_TX_TSO) ||
+      (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
+    status = sfvmk_txHwTso(pTxq, pXmitInfo, &txMapId);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx TSO failed: %s",
+                          pXmitInfo->pXmitPkt, vmk_StatusToString(status));
+      goto done;
+    }
+  } else {
+    status = sfvmk_txNonTsoPkt(pTxq, pXmitInfo->pXmitPkt, &txMapId);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] tx failed: %s",
+                          pXmitInfo->pXmitPkt, vmk_StatusToString(status));
+      goto done;
+    }
+  }
 
    /* Post the pSgElemment list. */
-   status = sfvmk_txqListPost(pTxq);
-   if (status != VMK_OK) {
-     pTxq->stats[SFVMK_TXQ_DESC_POST_FAILED]++;
-     SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] post failed: %s",
-                         pXmitInfo->pXmitPkt, vmk_StatusToString(status));
-   }
+  status = sfvmk_txqListPost(pTxq);
+  if (status != VMK_OK) {
+    pTxq->stats[SFVMK_TXQ_DESC_POST_FAILED]++;
+    SFVMK_ADAPTER_ERROR(pAdapter, "pkt[%p] post failed: %s",
+                        pXmitInfo->pXmitPkt, vmk_StatusToString(status));
+  }
 
 done:
-   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
-   return status;
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
+  return status;
 }
 
 /*! \brief function to check if the transmit queue is stopped
@@ -1764,7 +1775,12 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   xmitInfo.offloadFlag |= vmk_PktMustVlanTag(pkt) ? SFVMK_TX_VLAN : 0;
   xmitInfo.offloadFlag |= vmk_PktIsLargeTcpPacket(pkt) ? SFVMK_TX_TSO : 0;
   if (pAdapter->isTunnelEncapSupported)
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
     xmitInfo.offloadFlag |= vmk_PktIsInnerLargeTcpPacket(pkt) ? SFVMK_TX_ENCAP_TSO : 0;
+#else
+    xmitInfo.offloadFlag |= (vmk_PktIsEncapsulatedFrame(pkt) &&
+                             vmk_PktIsLargeTcpPacket(pkt)) ? SFVMK_TX_ENCAP_TSO : 0;
+#endif
 
   SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
                          "Xmit start, pkt = %p, TX VLAN offload %s needed, "

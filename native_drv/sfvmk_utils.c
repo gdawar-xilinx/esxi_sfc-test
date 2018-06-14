@@ -305,7 +305,8 @@ vmk_uint32 sfvmk_pow2GE(vmk_uint32 value)
   return (1ul << (order));
 }
 
-/*! \brief It creates a mutex lock with specified name and lock rank.
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+/*! \brief It creates a mutex lock with specified name.
 **
 ** \param[in]  pLockName    brief name for the mutexLock
 ** \param[out] pMutex        mutex lock pointer to create
@@ -313,7 +314,7 @@ vmk_uint32 sfvmk_pow2GE(vmk_uint32 value)
 ** \return: VMK_OK on success, and lock created. Error code if otherwise.
 */
 VMK_ReturnStatus
-sfvmk_mutexInit(const char *pLockName, vmk_Mutex *pMutex)
+sfvmk_mutexInit(const char *pLockName, sfvmk_Lock *pMutex)
 {
   vmk_MutexCreateProps lockProps;
   VMK_ReturnStatus status;
@@ -344,6 +345,44 @@ void sfvmk_mutexDestroy(vmk_Mutex mutex)
   if (mutex != NULL)
     vmk_MutexDestroy(mutex);
 }
+
+#else
+/*! \brief It creates a semaphore  with specified name.
+**
+** \param[in]  pLockName    brief name for the mutexLock
+** \param[out] pLock        semaphore pointer to create
+**
+** \return: VMK_OK on success, and lock created. Error code if otherwise.
+*/
+VMK_ReturnStatus
+sfvmk_mutexInit(const char *pLockName, sfvmk_Lock *pLock)
+{
+  VMK_ReturnStatus status;
+
+  VMK_ASSERT_NOT_NULL(pLockName);
+  VMK_ASSERT_NOT_NULL(pLock);
+
+  status = vmk_BinarySemaCreate(pLock, vmk_ModuleCurrentID,
+                                (const char *)pLockName);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Failed to create semaphore (%s)", vmk_StatusToString(status));
+  }
+
+  return status;
+}
+
+/*! \brief It destroy semaphore.
+**
+** \param[in]  lock  semaphore
+**
+** \return: void
+*/
+void sfvmk_mutexDestroy(sfvmk_Lock lock)
+{
+  if (lock != NULL)
+    vmk_SemaDestroy(&lock);
+}
+#endif
 
 /*! \brief  World Sleep function ensures that
 **          the world sleeps for specified time

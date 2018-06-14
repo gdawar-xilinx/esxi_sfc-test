@@ -98,111 +98,119 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
+#define SFVMK_ALLOC_DESC_SIZE  22
   vmk_ByteCount maxSize = 0;
-  vmk_HeapAllocationDescriptor allocDesc[22];
+  vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
+  vmk_uint32 index = 0;
 
-  allocDesc[0].size = vmk_LogHeapAllocSize();
-  allocDesc[0].alignment = 0;
-  allocDesc[0].count = 2;
+  allocDesc[index].size = vmk_LogHeapAllocSize();
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 2;
 
-  allocDesc[1].size = vmk_LockDomainAllocSize();
-  allocDesc[1].alignment = 0;
-  allocDesc[1].count = 1;
+  allocDesc[index].size = vmk_LockDomainAllocSize();
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
 
-  allocDesc[2].size = vmk_HashGetAllocSize(SFVMK_MAX_ADAPTER);
-  allocDesc[2].alignment = 0;
-  allocDesc[2].count = 1;
+  allocDesc[index].size = vmk_HashGetAllocSize(SFVMK_MAX_ADAPTER);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
 
-  allocDesc[3].size = vmk_HashGetAllocSize(SFVMK_MAX_FILTER);
-  allocDesc[3].alignment = 0;
-  allocDesc[3].count = SFVMK_MAX_ADAPTER;
+  allocDesc[index].size = vmk_HashGetAllocSize(SFVMK_MAX_FILTER);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* For MCDI lock, adapter lock */
-  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[4].size, &allocDesc[4].alignment);
-  allocDesc[4].count = 2;
+  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
+  allocDesc[index++].count = 2;
 
   /* Binary semaphore at the module level */
-  allocDesc[5].size = vmk_SemaAllocSize((vmk_uint32 *)&allocDesc[5].alignment);
-  allocDesc[5].count = 1;
+  allocDesc[index].size = vmk_SemaAllocSize((vmk_uint32 *)&allocDesc[index].alignment);
+  allocDesc[index++].count = 1;
+#endif
 
-  allocDesc[6].size = vmk_SpinlockAllocSize(VMK_SPINLOCK);
-  allocDesc[6].alignment = 0;
+  allocDesc[index].size = vmk_SpinlockAllocSize(VMK_SPINLOCK);
+  allocDesc[index].alignment = 0;
   /* Per adapter - memBarLock, nicLock, uplinkLock, evqLock for each EVQ,
    * txqLock for each TXQ.
    */
-  allocDesc[6].count = (3 + SFVMK_MAX_EVQ + SFVMK_MAX_TXQ) * SFVMK_MAX_ADAPTER;
+  allocDesc[index++].count = (3 + SFVMK_MAX_EVQ + SFVMK_MAX_TXQ) * SFVMK_MAX_ADAPTER;
 
   /* Space for helper thread */
-  allocDesc[7].size = vmk_WorldCreateAllocSize(&allocDesc[7].alignment);
-  allocDesc[7].count = 1;
+  allocDesc[index].size = vmk_WorldCreateAllocSize(&allocDesc[index].alignment);
+  allocDesc[index++].count = 1;
 
-  allocDesc[8].size = sizeof(sfvmk_adapter_t);
-  allocDesc[8].alignment = 0;
-  allocDesc[8].count = SFVMK_MAX_ADAPTER;
+  allocDesc[index].size = sizeof(sfvmk_adapter_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER;
 
-  allocDesc[9].size = sizeof(sfvmk_evq_t);
-  allocDesc[9].alignment = 0;
-  allocDesc[9].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+  allocDesc[index].size = sizeof(sfvmk_evq_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
 
-  allocDesc[10].size = sizeof(sfvmk_evq_t *);
-  allocDesc[10].alignment = sizeof(sfvmk_evq_t *);
-  allocDesc[10].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
+  allocDesc[index].size = sizeof(sfvmk_evq_t *);
+  allocDesc[index].alignment = sizeof(sfvmk_evq_t *);
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_EVQ;
 
-  allocDesc[11].size = sizeof(vmk_IntrCookie);
-  allocDesc[11].alignment = 0;
-  allocDesc[11].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_INTR;
+  allocDesc[index].size = sizeof(vmk_IntrCookie);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_INTR;
 
-  allocDesc[12].size = sizeof(sfvmk_rxq_t);
-  allocDesc[12].alignment = 0;
-  allocDesc[12].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+  allocDesc[index].size = sizeof(sfvmk_rxq_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
 
-  allocDesc[13].size = sizeof(sfvmk_rxq_t *);
-  allocDesc[13].alignment = sizeof(sfvmk_rxq_t *);
-  allocDesc[13].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
+  allocDesc[index].size = sizeof(sfvmk_rxq_t *);
+  allocDesc[index].alignment = sizeof(sfvmk_rxq_t *);
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ;
 
-  allocDesc[14].size = sizeof(sfvmk_rxSwDesc_t);
-  allocDesc[14].alignment = 0;
-  allocDesc[14].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ * EFX_RXQ_MAXNDESCS;
+  allocDesc[index].size = sizeof(sfvmk_rxSwDesc_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_RXQ * EFX_RXQ_MAXNDESCS;
 
-  allocDesc[15].size = sizeof(sfvmk_txq_t);
-  allocDesc[15].alignment = 0;
-  allocDesc[15].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+  allocDesc[index].size = sizeof(sfvmk_txq_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
 
-  allocDesc[16].size = sizeof(sfvmk_txq_t *);
-  allocDesc[16].alignment = sizeof(sfvmk_txq_t *);
-  allocDesc[16].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
+  allocDesc[index].size = sizeof(sfvmk_txq_t *);
+  allocDesc[index].alignment = sizeof(sfvmk_txq_t *);
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_TXQ;
 
-  allocDesc[17].size = sizeof(vmk_UplinkSharedQueueData);
-  allocDesc[17].alignment = 0;
-  allocDesc[17].count = SFVMK_MAX_ADAPTER * (SFVMK_MAX_RXQ * SFVMK_MAX_TXQ);
+  allocDesc[index].size = sizeof(vmk_UplinkSharedQueueData);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * (SFVMK_MAX_RXQ * SFVMK_MAX_TXQ);
 
-  allocDesc[18].size = sizeof(sfvmk_filterDBEntry_t);
-  allocDesc[18].alignment = 0;
-  allocDesc[18].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
+  allocDesc[index].size = sizeof(sfvmk_filterDBEntry_t);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
 
   /* Allocaion done for both Signed and Unsigned Image type*/
-  allocDesc[19].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
-  allocDesc[19].alignment = 0;
-  allocDesc[19].count = 1;
+  allocDesc[index].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   status = vmk_MgmtGetStaticHeapRequired((vmk_MgmtApiSignature *)&sfvmk_mgmtSig,
-                                         1, 0, 0, &allocDesc[20].size);
+                                         1, 0, 0, &allocDesc[index].size);
   if (status != VMK_OK) {
-    allocDesc[20].size = 0;
+    allocDesc[index].size = 0;
     SFVMK_ERROR("Failed to determine management heap size: status:%s",
                  vmk_StatusToString(status));
   }
 
-  allocDesc[20].alignment = 0;
-  allocDesc[20].count = 1;
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
+#endif
 
-  allocDesc[21].size = SFVMK_HWQ_STATS_BUFFER_SZ;
-  allocDesc[21].alignment = 0;
-  allocDesc[21].count = 1;
+  allocDesc[index].size = SFVMK_HWQ_STATS_BUFFER_SZ;
+  allocDesc[index].alignment = 0;
+  allocDesc[index].count = 1;
+
+  VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);
 
   status = vmk_HeapDetermineMaxSize(allocDesc,
-                                    sizeof(allocDesc) / sizeof(allocDesc[0]),
+                                    index,
                                     &maxSize);
   if (status != VMK_OK) {
     SFVMK_ERROR("Failed to determine heap max size: status:%s",
@@ -304,7 +312,11 @@ init_module(void)
   }
 
   status = vmk_BinarySemaCreate(&sfvmk_modInfo.lock,
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
                                 sfvmk_modInfo.heapID,
+#else
+                                vmk_ModuleCurrentID,
+#endif
                                 (const char *)"Module Lock");
   if (status != VMK_OK) {
     SFVMK_ERROR("Initialization of Module level lock failed (%s)",

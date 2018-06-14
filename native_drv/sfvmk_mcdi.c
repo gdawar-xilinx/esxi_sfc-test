@@ -136,11 +136,11 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->mcdi.lock);
+  sfvmk_MutexLock(pAdapter->mcdi.lock);
 
   if (pAdapter->mcdi.state != SFVMK_MCDI_STATE_INITIALIZED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "MCDI is not initialized");
-    vmk_MutexUnlock(pAdapter->mcdi.lock);
+    sfvmk_MutexUnlock(pAdapter->mcdi.lock);
     goto done;
   }
 
@@ -149,7 +149,7 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
   efx_mcdi_request_start(pAdapter->pNic, pEmrp, B_FALSE);
   sfvmk_mcdiPoll(pAdapter, timeoutUS);
 
-  vmk_MutexUnlock(pAdapter->mcdi.lock);
+  sfvmk_MutexUnlock(pAdapter->mcdi.lock);
 
   /* Check if driver reset required */
   if ((pEmrp->emr_rc == EIO) && (pAdapter->mcdi.mode == SFVMK_MCDI_MODE_POLL)) {
@@ -372,9 +372,9 @@ sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state)
 
   pMcdi = &pAdapter->mcdi;
 
-  vmk_MutexLock(pMcdi->lock);
+  sfvmk_MutexLock(pMcdi->lock);
   pMcdi->mcLogging = state;
-  vmk_MutexUnlock(pMcdi->lock);
+  sfvmk_MutexUnlock(pMcdi->lock);
 }
 #endif
 
@@ -490,11 +490,11 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  vmk_MutexLock(pAdapter->mcdi.lock);
+  sfvmk_MutexLock(pAdapter->mcdi.lock);
 
   if (pAdapter->mcdi.state != SFVMK_MCDI_STATE_INITIALIZED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "MCDI is not initialized");
-    vmk_MutexUnlock(pAdapter->mcdi.lock);
+    sfvmk_MutexUnlock(pAdapter->mcdi.lock);
     goto done;
   }
 
@@ -502,7 +502,7 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
 
   vmk_Memset(&pAdapter->mcdi.transport, 0, sizeof(efx_mcdi_transport_t));
 
-  vmk_MutexUnlock(pAdapter->mcdi.lock);
+  sfvmk_MutexUnlock(pAdapter->mcdi.lock);
 
   sfvmk_freeDMAMappedMem(pAdapter->dmaEngine, pAdapter->mcdi.mem.pEsmBase,
                          pAdapter->mcdi.mem.ioElem.ioAddr,

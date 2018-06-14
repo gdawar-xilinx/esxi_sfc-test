@@ -82,6 +82,19 @@
 /* Bit Masks for Encap offload features */
 #define SFVMK_VXLAN_OFFLOAD           1 << 0
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+typedef vmk_Mutex sfvmk_Lock;
+#define SFVMK_SPINLOCK_RANK_LOWEST    VMK_SPINLOCK_RANK_LOWEST
+#define sfvmk_MutexUnlock(lock)       vmk_MutexUnlock(lock)
+#define sfvmk_MutexLock(lock)         vmk_MutexLock(lock)
+#else
+/* Mutex is not supported, mapping it to semaphore */
+typedef vmk_Semaphore sfvmk_Lock;
+#define SFVMK_SPINLOCK_RANK_LOWEST    1
+#define sfvmk_MutexUnlock(lock)       vmk_SemaUnlock(&(lock))
+#define sfvmk_MutexLock(lock)         vmk_SemaLock(&(lock))
+#endif
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -92,7 +105,7 @@ extern void             sfvmk_driverUnregister(void);
  * than NIC and BAR.TXQ and EVQ are the logical order in which the locks are taken.
  */
 typedef enum sfvmk_spinlockRank_e {
-  SFVMK_SPINLOCK_RANK_EVQ_LOCK = VMK_SPINLOCK_RANK_LOWEST,
+  SFVMK_SPINLOCK_RANK_EVQ_LOCK = SFVMK_SPINLOCK_RANK_LOWEST,
   SFVMK_SPINLOCK_RANK_TXQ_LOCK,
   SFVMK_SPINLOCK_RANK_UPLINK_LOCK,
   SFVMK_SPINLOCK_RANK_NIC_LOCK,
@@ -111,7 +124,7 @@ typedef enum sfvmk_mcdiMode_e {
 
 typedef struct sfvmk_mcdi_s {
   efsys_mem_t           mem;
-  vmk_Mutex             lock;
+  sfvmk_Lock            lock;
   sfvmk_mcdiState_t     state;
   sfvmk_mcdiMode_t      mode;
   efx_mcdi_transport_t  transport;
@@ -423,9 +436,11 @@ typedef struct sfvmk_uplink_s {
   /* Structure advertising a mode (speed/duplex/media) that is supported by an uplink. */
   vmk_UplinkSupportedMode    supportedModes[EFX_PHY_CAP_NTYPES];
   vmk_uint32                 numSupportedModes;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* Currently advertised modes (speed/duplex/media) */
   vmk_UplinkAdvertisedMode   advertisedModes[EFX_PHY_CAP_NTYPES];
   vmk_uint32                 numAdvertisedModes;
+#endif
   /* Uplink Q allocated for RSS */
   vmk_uint32                 rssUplinkQueue;
   /* Uplink registration data. */
@@ -494,7 +509,7 @@ typedef struct sfvmk_adapter_s {
    * RxQ Param (defRxqIndex, rxPrefixSize, rxBufferSize,
    * rxBufferAlign, enableRSS)
    */
-  vmk_Mutex                  lock;
+  sfvmk_Lock                 lock;
 
   /* EFX /efsys related information */
   /* EFX family */
@@ -606,8 +621,8 @@ sfvmk_createLock(sfvmk_adapter_t *pAdapter,
 void sfvmk_destroyLock(vmk_Lock lock);
 
 /* mutex handler */
-VMK_ReturnStatus sfvmk_mutexInit(const char *pLockName,vmk_Mutex *pMutex);
-void sfvmk_mutexDestroy(vmk_Mutex mutex);
+VMK_ReturnStatus sfvmk_mutexInit(const char *pLockName, sfvmk_Lock *pLock);
+void sfvmk_mutexDestroy(sfvmk_Lock lock);
 
 /* Mempool handlers */
 vmk_VA sfvmk_memPoolAlloc(size_t size);

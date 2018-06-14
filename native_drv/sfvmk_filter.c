@@ -320,8 +320,10 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
 
       break;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
     /* TODO: Will add support for GENEVE in future */
     case VMK_UPLINK_QUEUE_FILTER_CLASS_GENEVE:
+#endif
     default:
       SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not supported",
                           pFdbEntry->class);

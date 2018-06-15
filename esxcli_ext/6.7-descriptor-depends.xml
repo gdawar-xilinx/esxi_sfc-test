@@ -1,0 +1,6 @@
+<constraint name="uwglibc-2.5-34-1"/>
+<constraint name="uwglibc64-2.5-34-1"/>
+<constraint name="libvmkuser-6.7.0-1"/>
+<constraint name="uwvmkcall-6.7.0-1"/>
+<constraint name="vmkapi_2_5_0_0"/>
+

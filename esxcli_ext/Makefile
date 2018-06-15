@@ -28,6 +28,10 @@
 UWTOOL = sfvmkcli
 UWTOOL_VERSION = 0.1
 
+NDDK_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKVER)
+NDDK_DIR  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKDIR)
+NDDK_PATH = /opt/vmware/$(NDDK_DIR)
+
 # mgmtInterface.c is in DEV_COMMON_DIR, the build system looks
 # there for sources as well as here.
 UWTOOL_SOURCES = main.c sfvmk_mgmt_interface.c
@@ -41,7 +45,7 @@ DESC_VENDOR=SolarFlare
 DESC_SUMMARY=esxcli extension for SFVMK driver
 DESC_DESCRIPTION=Userworld Tool to communicate with a VMKAPI driver module
 DESC_URLS=descriptor-urls.xml
-DESC_DEPENDS=descriptor-depends.xml
+DESC_DEPENDS=$(NDDK_VER)-descriptor-depends.xml
 DESC_CONFLICTS=
 DESC_REPLACES=
 DESC_PROVIDES=
@@ -58,5 +62,7 @@ BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
 BULL_VENDOR_CODE=solarfalre
 
+DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+
 # Remove the below include statement when appending Makefile.user
-include Makefile.user
+include $(NDDK_PATH)/src/partners/samples/common-mgmt-infrastructure/Makefile.user

@@ -1881,7 +1881,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (pAdapter->isTsoFwAssisted) {
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                    VMK_UPLINK_CAP_IPV4_TSO, NULL);
-    if (status != VMK_OK) {
+    if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
       SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV4_TSO failed status: %s",
                           vmk_StatusToString(status));
       goto done;
@@ -1889,7 +1889,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
 
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                    VMK_UPLINK_CAP_IPV6_TSO, NULL);
-    if (status != VMK_OK) {
+    if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
       SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV6_TSO failed status: %s",
                           vmk_StatusToString(status));
       goto done;

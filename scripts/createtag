@@ -2,7 +2,7 @@
 #############
 
 # This script currently:
-# - version bumps in sfvmk.sc
+# - version bumps in 6.0-sfvmk & 6.5-sfvmk
 # - tags esxi_sfc
 # - commit and push changes
 
@@ -179,9 +179,9 @@ isTopOfTreeTagged () {
     tot_tagged=""
 }
 
-# Update the sfvmk.sc file with new version number
+# Update the 6.0-sfvmk & 6.5-sfvmk files with new version number
 versionUpdate () {
-    file=$(pwd)/native_drv/sfvmk.sc
+    file=$(pwd)/native_drv/$1
     ver=$sfvmk_tag
     ver=${ver:1}
     ver="\"${ver}\""
@@ -197,7 +197,7 @@ buildtypeupdate () {
     sed -i 's/\(BUILDTYPE     = \)\(.*\)$/\1'${buildtype}'/' $file
 }
 
-# Update the live-install/remove params in the sfvmk.sc file
+# Update the live-install/remove params in the 6.0-sfvmk & 6.5-sfvmk files
 liveVibParamUpdate () {
     if [ "$buildtype" = "beta" ]; then
       livevibupdate="True"
@@ -207,7 +207,7 @@ liveVibParamUpdate () {
 
     echo "updating live-install/remove params as ${livevibupdate} for ${buildtype} build"
 
-    file=$(pwd)/native_drv/sfvmk.sc
+    file=$(pwd)/native_drv/$1
     sed -i 's/\(\"live-install-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
     sed -i 's/\(\"live-remove-allowed\"\t: \)\(.*\)$/\1'${livevibupdate},'/' $file
 }
@@ -424,9 +424,12 @@ bumpVersion () {
 }
 
 addSfvmkTag () {
-    echo "Updating sfvmk.sc ...."
-    versionUpdate
-    liveVibParamUpdate
+    echo "Updating 6.0-sfvmk file for 6.0 build...."
+    versionUpdate "6.0-sfvmk"
+    liveVibParamUpdate "6.0-sfvmk"
+    echo "Updating 6.5-sfvmk file for 6.5 build...."
+    versionUpdate "6.5-sfvmk"
+    liveVibParamUpdate "6.5-sfvmk"
     echo "Updating Makefile ...."
     buildtypeupdate
     updateV5Target

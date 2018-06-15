@@ -528,14 +528,15 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
 **          context only.
 **
 ** \param[in] pEvq     Pointer to event queue
+** \param[in] panic    Indicate if system is in panic state or not
 **
 ** \return: VMK_FALSE [success]
 ** \return: VMK_TRUE  [failure]
 */
 VMK_ReturnStatus
-sfvmk_evqPoll(sfvmk_evq_t *pEvq)
+sfvmk_evqPoll(sfvmk_evq_t *pEvq, vmk_Bool panic)
 {
-  VMK_ReturnStatus status = VMK_FAILURE;
+  VMK_ReturnStatus status = VMK_OK;
 
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
@@ -561,11 +562,13 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
   sfvmk_evqComplete(pEvq);
 
   /* Re-prime the event queue for interrupts */
-  status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "efx_ev_qprime failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
+  if (!panic) {
+    status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "efx_ev_qprime failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
   }
 
 done:

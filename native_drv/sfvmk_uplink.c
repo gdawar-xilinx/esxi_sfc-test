@@ -782,7 +782,7 @@ static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
     pEvq->panicPktList = pktList;
     vmk_SpinlockUnlock(pEvq->lock);
 
-    sfvmk_evqPoll(pEvq);
+    sfvmk_evqPoll(pEvq, VMK_TRUE);
   }
 
 done:
@@ -2691,7 +2691,7 @@ sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
   VMK_ASSERT_NOT_NULL(pEvq);
   pEvq->rxBudget = budget;
 
-  if (sfvmk_evqPoll(pEvq) == VMK_OK) {
+  if (sfvmk_evqPoll(pEvq, VMK_FALSE) == VMK_OK) {
     if (pEvq->rxDone >= pEvq->rxBudget)
       pendCompletion = VMK_TRUE;
   }

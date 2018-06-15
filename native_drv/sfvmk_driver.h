@@ -664,7 +664,7 @@ VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_evStart(sfvmk_adapter_t *pAdapter);
 void sfvmk_evStop(sfvmk_adapter_t *pAdapter);
-VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
+VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq, vmk_Bool panic);
 VMK_ReturnStatus sfvmk_evqModerate(sfvmk_adapter_t *pAdapter,
                                    unsigned int qIndex,
                                    unsigned int uSec);

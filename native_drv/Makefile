@@ -17,6 +17,11 @@
 #-------------------------------------------------------------------------------
 # Tools
 #-------------------------------------------------------------------------------
+$(shell sh buildcfg.sh CFG_SFVMKBUILD)
+NDDK_VER = $(shell sh buildcfg.sh GET_NDDKVER)
+NDDK_DIR = $(shell sh buildcfg.sh GET_NDDKDIR)
+NDDK_BUILDNUM = $(shell sh buildcfg.sh GET_NDDKBUILDNUM)
+
 include tool-defs.inc
 
 #-------------------------------------------------------------------------------
@@ -24,7 +29,7 @@ include tool-defs.inc
 #-------------------------------------------------------------------------------
 PRODUCT       = nativeddk
 
-VMKAPI_DIR    = $(shell /bin/rpm -q --qf '%{INSTPREFIXES}\n' vmware-esx-nativeddk-devtools-6.5.0-0.0.4598673)
+VMKAPI_DIR    = /opt/vmware/$(NDDK_DIR)
 SRC           = $(VMKAPI_DIR)/src/
 FIND_RPM      = $(VMKAPI_DIR)/tools/find_rpm_install_dir.sh
 VIRTUAL_GOBUILD = $(VMKAPI_DIR)/tools/gobuild/nativeddk.cache
@@ -37,7 +42,7 @@ REL_PWD       = $(shell pwd | $(SED) -e 's,$(SRC),,')
 SC            = $(shell echo *.sc | $(AWK) '{print $$1}')
 MANIFEST      = $(REL_PWD)/$(SC)
 BUILDTYPE     = beta
-BUILD_NUMBER  = 4598673
+BUILD_NUMBER  = $(NDDK_BUILDNUM)
 TARGET        = $(CURDIR)/build
 SCONS_TARGET  = $(CURDIR)/.build
 IMPORTED_CODE = $(CURDIR)/imported
@@ -126,11 +131,17 @@ clean_doxygen:
 	@$(RM) -rf $(DOXYGEN_TARGET)
 	@echo Done.
 
+clean_cfg:
+	@echo Cleaning out *.sc and tool-defs.inc files ...
+	@$(RM) -rf *.sc
+	@$(RM) -rf tool-defs.inc
+	@echo Done.
+
 clean_targets: clean_doxygen
 	@echo Cleaning out build directories ...
 	@$(RM) -rf $(TARGET) $(SCONS_TARGET)
 	@echo Done.
 
-clean: clean_targets
+clean: clean_targets clean_cfg
 
-cleanall: clean_imported clean_targets
+cleanall: clean_imported clean_targets clean_cfg

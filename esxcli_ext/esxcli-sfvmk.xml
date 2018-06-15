@@ -18,6 +18,10 @@
       <namespace path="sfvmk.vpd">
          <description>esxcli extension to get VPD information</description>
       </namespace>
+      <!-- esxcli sfvmk firmware -->
+      <namespace path="sfvmk.firmware">
+         <description>esxcli extension to get firmware version and update firmware image</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -87,6 +91,46 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/solarflare/bin/sfvmkcli --object vpd --get --nic-name $val{nic-name}</execute>
+      </command>
+
+      <!-- esxcli sfvmk firmware get -->
+      <command path="sfvmk.firmware.get">
+         <description>Gets installed firmware version</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object firmware --get --nic-name $val{nic-name}</execute>
+      </command>
+
+      <!-- esxcli sfvmk firmware set -->
+      <command path="sfvmk.firmware.set">
+         <description>Sets new firmware image</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+            <parameter name="file-name" type="string" required="true" shortname="f">
+               <description>Firmware image file name.</description>
+            </parameter>
+            <parameter name="type" type="string" required="true" shortname="t">
+               <description>Firmware image type (controller/ bootrom/ uefirom).</description>
+            </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} --type $val{type}</execute>
       </command>
    </commands>
 </plugin>

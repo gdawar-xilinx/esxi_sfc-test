@@ -60,7 +60,7 @@ DEV_SIGNING_PREFIX=vmpartner
 
 BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
-BULL_VENDOR_CODE=solarfalre
+BULL_VENDOR_CODE=solarflare
 
 DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 

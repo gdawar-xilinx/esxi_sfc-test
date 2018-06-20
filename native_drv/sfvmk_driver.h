@@ -791,7 +791,8 @@ void sfvmk_freeFilterRule(sfvmk_adapter_t *pAdapter, sfvmk_filterDBEntry_t *pFdb
 VMK_ReturnStatus sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter);
 void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal);
-vmk_uint32 sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter, char *pStart, const char *pEnd);
+VMK_ReturnStatus sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter, char *pStart,
+                                         vmk_ByteCount maxBytes, vmk_ByteCount *pBytesCopied);
 
 /* Functions for VPD read/write request handling */
 VMK_ReturnStatus sfvmk_vpdGetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,

@@ -1020,10 +1020,11 @@ done:
 /*! \brief Fill the buffer with a Tx queue stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[out] ppCurr    pointer to current position in stats buffer
-** \param[in]  pEnd      pointer to end position of stats buffer
-** \param[in]  qIndex    queue Index
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  qIndex        queue Index
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
@@ -1032,18 +1033,26 @@ done:
 **           VMK_FAILURE         Any other error
 */
 static VMK_ReturnStatus
-sfvmk_fillTxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
-                       const char *pEnd, vmk_uint16 qIndex)
+sfvmk_fillTxQueueStats(sfvmk_adapter_t *pAdapter,
+                       vmk_uint16 qIndex,
+                       char *pStart, vmk_ByteCount maxBytes,
+                       vmk_ByteCount *pBytesCopied)
 {
+  char *pCurr;
   sfvmk_txq_t *pTxq;
-  vmk_ByteCount offset = 0;
+  vmk_ByteCount bytesCopied = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
+
   pTxq = pAdapter->ppTxq[qIndex];
-  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
-                            &offset, "TxQ[%u]: %s %lu %s %lu %s %lu\n",
+  pCurr = pStart;
+
+  status = vmk_StringFormat(pCurr, maxBytes,
+                            &bytesCopied, "TxQ[%u]: %s %lu %s %lu %s %lu\n",
                             qIndex,
                             pSfvmkTxqStatsName[SFVMK_TXQ_PKTS],
                             pTxq->stats[SFVMK_TXQ_PKTS],
@@ -1057,7 +1066,8 @@ sfvmk_fillTxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
     goto done;
   }
 
-  *ppCurr += offset;
+  if (pBytesCopied != NULL)
+   *pBytesCopied += bytesCopied;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1067,10 +1077,11 @@ done:
 /*! \brief Fill the buffer with a Rx queue stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[out] ppCurr    pointer to current position in stats buffer
-** \param[in]  pEnd      pointer to end position of stats buffer
-** \param[in]  qIndex    queue Index
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  qIndex        queue Index
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
@@ -1079,18 +1090,26 @@ done:
 **           VMK_FAILURE         Any other error
 */
 static VMK_ReturnStatus
-sfvmk_fillRxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
-                       const char *pEnd, vmk_uint16 qIndex)
+sfvmk_fillRxQueueStats(sfvmk_adapter_t *pAdapter,
+                       vmk_uint16 qIndex,
+                       char *pStart, vmk_ByteCount maxBytes,
+                       vmk_ByteCount *pBytesCopied)
 {
+  char *pCurr;
   sfvmk_rxq_t *pRxq;
-  vmk_ByteCount offset = 0;
+  vmk_ByteCount bytesCopied = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
+
   pRxq = pAdapter->ppRxq[qIndex];
-  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
-                            &offset, "RxQ[%u]: %s %lu %s %lu %s %lu\n",
+  pCurr = pStart;
+
+  status = vmk_StringFormat(pCurr, maxBytes,
+                            &bytesCopied, "RxQ[%u]: %s %lu %s %lu %s %lu\n",
                             qIndex,
                             pSfvmkRxqStatsName[SFVMK_RXQ_PKTS],
                             pRxq->stats[SFVMK_RXQ_PKTS],
@@ -1104,19 +1123,29 @@ sfvmk_fillRxQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
     goto done;
   }
 
-  *ppCurr += offset;
+  if (pBytesCopied != NULL)
+   *pBytesCopied += bytesCopied;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
   return status;
 }
 
+#define SFVMK_UPDATE_STATS_INFO(curr, maxb, count, pCummCount) \
+                                 do {                          \
+                                   (curr)        += (count);   \
+                                   (maxb)        -= (count);   \
+                                   if((pCummCount) != NULL)    \
+                                     (*(pCummCount)) += (count); \
+                                 } while(VMK_FALSE)
+
 /*! \brief Fill the buffer with per Rx/Tx queue stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[out] pCurr     pointer to current position in stats buffer
-** \param[in]  pEnd      pointer to end position of stats buffer
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
@@ -1125,56 +1154,70 @@ done:
 **           VMK_FAILURE         Any other error
 */
 static VMK_ReturnStatus
-sfvmk_populateQueueStats(sfvmk_adapter_t *pAdapter,
-                         char            *pCurr,
-                         const char      *pEnd)
+sfvmk_fillQueueStats(sfvmk_adapter_t *pAdapter,
+                     char *pStart, vmk_ByteCount maxBytes,
+                     vmk_ByteCount *pBytesCopied)
 {
+  char *pCurr;
   vmk_uint16 maxRxQueues;
   vmk_uint16 maxTxQueues;
   vmk_uint16 qIndex;
-  vmk_ByteCount offset = 0;
+  vmk_ByteCount bytesCopied = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
+
   maxRxQueues = sfvmk_getMaxRxHardwareQueues(pAdapter);
   maxTxQueues = sfvmk_getMaxTxHardwareQueues(pAdapter);
 
-  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
-                            &offset, "  -- Per Hardware Queue Statistics\n");
+  pCurr = pStart;
+
+  status = vmk_StringFormat(pCurr, maxBytes, &bytesCopied,
+                            "  -- Per Hardware Queue Statistics\n");
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
 
-  pCurr += offset;
+  SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
+  bytesCopied = 0;
 
   for (qIndex = 0; qIndex < maxRxQueues; qIndex++) {
-    status = sfvmk_fillRxQueueStats(pAdapter, &pCurr, pEnd, qIndex);
+    status = sfvmk_fillRxQueueStats(pAdapter, qIndex, pCurr,
+                                    maxBytes, &bytesCopied);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillRxQueueStats failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
+
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
   }
 
-  status = vmk_StringFormat(pCurr, (pEnd - pCurr), &offset, "\n");
+  status = vmk_StringFormat(pCurr, maxBytes, &bytesCopied, "\n");
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
 
-  pCurr += offset;
+  SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
+  bytesCopied = 0;
 
   for (qIndex = 0; qIndex < maxTxQueues; qIndex++) {
-    status = sfvmk_fillTxQueueStats(pAdapter, &pCurr, pEnd, qIndex);
+    status = sfvmk_fillTxQueueStats(pAdapter, qIndex, pCurr,
+                                    maxBytes, &bytesCopied);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillTxQueueStats failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
+
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
   }
 
 done:
@@ -1185,8 +1228,10 @@ done:
 /*! \brief Fill the buffer with private stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[out] pStart    pointer to start position in stats buffer
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
@@ -1194,58 +1239,46 @@ done:
 **           VMK_BAD_PARAM       If buffer is not valid.
 **           VMK_FAILURE         Any other error
 */
-static VMK_ReturnStatus
-sfvmk_fillPrivStats(sfvmk_adapter_t *pAdapter, char *pStart)
+VMK_ReturnStatus
+sfvmk_fillMacStats(sfvmk_adapter_t *pAdapter,
+                   char *pStart, vmk_ByteCount maxBytes,
+                   vmk_ByteCount *pBytesCopied)
 {
-  uint32_t id;
-  vmk_ByteCount offset = 0;
-  char *pCurr;
-  const char *pEnd;
   const char *pEntryName;
+  char *pCurr;
+  uint32_t id;
+  vmk_ByteCount bytesCopied = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  pEnd = SFVMK_PRIV_STATS_BUFFER_SZ + pStart;
-  pCurr = pStart;
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
 
-  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
-                            &offset, "\n");
+  status = sfvmk_macStatsUpdate(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "Stats sync failed with error %s",
                         vmk_StatusToString(status));
-    goto string_format_failed;
+    goto done;
   }
 
-  pCurr += offset;
+  pCurr = pStart;
 
   for (id = 0; id < EFX_MAC_NSTATS; id++) {
     pEntryName = efx_mac_stat_name(pAdapter->pNic, id);
-    status = vmk_StringFormat(pCurr, (pEnd - pCurr),
-                              &offset, "%s: %lu\n", pEntryName,
+    status = vmk_StringFormat(pCurr, maxBytes,
+                              &bytesCopied, "%s: %lu\n", pEntryName,
                               pAdapter->adapterStats[id]);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                           vmk_StatusToString(status));
-      goto string_format_failed;
+      goto done;
     }
 
-    pCurr += offset;
-  }
-
-  /* Fill the driver maintained statistics */
-  status = sfvmk_populateQueueStats(pAdapter, pCurr, pEnd);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_populateQueueStats failed status: %s",
-                        vmk_StatusToString(status));
-    goto string_format_failed;
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
   }
 
   status = VMK_OK;
-  goto done;
-
-string_format_failed:
-  VMK_ASSERT((status != VMK_LIMIT_EXCEEDED), "Private stats buffer overflowed");
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1301,6 +1334,10 @@ sfvmk_privStatsGet(vmk_AddrCookie cookie,
                     char *pStatsBuf, vmk_ByteCount length)
 {
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
+  char *pCurr;
+  vmk_ByteCount maxBytes = 0;;
+  vmk_ByteCount bytesCopied = 0;
+  vmk_ByteCount totalBytes = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -1318,23 +1355,47 @@ sfvmk_privStatsGet(vmk_AddrCookie cookie,
   }
 
   sfvmk_MutexLock(pAdapter->lock);
-  status = sfvmk_macStatsUpdate(pAdapter);
+  maxBytes = SFVMK_PRIV_STATS_BUFFER_SZ;
+  pCurr = pStatsBuf;
+
+  status = vmk_StringFormat(pCurr, maxBytes,
+                            &bytesCopied, "\n");
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Stats sync failed with error %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
-    goto failed_stats_sync;
+    goto failed_stats_update;
   }
 
-  status = sfvmk_fillPrivStats(pAdapter, pStatsBuf);
+  maxBytes -= bytesCopied;
+  totalBytes += bytesCopied;
+  pCurr += bytesCopied;
+
+  status = sfvmk_fillMacStats(pAdapter, pCurr, maxBytes, &bytesCopied);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk MAC stats failed");
+    goto failed_stats_update;
+  }
+
+  maxBytes -= bytesCopied;
+  totalBytes += bytesCopied;
+  pCurr += bytesCopied;
+
+  status = sfvmk_fillQueueStats(pAdapter, pCurr, maxBytes, &bytesCopied);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Priv stats buffer fill failed with error %s",
                         vmk_StatusToString(status));
     goto failed_stats_update;
   }
 
+  maxBytes -= bytesCopied;
+  totalBytes += bytesCopied;
+  pCurr += bytesCopied;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "max Bytes %d, bytes copied %lu, bytes remaining %lu",
+                      SFVMK_PRIV_STATS_BUFFER_SZ, totalBytes, maxBytes);
   status = VMK_OK;
 
-failed_stats_sync:
 failed_stats_update:
   sfvmk_MutexUnlock(pAdapter->lock);
 
@@ -5413,11 +5474,12 @@ done:
 /*! \brief Fill the buffer with a Rx/Tx queue stats
 **         lock is already taken.
 **
-** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
-** \param[out] ppCurr      Pointer to current position in stats buffer
-** \param[in]  pEnd        Pointer to end position of stats buffer
-** \param[in]  qIndex      Queue Index
-** \param[in]  isRxQueue   VMK_TRUE if called for a rx queue
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  qIndex        queue Index
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[in]  isRxQueue     VMK_TRUE if called for a rx queue
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
 ** \return: VMK_OK [success]
 **     Below error values are returned in case of failure,
@@ -5426,17 +5488,25 @@ done:
 **           VMK_FAILURE         Any other error
 */
 static VMK_ReturnStatus
-sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
-                          const char *pEnd, vmk_uint16 qIndex, vmk_Bool isRxQueue)
+sfvmk_fillAllQueueStats(sfvmk_adapter_t *pAdapter,
+                        vmk_uint16 qIndex,
+                        char *pStart, vmk_ByteCount maxBytes,
+                        vmk_Bool isRxQueue, vmk_ByteCount *pBytesCopied)
 {
+  char *pCurr;
   char **ppStatsName = NULL;
   vmk_uint64 *pStatsVal = NULL;
-  vmk_ByteCount offset = 0;
+  vmk_ByteCount bytesCopied = 0;
   vmk_uint32 i, statsCounts = 0;
   vmk_uint32 maxStats;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
+
+  pCurr = pStart;
 
   if (isRxQueue) {
     pStatsVal = (vmk_uint64 *)&pAdapter->ppRxq[qIndex]->stats;
@@ -5448,7 +5518,7 @@ sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
     maxStats = SFVMK_TXQ_MAX_STATS;
   }
 
-  status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset,
+  status = vmk_StringFormat(pCurr, maxBytes, &bytesCopied,
                             isRxQueue ?  "RxQ[%u]:\n" : "TxQ[%u]:\n",
                             qIndex);
   if (status != VMK_OK) {
@@ -5457,11 +5527,12 @@ sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
     goto done;
   }
 
-  *ppCurr += offset;
+  SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
+  bytesCopied = 0;
 
   for (i = 0; i < maxStats; i++ ) {
-    status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr),
-                              &offset, " %-30s %-22lu",
+    status = vmk_StringFormat(pCurr, maxBytes,
+                              &bytesCopied, " %-30s %-22lu",
                               ppStatsName[i],
                               pStatsVal[i]);
     if (status != VMK_OK) {
@@ -5470,20 +5541,22 @@ sfvmk_requestAllQueueStats(sfvmk_adapter_t *pAdapter, char **ppCurr,
       goto done;
     }
 
-    *ppCurr += offset;
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
+    bytesCopied = 0;
     statsCounts++;
 
     if ((statsCounts <= 1) && (i != (maxStats - 1)))
       continue;
 
-    status = vmk_StringFormat(*ppCurr, (pEnd - *ppCurr), &offset, "\n");
+    status = vmk_StringFormat(pCurr, maxBytes, &bytesCopied, "\n");
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
 
-    *ppCurr += offset;
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
+    bytesCopied = 0;
     statsCounts = 0;
   }
 
@@ -5494,71 +5567,96 @@ done:
 
 /*! \brief Fill the buffer with per Rx/Tx queue stats
 **
-** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
-** \param[out] pStart    Pointer to starting position in stats buffer
-** \param[in]  pEnd      Pointer to end position of stats buffer
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
 **
-** \return: Number of bytes written [success] 0 [failure]
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
 */
-vmk_uint32
+VMK_ReturnStatus
 sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter,
-                         char            *pStart,
-                         const char      *pEnd)
+                        char *pStart, vmk_ByteCount maxBytes,
+                        vmk_ByteCount *pBytesCopied)
 {
+  char *pCurr = NULL;
   vmk_uint16 maxRxQueues;
   vmk_uint16 maxTxQueues;
   vmk_uint16 qIndex;
-  vmk_ByteCount offset = 0;
-  char *pCurr = NULL;
+  vmk_ByteCount bytesCopied = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
   sfvmk_MutexLock(pAdapter->lock);
+
+  if (pStart == NULL) {
+    status = VMK_BAD_PARAM;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid parameter: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (pBytesCopied == NULL)
+    *pBytesCopied = 0;
+
   pCurr = pStart;
   maxRxQueues = sfvmk_getMaxRxHardwareQueues(pAdapter);
   maxTxQueues = sfvmk_getMaxTxHardwareQueues(pAdapter);
 
-  status = vmk_StringFormat(pCurr, (pEnd - pCurr),
-                            &offset, "  -- Per Hardware Queue Statistics\n");
+  status = vmk_StringFormat(pCurr, maxBytes,
+                            &bytesCopied, "  -- Per Hardware Queue Statistics\n");
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
 
-  pCurr += offset;
+  SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
 
   for (qIndex = 0; qIndex < maxRxQueues; qIndex++) {
-    status = sfvmk_requestAllQueueStats(pAdapter, &pCurr, pEnd, qIndex, VMK_TRUE);
+    status = sfvmk_fillAllQueueStats(pAdapter, qIndex, pCurr,
+                                     maxBytes, VMK_TRUE, &bytesCopied);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillRxQueueStats failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
+
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
   }
 
-  status = vmk_StringFormat(pCurr, (pEnd - pCurr), &offset, "\n");
+  bytesCopied = 0;
+  status = vmk_StringFormat(pCurr, maxBytes, &bytesCopied, "\n");
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_StringFormat failed status: %s",
                         vmk_StatusToString(status));
     goto done;
   }
 
-  pCurr += offset;
+  SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
 
   for (qIndex = 0; qIndex < maxTxQueues; qIndex++) {
-    status = sfvmk_requestAllQueueStats(pAdapter, &pCurr, pEnd, qIndex, VMK_FALSE);
+    status = sfvmk_fillAllQueueStats(pAdapter, qIndex ,pCurr,
+                                     maxBytes, VMK_FALSE, &bytesCopied);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_fillTxQueueStats failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
+
+    SFVMK_UPDATE_STATS_INFO(pCurr, maxBytes, bytesCopied, pBytesCopied);
   }
+
+  status = VMK_OK;
 
 done:
   sfvmk_MutexUnlock(pAdapter->lock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
-  return (pCurr - pStart);
+  return status;
 }
 

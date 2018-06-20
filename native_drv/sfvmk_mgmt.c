@@ -984,9 +984,10 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
                            sfvmk_hwQueueStats_t *pHwQueueStats)
 {
   sfvmk_adapter_t   *pAdapter = NULL;
-  const char        *pEnd;
+  char              *pCurr = NULL;
   char              *pStatsBuffer = NULL;
-  vmk_uint32        bytesCopied = 0;
+  vmk_ByteCount     bytesCopied = 0;
+  vmk_ByteCount     maxBytes;
   VMK_ReturnStatus  status = VMK_FAILURE;
 
   vmk_SemaLock(&sfvmk_modInfo.lock);
@@ -1045,11 +1046,13 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
   }
 
   vmk_Memset(pStatsBuffer, 0, SFVMK_HWQ_STATS_BUFFER_SZ);
-  pEnd = pStatsBuffer + SFVMK_HWQ_STATS_BUFFER_SZ;
+  pCurr = pStatsBuffer;
+  maxBytes = SFVMK_HWQ_STATS_BUFFER_SZ;
 
-  bytesCopied = sfvmk_requestQueueStats(pAdapter, pStatsBuffer, pEnd);
-  if (bytesCopied == 0) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_requestQueueStats failed");
+  status = sfvmk_requestQueueStats(pAdapter, pCurr, maxBytes, &bytesCopied);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_requestQueueStats failed error: %s",
+                        vmk_StatusToString(status));
     goto freemem;
   }
 

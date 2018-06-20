@@ -17,7 +17,7 @@ import optparse
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
-SFREPORT_VERSION = "2.0.0.0002"
+SFREPORT_VERSION = "1.0.0.1004"
 
 def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """
@@ -210,7 +210,7 @@ def vmkernel_logs(output_file):
     output_file.write('%s</p>'%lines)
     return 0
 
-def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode):
+def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode, esx_ver):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
                       Parameters of sfvmk : <br></H1>')
@@ -246,17 +246,31 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode):
     get_pause_cmd = "esxcli "+ server + " network nic pauseParams list"
     get_pause_settings = execute(get_pause_cmd)
     get_pause_settings = get_pause_settings.split('\n')
-    # Queue count configurations
-    queue_count_html = '<table><th>Queue Count table</th></tr>\
-                        <table border="1">'
-    queue_hdr_list = ['NIC', 'Tx_netqueue_count', 'Rx_netqueue_count']
-    queue_count_cmd = "esxcli "+ server + " network nic queue count get"
-    queue_count_config = execute(queue_count_cmd)
-    queue_count_config = queue_count_config.split('\n')
-    for hdr in queue_hdr_list:
-        queue_count_html += '<th>%s' % hdr + '</th>'
-    queue_count_html += '</tr>'
-
+    for intf in sfvmk_adapter_list:
+         rxq_html = '<table><th>%s RX Queue Info table</th></tr>\
+                                     <table border="1">' % intf
+         rxq_cmd = "vsish -e cat /net/pNics/%s/rxqueues/info"%intf
+         rxq_count = execute(rxq_cmd)
+         for l in rxq_count.splitlines():
+              if not l.startswith("rx ") and not l.endswith('}'):
+                  lhs, rhs = l.split(":",1)
+                  rxq_html += '<th align=left>%s</th>' % lhs
+                  rxq_html += '<td> %s</td>'% rhs
+                  rxq_html += '</tr>'
+         rxq_html += '</table>'
+         output_file.write(rxq_html)
+         txq_html = '<table><th>%s TX Queue Info table</th></tr>\
+                                              <table border="1">' % intf
+         txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
+         txq_count = execute(txq_cmd)
+         for t in txq_count.splitlines():
+             if not t.startswith("tx ") and not t.endswith('}'):
+                 tlhs, trhs = t.split(":", 1)
+                 txq_html += '<th align=left>%s</th>' % tlhs
+                 txq_html += '<td> %s</td>' % trhs
+                 txq_html += '</tr>'
+         txq_html += '</table>'
+         output_file.write(txq_html)
     # fetch the sfvmk parameters for all sfvmk adapters.
     for interface in sfvmk_adapter_list:
         # fetch interface specific interrupt mod settings
@@ -316,22 +330,12 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode):
                     if val != "":
                         pause_params_html += '<td>%s' % val
             pause_params_html += '</tr>'
-        for line in queue_count_config:
-            if not line.startswith("---") and line.startswith(interface):
-                queue_count_val = line.split(" ")
-                for val in queue_count_val:
-                    if val != "":
-                        queue_count_html += '<td>%s' % val
-                queue_count_html += '</tr>'
-
     intrpt_html += '</table>'
     rxtx_ring_html += '</table>'
     pause_params_html += '</table>'
-    queue_count_html += '</table>'
     output_file.write(intrpt_html)
     output_file.write(rxtx_ring_html)
     output_file.write(pause_params_html)
-    output_file.write(queue_count_html)
     return 0
 
 def sf_pci_devices(output_file, sfvmk_tlp_list, server, mode):
@@ -375,10 +379,9 @@ def pci_configuration_space(output_file):
     """function to fetch PCI configuration space dump"""
     output_file.write('<h1 id="PCI configuration"style="font-size:26px;">\
                       PCI configuration space: <br></H1>')
-    dmesg = subprocess.Popen(["lspci -d"], stdout=subprocess.PIPE,\
-                             stderr=subprocess.PIPE, shell=True)
+    dmesg = execute("lspci -d")
     lines = ('<p>')
-    for line in io.TextIOWrapper(dmesg.stdout, encoding="utf-8"):
+    for line in dmesg.splitlines():
         lines += '<small>%s</small><br>'%line
     output_file.write('%s</p>'%lines)
     return 0
@@ -418,7 +421,7 @@ def sf_kernel_modules(output_file):
     output_file.write(html)
     return 0
 
-def network_configuration(output_file, server, mode):
+def network_configuration(output_file, server, mode, esx_ver):
     """function to fetch network configuration informations"""
     output_file.write('<h1 id="Network Configurations"style="font-size:26px;"> \
                       Network Configurations: <br></H1>')
@@ -464,22 +467,30 @@ def network_configuration(output_file, server, mode):
     output_file.write(table)
     ip_list = ['v4', 'v6']
     for ip_type in ip_list:
-        ipv_ip_cmd = "esxcli "+ server + " network ip interface ip"+ ip_type+" address list"
-        ipv_ip_info = execute(ipv_ip_cmd)
-        ipv_ip_info = ipv_ip_info.split('\n')
         if ip_type == "v4":
             ip4_table = '<table style="font-size:18px;"><th>IP%s configurations:\
                          </th></tr><table border="1">'% ip_type
-            hdr_list = ('Interface', 'IPV4 address', 'IPv4 netmask', 'IPv4Bcast address',\
-                        'Type', 'Gateway', 'DHCP DNS')
+            hdr_list = ['Interface', 'IPV4 address', 'IPv4 netmask', \
+                        'IPv4Bcast address', 'Type', 'Gateway', 'DHCP DNS']
+            if "6.0.0" in esx_ver:
+                ipv_ip_cmd = "esxcli " + server + " network ip interface ip" +\
+                             ip_type + " get"
+                hdr_list.remove('Gateway')
+            else:
+                ipv_ip_cmd = "esxcli " + server + " network ip interface ip"\
+                              + ip_type + " address list"
             for hdr in hdr_list:
                 ip4_table += '<th>%s' % hdr + '</th>'
         elif ip_type == "v6":
             ip6_table = '<table style="font-size:18px;"><th>IP%s configurations: \
                          </th></tr><table border="1">' % ip_type
             hdr_list = ('Interface', 'Address', 'Netmask', 'Type', 'Status')
+            ipv_ip_cmd = "esxcli " + server + " network ip interface ip" + \
+                         ip_type + " address list"
             for hdr in hdr_list:
                 ip6_table += '<th>%s' % hdr + '</th>'
+        ipv_ip_info = execute(ipv_ip_cmd)
+        ipv_ip_info = ipv_ip_info.split('\n')
 
         for line in ipv_ip_info:
             if line != "" and not line.startswith("---") \
@@ -489,26 +500,35 @@ def network_configuration(output_file, server, mode):
                     try:
                         line = re.search('(\w+)\s+(\d+\.\d+\.\d+\.\d+)\s+'
                                          '(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)'
-                                         '\s+(\w+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\w+)'
+                                         '\s+(\w+)\s+([\d+\.\d+\.\d+\.\d+])*\s+(\w+)'
                                          , line)
                         interface = line.group(1)
                         ip_addr = line.group(2)
                         netmask = line.group(3)
                         bcast_ip = line.group(4)
                         iptype = line.group(5)
-                        gateway = line.group(6)
-                        dhcp = line.group(7)
+                        if esx_ver != "6.0.0":
+                            gateway = line.group(6)
+                            dhcp = line.group(7)
+                        else:
+                            dhcp = line.group(6)
                     except AttributeError:
                         interface = "not updated"
                         ip_addr = "not updated"
                         netmask = "not updated"
                         bcast_ip = "not updated"
                         iptype = "not updated"
-                        gateway = "not updated"
+                        if esx_ver != "6.0.0":
+                            gateway = "not updated"
                         dhcp = "not updated"
-                    ip4_table += '</tr><td>%s'%interface +'<td>%s'%ip_addr \
-                                 +'<td>%s'%netmask +'<td>%s'%bcast_ip \
-                                 +'<td>%s'%iptype +'<td>%s'%gateway +'<td>%s'%dhcp
+                    if "6.0.0" in esx_ver:
+                        ip4_table += '</tr><td>%s'%interface +'<td>%s'%ip_addr \
+                                    +'<td>%s'%netmask +'<td>%s'%bcast_ip \
+                                    +'<td>%s'%iptype +'<td>%s'%dhcp
+                    else:
+                        ip4_table += '</tr><td>%s' % interface + '<td>%s' % ip_addr \
+                                     + '<td>%s' % netmask + '<td>%s' % bcast_ip \
+                                     + '<td>%s' % iptype + '<td>%s' % gateway + '<td>%s' % dhcp
                 elif ip_type == "v6":
                     line = re.search('(\w+)\s+(\w+\:\:\w+\:\w+\:\w+\:\w+)'
                                      '\s+(\w+)\s+(\w+)\s+(.*)',
@@ -924,6 +944,8 @@ if __name__ == "__main__":
                 iface = re.search('(\w+)\s+(\w+\:\w+\:\w+\.\w+)\s(.*)', string)
                 SFVMK_ADAPTERS.append(iface.group(1))
                 SFVMK_TLPS.append(iface.group(2))
+    # get ESX version
+    ESX_VER = execute("uname -r")
     if "sfvmk" in SF_ADAPTERS:
         print("sfreport version: "+ SFREPORT_VERSION)
         print("Solarflare Adapters detected..")
@@ -969,9 +991,10 @@ if __name__ == "__main__":
 
         system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
-        sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE)
+        sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
+                             ESX_VER)
         sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
-        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
         ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)

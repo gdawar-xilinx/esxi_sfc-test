@@ -5660,3 +5660,43 @@ done:
   return status;
 }
 
+/*! \brief Fill the buffer with MAC stats
+**
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pStart        pointer to start position in stats buffer
+** \param[in]  maxBytes      maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_BAD_PARAM       If buffer is not valid.
+**           VMK_FAILURE         Any other error
+*/
+VMK_ReturnStatus
+sfvmk_requestMACStats(sfvmk_adapter_t *pAdapter,
+                      char *pStart, vmk_ByteCount maxBytes,
+                      vmk_ByteCount *pBytesCopied)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
+
+  if (pStart == NULL) {
+    status = VMK_BAD_PARAM;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid parameter: %s",
+                        vmk_StatusToString(status));
+    return status;
+  }
+
+  if (pBytesCopied != NULL)
+    *pBytesCopied = 0;
+
+  sfvmk_MutexLock(pAdapter->lock);
+  status = sfvmk_fillMacStats(pAdapter, pStart, maxBytes, pBytesCopied);
+  sfvmk_MutexUnlock(pAdapter->lock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
+  return status;
+}
+

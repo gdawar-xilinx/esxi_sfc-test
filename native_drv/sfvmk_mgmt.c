@@ -988,6 +988,7 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
   char              *pStatsBuffer = NULL;
   vmk_ByteCount     bytesCopied = 0;
   vmk_ByteCount     maxBytes;
+  vmk_ByteCount     totalBytes = 0;
   VMK_ReturnStatus  status = VMK_FAILURE;
 
   vmk_SemaLock(&sfvmk_modInfo.lock);
@@ -1017,7 +1018,7 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
     /* Set size of the hardware queue stats buffer as requested
      * by user before allocating memory and requesting the hardware
      * queue stats data */
-    pHwQueueStats->size = SFVMK_HWQ_STATS_BUFFER_SZ;
+    pHwQueueStats->size = SFVMK_STATS_BUFFER_SZ;
     pDevIface->status = VMK_OK;
     goto end;
   } else if (pHwQueueStats->subCmd != SFVMK_MGMT_STATS_GET) {
@@ -1032,22 +1033,33 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
     goto end;
   }
 
-  if (pHwQueueStats->size < SFVMK_HWQ_STATS_BUFFER_SZ) {
+  if (pHwQueueStats->size < SFVMK_STATS_BUFFER_SZ) {
     SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is not sufficient");
     pDevIface->status = VMK_NO_SPACE;
     goto freemem;
   }
 
-  pStatsBuffer = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, SFVMK_HWQ_STATS_BUFFER_SZ);
+  pStatsBuffer = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, SFVMK_STATS_BUFFER_SZ);
   if (pStatsBuffer == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Queue stats memory allocation failed");
     status = VMK_NO_MEMORY;
     goto end;
   }
 
-  vmk_Memset(pStatsBuffer, 0, SFVMK_HWQ_STATS_BUFFER_SZ);
+  vmk_Memset(pStatsBuffer, 0, SFVMK_STATS_BUFFER_SZ);
   pCurr = pStatsBuffer;
-  maxBytes = SFVMK_HWQ_STATS_BUFFER_SZ;
+  maxBytes = SFVMK_STATS_BUFFER_SZ;
+
+  status = sfvmk_requestMACStats(pAdapter, pCurr, maxBytes, &bytesCopied);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_requestMacStats failed error: %s",
+                        vmk_StatusToString(status));
+    goto freemem;
+  }
+
+  pCurr += bytesCopied;
+  maxBytes -= bytesCopied;
+  totalBytes += bytesCopied;
 
   status = sfvmk_requestQueueStats(pAdapter, pCurr, maxBytes, &bytesCopied);
   if (status != VMK_OK) {
@@ -1056,15 +1068,22 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
     goto freemem;
   }
 
+  maxBytes -= bytesCopied;
+  totalBytes += bytesCopied;
+
   if ((status = vmk_CopyToUser((vmk_VA)pHwQueueStats->statsBuffer, (vmk_VA)pStatsBuffer,
-                                SFVMK_HWQ_STATS_BUFFER_SZ)) != VMK_OK) {
+                                SFVMK_STATS_BUFFER_SZ)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Copy to user failed with error: %s",
                         vmk_StatusToString(status));
     pDevIface->status = VMK_WRITE_ERROR;
     goto freemem;
   }
 
-  pHwQueueStats->size = bytesCopied;
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
+                      "max Bytes %d, bytes copied %lu, bytes remaining %lu",
+                      SFVMK_STATS_BUFFER_SZ, totalBytes, maxBytes);
+
+  pHwQueueStats->size = totalBytes;
   pDevIface->status = VMK_OK;
 
 freemem:

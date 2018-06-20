@@ -203,7 +203,7 @@ sfvmk_calcHeapSize(void)
   allocDesc[index++].count = 1;
 #endif
 
-  allocDesc[index].size = SFVMK_HWQ_STATS_BUFFER_SZ;
+  allocDesc[index].size = SFVMK_STATS_BUFFER_SZ;
   allocDesc[index].alignment = 0;
   allocDesc[index].count = 1;
 

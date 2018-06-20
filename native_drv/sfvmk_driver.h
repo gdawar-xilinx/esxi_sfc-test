@@ -414,11 +414,13 @@ typedef struct sfvmk_rxq_s {
   sfvmk_rxSwDesc_t        *pQueue;
 } sfvmk_rxq_t;
 
-/* Estimate hardware queues stats length */
-#define SFVMK_HWQ_STATS_ENTRY_LEN  52
-#define SFVMK_HWQ_STATS_BUFFER_SZ ((SFVMK_MAX_TXQ * SFVMK_TXQ_MAX_STATS) + \
-                                   (SFVMK_MAX_RXQ * SFVMK_RXQ_MAX_STATS)) * \
-                                    SFVMK_HWQ_STATS_ENTRY_LEN
+/* Estimate length of hardware queues stats buffer and MAC stats buffer */
+#define SFVMK_STATS_ENTRY_LEN     60
+#define SFVMK_MAC_STATS_BUF_LEN   (EFX_MAC_NSTATS * SFVMK_STATS_ENTRY_LEN)
+#define SFVMK_QUEUE_STATS_BUF_LEN (((SFVMK_MAX_TXQ * SFVMK_TXQ_MAX_STATS)  + \
+                                    (SFVMK_MAX_RXQ * SFVMK_RXQ_MAX_STATS)) * \
+                                    SFVMK_STATS_ENTRY_LEN)
+#define SFVMK_STATS_BUFFER_SZ     (SFVMK_QUEUE_STATS_BUF_LEN + SFVMK_MAC_STATS_BUF_LEN)
 
 /* Data structure for filter database entry
 ** Note:
@@ -793,6 +795,8 @@ void sfvmk_uplinkDataFini(sfvmk_adapter_t *pAdapter);
 void sfvmk_removeUplinkFilter(sfvmk_adapter_t *pAdapter, vmk_uint32 qidVal);
 VMK_ReturnStatus sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter, char *pStart,
                                          vmk_ByteCount maxBytes, vmk_ByteCount *pBytesCopied);
+VMK_ReturnStatus sfvmk_requestMACStats(sfvmk_adapter_t *pAdapter, char *pStart, vmk_ByteCount maxBytes,
+                                       vmk_ByteCount *pBytesCopied);
 
 /* Functions for VPD read/write request handling */
 VMK_ReturnStatus sfvmk_vpdGetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,

@@ -222,6 +222,31 @@ updateSfreport() {
     sed -i 's/\(SFREPORT_VERSION = \)\(.*\)$/\1'${ver}'/' $file
 }
 
+# Update the build type param in the Makefile.user
+updateEsxcliMakefile () {
+    local file
+    local vmkver
+
+    vmkver=$1
+    echo "Updating Buildtype ${buildtype} in the ${vmkver}-Makefile.user"
+
+    file=$(pwd)/esxcli_ext/${vmkver}-Makefile.user
+    sed -i 's/\(DEV_OBJDIR = \)\(.*\)$/\1'${buildtype}'/' $file
+}
+
+# Update version in esxcli Makefile
+updateEsxcliVersion () {
+    local file
+    local ver
+
+    ver=$sfvmk_tag
+    ver=${ver:1}
+    echo "Updating Version: ${ver}"
+
+    file=$(pwd)/esxcli_ext/Makefile
+    sed -i 's/\(UWTOOL_VERSION = \)\(.*\)$/\1'${ver}'/' $file
+}
+
 # Update the V5_TAG params in the Makefile file
 updateV5Target () {
     file=$(pwd)/native_drv/Makefile
@@ -427,12 +452,18 @@ addSfvmkTag () {
     echo "Updating 6.0-sfvmk file for 6.0 build...."
     versionUpdate "6.0-sfvmk"
     liveVibParamUpdate "6.0-sfvmk"
+    echo "Updating 6.0-Makefile.user"
+    updateEsxcliMakefile "6.0"
     echo "Updating 6.5-sfvmk file for 6.5 build...."
     versionUpdate "6.5-sfvmk"
     liveVibParamUpdate "6.5-sfvmk"
+    echo "Updating 6.5-Makefile.user"
+    updateEsxcliMakefile "6.5"
     echo "Updating Makefile ...."
     buildtypeupdate
     updateV5Target
+    echo "Updating esxcli version ...."
+    updateEsxcliVersion
     echo -e "\n Creating tag : $sfvmk_tag on branch $sfvmk_branch for $buildtype build"
     makeSfvmkTag
 }

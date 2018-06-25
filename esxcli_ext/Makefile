@@ -29,8 +29,6 @@ UWTOOL = sfvmkcli
 UWTOOL_VERSION = 0.1
 
 NDDK_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKVER)
-NDDK_DIR  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKDIR)
-NDDK_PATH = /opt/vmware/$(NDDK_DIR)
 
 # mgmtInterface.c is in DEV_COMMON_DIR, the build system looks
 # there for sources as well as here.
@@ -63,6 +61,7 @@ BULL_PLATFORMS=bulletin-platforms.url
 BULL_VENDOR_CODE=solarflare
 
 DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+DEV_release_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 
 # Remove the below include statement when appending Makefile.user
-include $(NDDK_PATH)/src/partners/samples/common-mgmt-infrastructure/Makefile.user
+include $(NDDK_VER)-Makefile.user

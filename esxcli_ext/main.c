@@ -74,6 +74,7 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *mgmtParm,
 static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_firmwareType_t fwType);
 static int sfvmk_getMACAddress(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_macAddress_t *pMacAddr);
 static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[]);
+static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo);
 
 static inline void sfvmk_strLwr(char string[])
 {
@@ -93,6 +94,21 @@ static int sfvmk_findObjectType(const char *obj)
   }
 
   return SFVMK_OBJECT_MAX;
+}
+
+static vmk_Bool sfvmk_isSFNic(sfvmk_mgmtDevInfo_t *pMgmtParm)
+{
+  int status = 0;
+  sfvmk_pciInfo_t pciInfo;
+
+  status = sfvmk_getPCIInfo(pMgmtParm, &pciInfo);
+  if (status == 0)
+    return VMK_TRUE;
+
+  if (status == -ENOENT)
+    printf("ERROR: Unable to find Solarflare NIC %s\n", pMgmtParm->deviceName);
+
+  return VMK_FALSE;
 }
 
 int
@@ -245,6 +261,10 @@ main(int argc, char **argv)
     goto end;
   }
 
+  /* Confirm if NIC name is a Solarflare NIC or not */
+  if (!sfvmk_isSFNic(&mgmtParm))
+    goto destroy_handle;
+
   switch (sfvmk_findObjectType(objectName)) {
     case SFVMK_OBJECT_MCLOG:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
@@ -394,10 +414,16 @@ static int sfvmk_vpdGetByTag(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_vpdInfo_t *vpd
   }
 
   if (mgmtParm->status != VMK_OK) {
+    if (mgmtParm->status == VMK_NOT_FOUND) {
+      printf("[missing]\n");
+      return 0;
+    }
+
     printf("ERROR: VPD info get failed, error 0x%x\n", mgmtParm->status);
     return -EINVAL;
   }
 
+  printf("%s\n", vpdInfo->vpdPayload);
   return 0;
 }
 
@@ -411,30 +437,30 @@ static void sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
     return;
   }
 
+  printf("Product Name: ");
   ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x02, 0x0);
   if (ret < 0)
     return;
-  printf("Product Name: %s\n", vpdInfo.vpdPayload);
 
+  printf("[PN] Part number: ");
   ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('P' | 'N' << 8));
   if (ret < 0)
     return;
-  printf("[PN] Part number: %s\n", vpdInfo.vpdPayload);
 
+  printf("[SN] Serial number: ");
   ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('S' | 'N' << 8));
   if (ret < 0)
     return;
-  printf("[SN] Serial number: %s\n", vpdInfo.vpdPayload);
 
+  printf("[EC] Engineering changes: ");
   ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('E' | 'C' << 8));
   if (ret < 0)
     return;
-  printf("[EC] Engineering changes: %s\n", vpdInfo.vpdPayload);
 
+  printf("[VD] Version: ");
   ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('V' | 'D' << 8));
   if (ret < 0)
     return;
-  printf("[VD] Version: %s\n", vpdInfo.vpdPayload);
 }
 
 static int sfvmk_getFWVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_versionInfo_t *pVerInfo)
@@ -654,6 +680,9 @@ static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPc
   }
 
   if (pMgmtParm->status != VMK_OK) {
+    if (pMgmtParm->status == VMK_NOT_FOUND)
+      return -ENOENT;
+
     printf("ERROR: PCI information get failed, error 0x%x\n", pMgmtParm->status);
     return -EINVAL;
   }

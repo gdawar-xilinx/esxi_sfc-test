@@ -38,7 +38,7 @@ DEV_COMMON_DIR = ../native_drv
 PLUGIN_XML = esxcli-sfvmk.xml
 
 DESC_VENDOR_EMAIL=support@solarflare.com
-DESC_VERSION=$(UWTOOL_VERSION)-01
+DESC_VERSION=$(UWTOOL_VERSION)-02
 DESC_VENDOR=SolarFlare
 DESC_SUMMARY=esxcli extension for SFVMK driver
 DESC_DESCRIPTION=Userworld Tool to communicate with a VMKAPI driver module

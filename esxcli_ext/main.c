@@ -251,7 +251,7 @@ main(int argc, char **argv)
         if (!strchr("yYnN", optionValue)) {
           printf("ERROR: --enable Enable/ Disable MC "
                  "logging (Y/ Yes/ N / No) required\n");
-          goto end;
+          goto destroy_handle;
         }
 
         optionEnable = ((optionValue == 'y') || (optionValue == 'Y')) ?

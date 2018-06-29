@@ -77,7 +77,7 @@ endif
 # Common code would be used from v5 tag for the released version of sfvmk
 # or from the tip of v5 branch or tip of default branch for beta version
 V5_TAG          = v4_13_1_1000
-V5_BRANCH       = v4_13_1_sfvmk
+V5_BRANCH       = v4_13_2_sfvmk
 
 ifeq ($(BUILDTYPE), beta)
 V5_TARGET       = $(V5_BRANCH)

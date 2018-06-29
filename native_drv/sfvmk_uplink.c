@@ -301,7 +301,8 @@ const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie,
                                               vmk_uint16 portNumNBO);
-
+static VMK_ReturnStatus sfvmk_genevePortUpdate(vmk_AddrCookie cookie,
+                                              vmk_uint16 portNumNBO);
 static VMK_ReturnStatus sfvmk_tunnelPortUpdate(vmk_AddrCookie cookie,
                                                vmk_uint16 portNumNBO,
                                                efx_tunnel_protocol_t encapType);
@@ -321,6 +322,12 @@ static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
   .vxlanPortUpdate = sfvmk_vxlanPortUpdate,
 };
 #endif
+
+static vmk_UplinkGeneveOffloadParams sfvmk_geneveOffloadOps = {
+  .portUpdate      = sfvmk_genevePortUpdate,
+  .maxHeaderOffset = 0,
+  .flags           = VMK_UPLINK_GENEVE_FLAG_OUTER_UDP_CSO,
+};
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 /****************************************************************************
@@ -2016,6 +2023,23 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   } else {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                         "VXLAN Offload capability not registered : "
+                        "not supported by hw or feature is disabled");
+  }
+
+  /* Register capability for geneve offload */
+  if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_GENEVE_OFFLOAD,
+                                   &sfvmk_geneveOffloadOps);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "VMK_UPLINK_GENEVE_OFFLOAD register failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "Geneve Offload capability not registered : "
                         "not supported by hw or feature is disabled");
   }
 
@@ -4980,6 +5004,20 @@ static VMK_ReturnStatus
 sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
 {
   return sfvmk_tunnelPortUpdate(cookie, portNumNBO, EFX_TUNNEL_PROTOCOL_VXLAN);
+}
+
+/*! \brief uplink callback function to configure Geneve UDP port number.
+**
+** \param[in]  cookie       pointer to sfvmk_adapter_t
+** \param[in]  portNumNBO   Geneve UDP port number in network byte order
+**
+** \return: VMK_OK on success or error code
+**
+*/
+static VMK_ReturnStatus
+sfvmk_genevePortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
+{
+  return sfvmk_tunnelPortUpdate(cookie, portNumNBO, EFX_TUNNEL_PROTOCOL_GENEVE);
 }
 
 /*! \brief uplink callback function to run self tests

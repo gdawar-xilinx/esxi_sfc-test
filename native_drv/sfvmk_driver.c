@@ -767,7 +767,8 @@ done:
   return status;
 }
 
-#define SFVMK_DEFAULT_VXLAN_PORT_NUM 8472
+#define SFVMK_DEFAULT_VXLAN_PORT_NUM  8472
+#define SFVMK_DEFAULT_GENEVE_PORT_NUM 6081
 
 /*! \brief Initialize and add tunnel port
 **
@@ -781,6 +782,8 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   uint16_t vxlanPortNum = 0;
+  uint16_t genevePortNum = 0;
+  uint16_t geneveDefaultPort = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -811,6 +814,27 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
     }
 
     pAdapter->vxlanUdpPort = vxlanPortNum;
+  }
+
+  /* Configure default geneve udp port number */
+  if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
+    /* Get default geneve port number */
+    geneveDefaultPort = vmk_BE16ToCPU(vmk_GenevePortGet());
+    genevePortNum = (geneveDefaultPort ?
+                     geneveDefaultPort :
+                     SFVMK_DEFAULT_GENEVE_PORT_NUM);
+
+    status = efx_tunnel_config_udp_add(pAdapter->pNic,
+                                       genevePortNum,
+                                       EFX_TUNNEL_PROTOCOL_GENEVE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_tunnel_config_udp_add [geneve] failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_port_add;
+    }
+
+    pAdapter->geneveUdpPort = genevePortNum;
   }
 
   pAdapter->startIOTunnelReCfgReqd = VMK_TRUE;

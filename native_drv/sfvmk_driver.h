@@ -589,6 +589,8 @@ typedef struct sfvmk_adapter_s {
 
   /* VxLAN UDP port number */
   vmk_uint16                 vxlanUdpPort;
+  /* Geneve UDP port number */
+  vmk_uint16                 geneveUdpPort;
   /* Bit Mask for supported Encap offloads */
   vmk_uint8                  isTunnelEncapSupported;
 

@@ -83,6 +83,7 @@
 
 /* Bit Masks for Encap offload features */
 #define SFVMK_VXLAN_OFFLOAD           1 << 0
+#define SFVMK_GENEVE_OFFLOAD          1 << 1
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 typedef vmk_Mutex sfvmk_Lock;

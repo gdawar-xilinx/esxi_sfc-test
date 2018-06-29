@@ -37,6 +37,7 @@ sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
   .netQCount = SFVMK_NETQ_COUNT_DEFAULT,
   .vxlanOffload = VMK_TRUE,
+  .geneveOffload = VMK_TRUE,
   .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
 };
 
@@ -51,7 +52,9 @@ VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
 VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
                    "Enable / disable vxlan offload "
                    "[0:Disable, 1:Enable (default)]");
-
+VMK_MODPARAM_NAMED(geneveOffload, modParams.geneveOffload, bool,
+                   "Enable / disable geneve offload "
+                   "[0:Disable, 1:Enable (default)]");
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -1064,6 +1067,8 @@ sfvmk_attachDevice(vmk_Device dev)
   if (pNicCfg->enc_tunnel_encapsulations_supported) {
     if (modParams.vxlanOffload)
       pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
+    if (modParams.geneveOffload)
+      pAdapter->isTunnelEncapSupported |= SFVMK_GENEVE_OFFLOAD;
   }
 
   if (pAdapter->isTunnelEncapSupported) {

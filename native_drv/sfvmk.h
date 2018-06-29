@@ -55,6 +55,7 @@ typedef struct sfvmk_modParams_s {
   vmk_uint32 netQCount;
   vmk_uint32 rssQCount;
   vmk_uint32 vxlanOffload;
+  vmk_uint32 geneveOffload;
 } sfvmk_modParams_t;
 
 extern struct sfvmk_modParams_s modParams;

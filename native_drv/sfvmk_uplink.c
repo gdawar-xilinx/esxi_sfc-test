@@ -2751,9 +2751,11 @@ sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
 
   VMK_ASSERT_NOT_NULL(pEvq);
   pEvq->rxBudget = budget;
+  pEvq->txBudget = SFVMK_NETPOLL_TX_BUDGET;
 
   if (sfvmk_evqPoll(pEvq, VMK_FALSE) == VMK_OK) {
-    if (pEvq->rxDone >= pEvq->rxBudget)
+    if ((pEvq->rxDone >= pEvq->rxBudget) ||
+        (pEvq->txDone >= pEvq->txBudget))
       pendCompletion = VMK_TRUE;
   }
 

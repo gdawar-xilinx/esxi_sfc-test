@@ -63,6 +63,8 @@
 /* Max number of RSSQ supported */
 #define SFVMK_MAX_RSSQ_COUNT          4
 
+#define SFVMK_NETPOLL_TX_BUDGET       128
+
 /* Wait time for StartIO on MC Reboot */
 #define SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC    300
 
@@ -180,8 +182,10 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              txDone;
   vmk_uint32              readPtr;
   vmk_uint32              rxDone;
-  /* Maximum number of packets to be processed in each netPoll invocation */
+  /* Maximum number of rx packets to be processed in each netPoll invocation */
   vmk_uint32              rxBudget;
+  /* Maximum number of tx packets to be processed in each netPoll invocation */
+  vmk_uint32              txBudget;
   /* Used for storing pktList passed in sfvmk_panicPoll */
   vmk_PktList             panicPktList;
 } sfvmk_evq_t;

@@ -33,6 +33,13 @@
 #define SFVMK_SELF_TEST_COUNT       3
 #define SFVMK_SELF_TEST_RESULT_LEN 32
 
+/* Parser can only receive the first 256 bytes of data for a packet,
+ * 32 bytes of that are metadata, so maximum of (256-32) bytes of actual
+ * actual packet data can be used by Parser. The packet will be parsed as
+ * Geneve if the Outer header + Geneve header + inner header <= 224 bytes
+ */
+#define SFVMK_GENEVE_MAX_HEADER_OFFSET  224
+
 typedef enum sfvmk_selfTest_e {
   SFVMK_SELFTEST_PHY = 1 << 0,
   SFVMK_SELFTEST_REG = 1 << 1,
@@ -328,7 +335,7 @@ static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 static vmk_UplinkGeneveOffloadParams sfvmk_geneveOffloadOps = {
   .portUpdate      = sfvmk_genevePortUpdate,
-  .maxHeaderOffset = 0,
+  .maxHeaderOffset = SFVMK_GENEVE_MAX_HEADER_OFFSET,
   .flags           = VMK_UPLINK_GENEVE_FLAG_OUTER_UDP_CSO,
 };
 #endif

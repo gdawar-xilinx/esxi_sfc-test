@@ -4483,10 +4483,14 @@ VMK_ReturnStatus
 sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
 {
   vmk_HelperRequestProps props;
-  VMK_ReturnStatus status = VMK_NOT_SUPPORTED;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (pAdapter->state == SFVMK_ADAPTER_STATE_UNINITIALIZED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter is not yet initilized");
+    goto done;
+  }
   vmk_HelperRequestPropsInit(&props);
 
   /* Create a request and submit */
@@ -4504,6 +4508,7 @@ sfvmk_scheduleReset(sfvmk_adapter_t *pAdapter)
                          vmk_StatusToString(status));
   }
 
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
   return status;

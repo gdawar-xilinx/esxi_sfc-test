@@ -46,8 +46,20 @@ sfvmk_hdrParseCtrl_t sfvmk_tsoHdrList[] = {
   { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
 };
 
-static const
-sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
+static
+sfvmk_hdrParseCtrl_t sfvmk_allEncapTsoHdrList[] = {
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_IP},
+  { VMK_PKT_HEADER_L4_UDP,           SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_ENCAP_MASK,       SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_ENCAP_IP},
+  { VMK_PKT_HEADER_L4_TCP,           SFVMK_HDR_INFO_TYPE_TCP},
+  { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
+};
+
+static
+sfvmk_hdrParseCtrl_t sfvmk_vxlanTsoHdrList[] = {
   { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
   { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_IP},
   { VMK_PKT_HEADER_L4_UDP,           SFVMK_HDR_INFO_TYPE_UNUSED},
@@ -56,6 +68,26 @@ sfvmk_hdrParseCtrl_t sfvmk_encapTsoHdrList[] = {
   { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_ENCAP_IP},
   { VMK_PKT_HEADER_L4_TCP,           SFVMK_HDR_INFO_TYPE_TCP},
   { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
+};
+
+static
+sfvmk_hdrParseCtrl_t sfvmk_geneveTsoHdrList[] = {
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_IP},
+  { VMK_PKT_HEADER_L4_UDP,           SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_ENCAP_GENEVE,     SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L2_ETHERNET_MASK, SFVMK_HDR_INFO_TYPE_UNUSED},
+  { VMK_PKT_HEADER_L3_MASK,          SFVMK_HDR_INFO_TYPE_ENCAP_IP},
+  { VMK_PKT_HEADER_L4_TCP,           SFVMK_HDR_INFO_TYPE_TCP},
+  { 0,                               SFVMK_HDR_INFO_TYPE_UNUSED}
+};
+
+static const
+sfvmk_hdrParseCtrl_t *(sfvmk_tunnelTsoHdrList)[4] = {
+  NULL,
+  sfvmk_vxlanTsoHdrList,
+  sfvmk_geneveTsoHdrList,
+  sfvmk_allEncapTsoHdrList
 };
 
 /*! \brief  Allocate resources required for a particular TX queue.
@@ -1097,7 +1129,8 @@ sfvmk_fillXmitInfo(sfvmk_txq_t *pTxq,
   if (vmk_PktIsEncapsulatedFrame(pkt) &&
 #endif
       (pXmitInfo->offloadFlag & SFVMK_TX_ENCAP_TSO)) {
-    pExpectHdrList = sfvmk_encapTsoHdrList;
+    VMK_ASSERT(pAdapter->isTunnelEncapSupported != 0);
+    pExpectHdrList = sfvmk_tunnelTsoHdrList[pAdapter->isTunnelEncapSupported];
   }
   else if (pXmitInfo->offloadFlag & SFVMK_TX_TSO) {
     pExpectHdrList = sfvmk_tsoHdrList;

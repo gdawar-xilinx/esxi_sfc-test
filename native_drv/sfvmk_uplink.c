@@ -3301,6 +3301,11 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
   }
 
+  if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
+    pQueueInfo->supportedRxQueueFilterClasses |=
+                              VMK_UPLINK_QUEUE_FILTER_CLASS_GENEVE;
+  }
+
   /* Update max TX and RX queue
    * For base RSSQ one uplink Q is added
    * HWQs are sum of netQs + one uplink Q for RSS and num of RSSQs

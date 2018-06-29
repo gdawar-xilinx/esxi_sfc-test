@@ -35,17 +35,16 @@ typedef struct sfvmk_filterDBIterCtx_s {
 
 typedef struct sfvmk_filterEncapEntry_s {
   uint16_t               etherType;
-  efx_tunnel_protocol_t  encapType;
   uint32_t               innerFrameMatch;
 } sfvmk_filterEncapEntry_t;
 
-#define SFVMK_ENCAP_FILTER_ENTRY(ipv, encapType)           \
-  {EFX_ETHER_TYPE_##ipv, EFX_TUNNEL_PROTOCOL_##encapType,  \
+#define SFVMK_ENCAP_FILTER_ENTRY(ipv)                      \
+  {EFX_ETHER_TYPE_##ipv,                                   \
    EFX_FILTER_INNER_FRAME_MATCH_OTHER}
 
-static const sfvmk_filterEncapEntry_t sfvmk_filterVXLANList[] = {
-  SFVMK_ENCAP_FILTER_ENTRY(IPV4, VXLAN),
-  SFVMK_ENCAP_FILTER_ENTRY(IPV6, VXLAN)
+static const sfvmk_filterEncapEntry_t sfvmk_filterEncapList[] = {
+  SFVMK_ENCAP_FILTER_ENTRY(IPV4),
+  SFVMK_ENCAP_FILTER_ENTRY(IPV6)
 };
 
 /*! \brief  Allocate a filter DB entry
@@ -151,11 +150,14 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
   return status;
 }
 
-/*! \brief  Prepare a VxLAN filter rule
+/*! \brief  Prepare a tunnel filter rule
  **
  ** \param[in]      pAdapter          pointer to sfvmk_adapter_t
- ** \param[in]      pRxq	      pointer to HW Rx Q for which filter is prepared
- ** \param[in]      pVxlanFilterInfo  pointer to vmk_UplinkQueueVXLANFilterInfo
+ ** \param[in]      pRxq              pointer to HW Rx Q for which filter is prepared
+ ** \param[in]      encapType         pointer to efx_tunnel_protocol_t
+ ** \param[in]      innerMAC          inner mac address
+ ** \param[in]      outerMAC          outer mac address
+ ** \param[in]      vni_or_vsid       vni for vxlan/geneve or vsid of nvgre
  ** \param[in]      flags             filter flags
  ** \param[in,out]  pFdbEntry         pointer to filter DB entry
  **
@@ -163,9 +165,12 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
  **
  */
 static VMK_ReturnStatus
-sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
+sfvmk_prepareTunnelFilterRule(sfvmk_adapter_t *pAdapter,
                              struct sfvmk_rxq_s *pRxq,
-                             vmk_UplinkQueueVXLANFilterInfo *pVxlanFilterInfo,
+                             efx_tunnel_protocol_t encapType,
+                             vmk_EthAddress innerMAC,
+                             vmk_EthAddress outerMAC,
+                             vmk_uint32 vni_or_vsid,
                              efx_filter_flags_t flags,
                              sfvmk_filterDBEntry_t *pFdbEntry)
 {
@@ -179,27 +184,27 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
     goto end;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_FILTER, SFVMK_LOG_LEVEL_DBG,
-                      "Create VXLAN Filter %p: VXLAN ID %u"
+                      "Create Encap Filter %p: VNI ID %u, encapType %u"
                       " %02x:%02x:%02x:%02x:%02x:%02x"
                       " %02x:%02x:%02x:%02x:%02x:%02x",
-                      pFdbEntry, pVxlanFilterInfo->vxlanID,
-                      pVxlanFilterInfo->innerMAC[0], pVxlanFilterInfo->innerMAC[1],
-                      pVxlanFilterInfo->innerMAC[2], pVxlanFilterInfo->innerMAC[3],
-                      pVxlanFilterInfo->innerMAC[4], pVxlanFilterInfo->innerMAC[5],
-                      pVxlanFilterInfo->outerMAC[0], pVxlanFilterInfo->outerMAC[1],
-                      pVxlanFilterInfo->outerMAC[2], pVxlanFilterInfo->outerMAC[3],
-                      pVxlanFilterInfo->outerMAC[4], pVxlanFilterInfo->outerMAC[5]);
+                      pFdbEntry, vni_or_vsid, encapType,
+                      innerMAC[0], innerMAC[1],
+                      innerMAC[2], innerMAC[3],
+                      innerMAC[4], innerMAC[5],
+                      outerMAC[0], outerMAC[1],
+                      outerMAC[2], outerMAC[3],
+                      outerMAC[4], outerMAC[5]);
 
   /* VNI in big endian format */
-  vni[0] = (pVxlanFilterInfo->vxlanID >> 16) & 0xFF;
-  vni[1] = (pVxlanFilterInfo->vxlanID >> 8) & 0xFF;
-  vni[2] = pVxlanFilterInfo->vxlanID & 0xFF;
+  vni[0] = (vni_or_vsid >> 16) & 0xFF;
+  vni[1] = (vni_or_vsid >> 8) & 0xFF;
+  vni[2] = vni_or_vsid & 0xFF;
 
-  EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterVXLANList));
+  EFX_STATIC_ASSERT(SFMK_MAX_HWF_PER_UPF >= EFX_ARRAY_SIZE(sfvmk_filterEncapList));
 
-  for (i = 0; i < EFX_ARRAY_SIZE(sfvmk_filterVXLANList); i++) {
+  for (i = 0; i < EFX_ARRAY_SIZE(sfvmk_filterEncapList); i++) {
 
-    const sfvmk_filterEncapEntry_t *pEncapFilter = &sfvmk_filterVXLANList[i];
+    const sfvmk_filterEncapEntry_t *pEncapFilter = &sfvmk_filterEncapList[i];
 
     if (pEncapFilter->etherType == EFX_ETHER_TYPE_IPV6) {
       if (!(pNicCfg->enc_features & EFX_FEATURE_IPV6))
@@ -210,27 +215,38 @@ sfvmk_prepareVXLANFilterRule(sfvmk_adapter_t *pAdapter,
                             EFX_FILTER_PRI_HINT,
                             flags, pRxq->pCommonRxq);
 
-    status = efx_filter_spec_set_vxlan_full(&pFdbEntry->spec[i],
-                                            vni,
-                                            pVxlanFilterInfo->innerMAC,
-                                            pVxlanFilterInfo->outerMAC);
+    if (encapType == EFX_TUNNEL_PROTOCOL_VXLAN) {
+      status = efx_filter_spec_set_vxlan(&pFdbEntry->spec[i],
+                                         vni,
+                                         innerMAC,
+                                         outerMAC);
+    }
+    else if (encapType == EFX_TUNNEL_PROTOCOL_GENEVE) {
+      status = efx_filter_spec_set_geneve(&pFdbEntry->spec[i],
+                                          vni,
+                                          innerMAC,
+                                          outerMAC);
+    }
+    else
+      status = VMK_NOT_SUPPORTED;
+
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter,
-                          "Prepare VxLAN HW filter for %d entry "
+                          "Prepare Encap HW filter for %d entry for encap_type %u"
                           "failed with error code %s",
-                          i, vmk_StatusToString(status));
+                          i, encapType, vmk_StatusToString(status));
       goto end;
     }
 
     efx_filter_spec_set_ether_type(&pFdbEntry->spec[i], pEncapFilter->etherType);
     status = efx_filter_spec_set_encap_type(&pFdbEntry->spec[i],
-                                            pEncapFilter->encapType,
+                                            encapType,
                                             pEncapFilter->innerFrameMatch);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter,
-                          "Prepare VxLAN HW filter set encapType for %d entry "
+                          "Prepare Encap HW filter set encapType for %d entry for encap_type %u"
                           "failed with error code %s",
-                          i, vmk_StatusToString(status));
+                          i, encapType, vmk_StatusToString(status));
       goto end;
     }
 
@@ -308,8 +324,11 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
 
     case VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN:
       if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
-        status = sfvmk_prepareVXLANFilterRule(pAdapter, pRxq,
-                                              pFilter->vxlanFilterInfo,
+        status = sfvmk_prepareTunnelFilterRule(pAdapter, pRxq,
+                                              EFX_TUNNEL_PROTOCOL_VXLAN,
+                                              pFilter->vxlanFilterInfo->innerMAC,
+                                              pFilter->vxlanFilterInfo->outerMAC,
+                                              pFilter->vxlanFilterInfo->vxlanID,
                                               flags, pFdbEntry);
       }
       else {
@@ -321,9 +340,24 @@ sfvmk_prepareFilterRule(sfvmk_adapter_t *pAdapter,
       break;
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
-    /* TODO: Will add support for GENEVE in future */
     case VMK_UPLINK_QUEUE_FILTER_CLASS_GENEVE:
+      if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
+        status = sfvmk_prepareTunnelFilterRule(pAdapter, pRxq,
+                                               EFX_TUNNEL_PROTOCOL_GENEVE,
+                                               pFilter->geneveFilterInfo->innerMAC,
+                                               pFilter->geneveFilterInfo->outerMAC,
+                                               pFilter->geneveFilterInfo->vni,
+                                               flags, pFdbEntry);
+      }
+      else {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not enabled",
+                            pFdbEntry->class);
+        status = VMK_NOT_SUPPORTED;
+      }
+
+      break;
 #endif
+
     default:
       SFVMK_ADAPTER_ERROR(pAdapter, "Filter class %d not supported",
                           pFdbEntry->class);

@@ -786,6 +786,7 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   uint16_t vxlanPortNum = 0;
+  uint16_t vxlanDefaultPort = 0;
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   uint16_t genevePortNum = 0;
   uint16_t geneveDefaultPort = 0;
@@ -805,8 +806,9 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
   /* Configure default vxlan udp port number */
   if (pAdapter->isTunnelEncapSupported & SFVMK_VXLAN_OFFLOAD) {
     /* Get default vxlan port number */
-    vxlanPortNum = (vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) ?
-                    vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet()) :
+    vxlanDefaultPort = vmk_BE16ToCPU(vmk_UplinkVXLANPortNBOGet());
+    vxlanPortNum = (vxlanDefaultPort ?
+                    vxlanDefaultPort :
                     SFVMK_DEFAULT_VXLAN_PORT_NUM);
 
     status = efx_tunnel_config_udp_add(pAdapter->pNic,

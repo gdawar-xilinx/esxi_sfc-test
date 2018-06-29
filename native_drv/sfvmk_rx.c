@@ -562,15 +562,11 @@ void sfvmk_rxqComplete(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
       if (pRxDesc->flags & EFX_PKT_IPV4) {
         if (pRxDesc->flags & EFX_PKT_TCP)
           rssType = VMK_PKT_RSS_TYPE_IPV4_TCP;
-        else if (pRxDesc->flags & EFX_PKT_UDP)
-          rssType = VMK_PKT_RSS_TYPE_IPV4_UDP;
         else
           rssType = VMK_PKT_RSS_TYPE_IPV4;
       } else if (pRxDesc->flags & EFX_PKT_IPV6) {
         if (pRxDesc->flags & EFX_PKT_TCP)
           rssType = VMK_PKT_RSS_TYPE_IPV6_TCP;
-        else if (pRxDesc->flags & EFX_PKT_UDP)
-          rssType = VMK_PKT_RSS_TYPE_IPV6_UDP;
         else
           rssType = VMK_PKT_RSS_TYPE_IPV6;
       }

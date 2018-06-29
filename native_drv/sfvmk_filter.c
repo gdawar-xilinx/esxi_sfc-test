@@ -221,12 +221,14 @@ sfvmk_prepareTunnelFilterRule(sfvmk_adapter_t *pAdapter,
                                          innerMAC,
                                          outerMAC);
     }
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
     else if (encapType == EFX_TUNNEL_PROTOCOL_GENEVE) {
       status = efx_filter_spec_set_geneve(&pFdbEntry->spec[i],
                                           vni,
                                           innerMAC,
                                           outerMAC);
     }
+#endif
     else
       status = VMK_NOT_SUPPORTED;
 

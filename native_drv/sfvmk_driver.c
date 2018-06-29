@@ -37,7 +37,9 @@ sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
   .netQCount = SFVMK_NETQ_COUNT_DEFAULT,
   .vxlanOffload = VMK_TRUE,
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   .geneveOffload = VMK_TRUE,
+#endif
   .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
 };
 
@@ -52,9 +54,11 @@ VMK_MODPARAM_NAMED(rssQCount, modParams.rssQCount, uint,
 VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
                    "Enable / disable vxlan offload "
                    "[0:Disable, 1:Enable (default)]");
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 VMK_MODPARAM_NAMED(geneveOffload, modParams.geneveOffload, bool,
                    "Enable / disable geneve offload "
                    "[0:Disable, 1:Enable (default)]");
+#endif
 
 #define SFVMK_MIN_EVQ_COUNT 1
 
@@ -782,8 +786,10 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
   uint16_t vxlanPortNum = 0;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   uint16_t genevePortNum = 0;
   uint16_t geneveDefaultPort = 0;
+#endif
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -816,6 +822,7 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
     pAdapter->vxlanUdpPort = vxlanPortNum;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* Configure default geneve udp port number */
   if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
     /* Get default geneve port number */
@@ -836,6 +843,7 @@ sfvmk_tunnelInit(sfvmk_adapter_t *pAdapter)
 
     pAdapter->geneveUdpPort = genevePortNum;
   }
+#endif
 
   pAdapter->startIOTunnelReCfgReqd = VMK_TRUE;
 
@@ -1091,8 +1099,10 @@ sfvmk_attachDevice(vmk_Device dev)
   if (pNicCfg->enc_tunnel_encapsulations_supported) {
     if (modParams.vxlanOffload)
       pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
     if (modParams.geneveOffload)
       pAdapter->isTunnelEncapSupported |= SFVMK_GENEVE_OFFLOAD;
+#endif
   }
 
   if (pAdapter->isTunnelEncapSupported) {

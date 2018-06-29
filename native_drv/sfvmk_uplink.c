@@ -301,8 +301,10 @@ const static vmk_UplinkSelfTestOps sfvmk_selfTestOps = {
  ****************************************************************************/
 static VMK_ReturnStatus sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie,
                                               vmk_uint16 portNumNBO);
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 static VMK_ReturnStatus sfvmk_genevePortUpdate(vmk_AddrCookie cookie,
                                               vmk_uint16 portNumNBO);
+#endif
 static VMK_ReturnStatus sfvmk_tunnelPortUpdate(vmk_AddrCookie cookie,
                                                vmk_uint16 portNumNBO,
                                                efx_tunnel_protocol_t encapType);
@@ -323,11 +325,13 @@ static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
 };
 #endif
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 static vmk_UplinkGeneveOffloadParams sfvmk_geneveOffloadOps = {
   .portUpdate      = sfvmk_genevePortUpdate,
   .maxHeaderOffset = 0,
   .flags           = VMK_UPLINK_GENEVE_FLAG_OUTER_UDP_CSO,
 };
+#endif
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 /****************************************************************************
@@ -2026,6 +2030,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "not supported by hw or feature is disabled");
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* Register capability for geneve offload */
   if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
@@ -2042,6 +2047,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
                         "Geneve Offload capability not registered : "
                         "not supported by hw or feature is disabled");
   }
+#endif
 
   /* Register capability for pause param configuration */
   status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
@@ -3301,10 +3307,12 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
                               VMK_UPLINK_QUEUE_FILTER_CLASS_VXLAN;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   if (pAdapter->isTunnelEncapSupported & SFVMK_GENEVE_OFFLOAD) {
     pQueueInfo->supportedRxQueueFilterClasses |=
                               VMK_UPLINK_QUEUE_FILTER_CLASS_GENEVE;
   }
+#endif
 
   /* Update max TX and RX queue
    * For base RSSQ one uplink Q is added
@@ -5011,6 +5019,7 @@ sfvmk_vxlanPortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
   return sfvmk_tunnelPortUpdate(cookie, portNumNBO, EFX_TUNNEL_PROTOCOL_VXLAN);
 }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
 /*! \brief uplink callback function to configure Geneve UDP port number.
 **
 ** \param[in]  cookie       pointer to sfvmk_adapter_t
@@ -5024,6 +5033,7 @@ sfvmk_genevePortUpdate(vmk_AddrCookie cookie, vmk_uint16 portNumNBO)
 {
   return sfvmk_tunnelPortUpdate(cookie, portNumNBO, EFX_TUNNEL_PROTOCOL_GENEVE);
 }
+#endif
 
 /*! \brief uplink callback function to run self tests
 **

@@ -608,7 +608,7 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
   printf("...\n");
 
   memset(&imgUpdate, 0, sizeof(imgUpdate));
-  imgUpdate.pFileBuffer = (vmk_uint64)pBuf;
+  imgUpdate.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
   imgUpdate.size = fileSize;
 
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,

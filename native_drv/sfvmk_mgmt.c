@@ -804,13 +804,12 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies     *pCookies,
   sfvmk_adapter_t  *pAdapter = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
 
-  pDevIface->status = VMK_FAILURE;
-
   if (!pDevIface) {
     SFVMK_ERROR("pDevIface: NULL pointer passed as input");
-    pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
+
+  pDevIface->status = VMK_FAILURE;
 
   if (!pImgUpdate) {
     SFVMK_ERROR("pImgUpdate: NULL pointer passed as input");

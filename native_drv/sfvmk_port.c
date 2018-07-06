@@ -157,7 +157,6 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
     goto end;
   }
 
-  vmk_LogMessage("0xdeadbeaf Set the Capabilities");
   status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to set PHY cap with error %s",

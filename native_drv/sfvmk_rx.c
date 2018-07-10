@@ -359,7 +359,7 @@ static void sfvmk_rxqFillHelper(vmk_AddrCookie data)
   pEvq = pAdapter->ppEvq[pRxq->index];
   VMK_ASSERT_NOT_NULL(pEvq);
 
-  /* TODO Take adapter lock */
+  sfvmk_MutexLock(pAdapter->lock);
   if (pRxq->state != SFVMK_RXQ_STATE_STARTED) {
     SFVMK_ADAPTER_ERROR(pAdapter, "RXQ[%u] is not yet started", pRxq->index);
     goto done;
@@ -369,7 +369,8 @@ static void sfvmk_rxqFillHelper(vmk_AddrCookie data)
   efx_ev_qpost(pEvq->pCommonEvq, magic);
 
 done:
-  /* TODO Release adapter lock */
+  sfvmk_MutexUnlock(pAdapter->lock);
+
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_RX);
 }
 

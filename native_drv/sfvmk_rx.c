@@ -995,7 +995,10 @@ static void sfvmk_rxFlush(sfvmk_adapter_t *pAdapter)
     status = efx_rx_qflush(pRxq->pCommonRxq);
     if (status != VMK_OK) {
       vmk_SpinlockLock(pEvq->lock);
-      pRxq->flushState = SFVMK_FLUSH_STATE_FAILED;
+      if (status == VMK_EALREADY)
+        pRxq->flushState = SFVMK_FLUSH_STATE_DONE;
+      else
+        pRxq->flushState = SFVMK_FLUSH_STATE_FAILED;
       vmk_SpinlockUnlock(pEvq->lock);
     }
   }

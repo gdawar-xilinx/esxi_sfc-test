@@ -34,7 +34,7 @@
 #define SFVMK_EVQ_START_TIME_OUT_USEC    (200 *  VMK_USEC_PER_MSEC)
 
 /* Default static interrupt moderation value */
-#define SFVMK_MODERATION_USEC         60
+#define SFVMK_MODERATION_USEC         30
 
 /* Number of RX desc processed per batch */
 #define SFVMK_RX_BATCH                128

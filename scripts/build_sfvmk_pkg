@@ -1,0 +1,206 @@
+#!/usr/bin/bash
+# ssh-keygen -t rsa # ENTER to every field
+# ssh-copy-id root@ddk_VM
+# Script to make release & debug builds for Esxi native driver [sfvmk].
+# Usage: ./build_sfvmk_pkg | source ./build_sfvmk_pkg
+######################################################################
+echo
+echo "   S F V M K   P A C K A G E   G E N E R A T I O N   U T I L I T Y"
+echo
+# source configuration file [rel_config.sh] to fetch build info.
+if [ ! -f rel_config ] ;then
+   echo "ERROR: rel_config.sh not found"
+   echo "Aborting!.."
+   exit
+fi
+source rel_config
+
+current_dir=$(pwd)
+user=$USER
+cnt=0
+errors=()
+
+# change dir to root esxi_sfc
+cd ..
+for t in "${TAGS[@]}"
+do
+   rep=$(echo $t | tr -cd ';' | wc -c)
+      if [ $rep != 2 ] ;then
+         echo
+         echo "ERROR: wrong user input @ TAG section of rel_config"
+         echo "Enter string as below:"
+         echo "<tag>;<rel/debug>;<yes/no[for src package>]"
+         echo "Aborting!.."
+         exit
+      fi
+   tag_arr=(${t//;/ })
+   tag=${tag_arr[0]}
+   build=${tag_arr[1]}
+   src_option=${tag_arr[2]}
+
+   # Update repo to respective tag
+   echo
+   echo "Starting Build phase for $build TAG-->$tag"
+   echo
+   echo "Pulling changes.."
+   hg pull
+   echo "Verifying tag:$tag"
+   if hg log -r $tag |grep $tag ;then
+      echo "Tag:$tag exists, continuing.."
+   else
+      echo "ERROR! Tag:$tag doesn't exists"
+      echo "Aborting build phase for tag:$tag"
+      errors+=("ERROR! tag:$tag doesn't exist")
+      continue
+   fi
+   echo "Updating repo to tag:$tag"
+   hg update -r $tag
+   for i in "${ESX[@]}"
+   do
+      rep=$(echo $i | tr -cd ';' | wc -c)
+      if [ $rep != 2 ] ;then
+         echo
+         echo "ERROR: wrong user input"
+         echo "Enter string as below:"
+         echo "<ESX_VER>;<NDDK_PATH>;<VM_IP> @ ESXi section of rel_config"
+         echo "Aborting!.."
+         exit
+      fi
+      esx_arr=(${i//;/ })
+      esx_ver=${esx_arr[0]}
+      ddk=${esx_arr[1]}
+      ddk_vm=${esx_arr[2]}
+      echo "Current ESX version: $esx_ver"
+      # create destination dir for the packages
+      pkg_dir="/projects/vmware/$build""_""$tag/esxi_$esx_ver"
+      cnt=$(expr $cnt + 1)
+      echo "Transferring native_drv dir to $ddk"
+      ddk_tag_dir="$ddk/$tag"
+      # delete any pre-created same tagged version of native src dir @ nddk_VM
+      cmd="rm -rf $ddk_tag_dir"
+      ssh -l root ${ddk_vm} "${cmd}"
+      cmd="mkdir $ddk_tag_dir"
+      ssh -l root ${ddk_vm} "${cmd}"
+      scp -r native_drv root@$ddk_vm:$ddk_tag_dir
+      scp -r doxygen root@$ddk_vm:$ddk_tag_dir
+      scp -r esxcli_ext root@$ddk_vm:$ddk_tag_dir
+      echo "Initiating build"
+      cmd="cd $ddk_tag_dir/native_drv; make clean; make"
+      ssh -l root ${ddk_vm} "${cmd}"
+      cmd="cd $ddk_tag_dir/esxcli_ext; make clean; make"
+      ssh -l root ${ddk_vm} "${cmd}"
+      #Publishing part
+      echo "------------------------------------------------------------------"
+      echo "ESXi: ESX-$esx_ver"
+      echo "Build type: $build"
+      echo "Tag: $tag"
+      echo "DDK_VM: $ddk_vm"
+      echo "DDK: $ddk"
+      echo "Publish directory: $pkg_dir"
+      echo "USER: $user"
+      echo "-------------------------------------------------------------------"
+      read -p 'Do you want to publish the release? (y/ yes/ n / no): ' user_input
+      if [[ $user_input == *y*  ]] || [[ $user_input == *Y*  ]]; then
+         echo "Continuing with publishing the packages"
+      else
+         echo "exiting without publishing the packages"
+         errors+=("Warning! $USER skipped publishing")
+         continue
+      fi
+      # create the package directory if it doesn't exist
+      # get user input to continue
+      if [ -d "$pkg_dir" ]; then
+         echo
+         echo "WARNING!: $pkg_dir exists for tag:$tag"
+         echo "Please make sure you know what you are doing?"
+         read -p 'Do you want to remove & create a new one? (y/ yes/ n / no): ' user_input
+         if [[ $user_input == *y*  ]] || [[ $user_input == *Y*  ]]; then
+            echo "Continuing by deleting and creating new $pkg_dir"
+            rm -rf $pkg_dir
+            errors+=("Warning! $pkg_dir exists[action:$USER removed & recreated tagged dir for tag:$tag]")
+         else
+            echo "Continuing w/o copying"
+            errors+=("Warning! $pkg_dir exists[action:$USER skipped publishing release for tag:$tag]")
+            continue
+         fi
+      fi
+      echo
+      echo "Publishing Release.."
+      mkdir -p $pkg_dir
+      chmod 775 -R $pkg_dir
+      # copy back the vibs/offline_bundles/sfreport.py to the destination package directory:
+      echo "Copying sfvmk.vib"
+      scp root@$ddk_vm:$ddk_tag_dir"/native_drv/build/vib/sfvmk*.vib" $pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
+      echo "Copying sfvmk_offline.bundle"
+      scp root@$ddk_vm:$ddk_tag_dir"/native_drv/build/bundle/offline-bundle.zip" $pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
+      echo "Copying esxcli_ext.vib"
+      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/vib/solar*.vib" $pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
+      echo "Copying esxcli_ext_bundle.zip"
+      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/solar*.zip" $pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
+      echo "Copying sfreport utility"
+      cp "tools/sfreport.py" $pkg_dir
+      # copy src_code.zip only when user specifies yes option
+      if [ $src_option == "yes" ] ;then
+         echo "Copying src_code.zip"
+         cmd="zip -r /root/src_code_$tag.zip $ddk_tag_dir"
+         ssh -l root ${ddk_vm} "${cmd}"
+         scp root@$ddk_vm:/root/src_code_$tag.zip $pkg_dir
+      fi
+
+      chmod 775 -R $pkg_dir
+      # clean the build directory:$ddk_tag_dir
+      echo "Cleaning dir:$ddk_tag_dir"
+      cmd="rm -rf $ddk_tag_dir"
+      ssh -l root ${ddk_vm} "${cmd}"
+   done
+done
+echo
+echo "*************************************"
+echo "Release Packaging Completion  Report "
+echo "*************************************"
+for t in "${TAGS[@]}"
+do
+   echo ">>>"$t
+   tag_arr=(${t//;/ })
+   tag=${tag_arr[0]}
+   echo "$tag packages are:"
+   echo "-------------------------------"
+   ls -R /projects/vmware/*_$tag
+   echo
+done
+# Report errors/warnings if any
+echo "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+if [ -z "$errors" ] ;then
+   echo
+   echo "INFO: No Errors/Warnings observed"
+   echo "      Package generation finished w/o any errors"
+else
+   echo "Error Reporting:"
+   echo "following errors/warnings were observed"
+   for e in "${errors[@]}"
+   do
+       echo "->"$e
+   done
+fi
+echo "Release packaging completed"
+echo "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

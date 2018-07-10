@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+# This file acts as an input file for build_sfvmk_pkg.sh
+# Devs must change the release/debug tags as per build cycle
+# User can comment out any ESX version that are not needed
+# Other than ESXi version, nothing else needs a change
+# unless the nDDK_VMs are changed.
+# Warning: file not self executable, won't yield anything
+#***********************************************************
+
+# ESXi information array
+# to be filled as: "<ESX_VER>;<NDDK_PATH>;<VM_IP>"
+ESX[0]="6.0;/opt/vmware/nativeddk-6.0.0-2768847/src;10.40.128.99"
+ESX[1]="6.5;/opt/vmware/nativeddk-6.5.0-4598673/src;10.40.128.87"
+ESX[2]="6.7;/opt/vmware/nativeddk-6.7.0-8169922/src;10.40.128.67"
+
+# TAG information array
+# to be filled as: "<tag>;<rel/debug>;<yes/no[for src package>]"
+# Release tag
+TAGS[0]="v2.0.0.0006;rel;yes"
+# Debug tag
+TAGS[1]="v2.0.0.0007;debug;no"
+
+#export all esx versions in form of array
+export ESX
+#export all tags in form of array
+export TAGS

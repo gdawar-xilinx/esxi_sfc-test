@@ -55,6 +55,7 @@
  ** SFVMK_CB_HW_QUEUE_STATS_GET:       Get Rx/Tx hardware queue stats
  ** SFVMK_CB_MAC_ADDRESS_GET:          Get MAC address of an interface
  ** SFVMK_CB_IFACE_LIST_GET:           Get list of all SFVMK interface
+ ** SFVMK_CB_FEC_MODE_REQUEST:         Get/Set FEC mode settings
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -71,6 +72,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_HW_QUEUE_STATS_GET,
   SFVMK_CB_MAC_ADDRESS_GET,
   SFVMK_CB_IFACE_LIST_GET,
+  SFVMK_CB_FEC_MODE_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -481,6 +483,57 @@ typedef struct sfvmk_ifaceList_s {
   vmk_Name    ifaceArray[SFVMK_MAX_INTERFACE];
 } __attribute__((__packed__)) sfvmk_ifaceList_t;
 
+/*! \brief struct sfvmk_fecMode_s to get/ set
+ ** the FEC mode settings
+ **
+ ** type[in]        Command type (Get/Set)
+ **
+ ** activeFec[out]  Applied settings of current
+ **                 FEC mode
+ **
+ ** fec[in]         Bitmap of the new FEC mode
+ **                 settings to be applied
+ **
+ ** reserved        Reserved for future use
+ **
+ */
+typedef struct sfvmk_fecMode_s {
+  sfvmk_mgmtDevOps_t type;
+  vmk_uint32         activeFec;
+  vmk_uint32         fec;
+  vmk_uint32         reserved;
+} __attribute__((__packed__)) sfvmk_fecMode_t;
+
+/*! \brief Bit number for different FEC mode settings,
+ **        these bits are used to form bit map for filling
+ **        the fec field
+ **
+ ** SFVMK_MGMT_FEC_NONE_BIT:  FEC mode configuration is not supported
+ **
+ ** SFVMK_MGMT_FEC_AUTO_BIT:  Default FEC mode provided by driver
+ **
+ ** SFVMK_MGMT_FEC_OFF_BIT:   No FEC Mode
+ **
+ ** SFVMK_MGMT_FEC_RS_BIT:    Reed-Solomon Forward Error Detection mode
+ **
+ ** SFVMK_MGMT_FEC_BASER_BIT: Base-R/Reed-Solomon Forward Error Detection mode
+ **
+ */
+typedef enum sfvmk_mgmtFecConfigBits_e {
+  SFVMK_MGMT_FEC_NONE_BIT,
+  SFVMK_MGMT_FEC_AUTO_BIT,
+  SFVMK_MGMT_FEC_OFF_BIT,
+  SFVMK_MGMT_FEC_RS_BIT,
+  SFVMK_MGMT_FEC_BASER_BIT
+} sfvmk_mgmtFecConfigBits_t;
+
+/* Define bitmask for FEC mode settings */
+#define SFVMK_MGMT_FEC_NONE_MASK  (1 << SFVMK_MGMT_FEC_NONE_BIT)
+#define SFVMK_MGMT_FEC_AUTO_MASK  (1 << SFVMK_MGMT_FEC_AUTO_BIT)
+#define SFVMK_MGMT_FEC_OFF_MASK   (1 << SFVMK_MGMT_FEC_OFF_BIT)
+#define SFVMK_MGMT_FEC_RS_MASK    (1 << SFVMK_MGMT_FEC_RS_BIT)
+#define SFVMK_MGMT_FEC_BASER_MASK (1 << SFVMK_MGMT_FEC_BASER_BIT)
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -573,6 +626,11 @@ VMK_ReturnStatus sfvmk_mgmtInterfaceListCallback(vmk_MgmtCookies *pCookies,
                                                  sfvmk_mgmtDevInfo_t *pDevIface,
                                                  sfvmk_ifaceList_t *pIfaceList);
 
+VMK_ReturnStatus sfvmk_mgmtFecModeCallback(vmk_MgmtCookies *pCookies,
+                                           vmk_MgmtEnvelope *pEnvelope,
+                                           sfvmk_mgmtDevInfo_t *pDevIface,
+                                           sfvmk_fecMode_t *pFecMode);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -592,6 +650,7 @@ VMK_ReturnStatus sfvmk_mgmtInterfaceListCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtHWQStatsCallback NULL
 #define sfvmk_mgmtMACAddressCallback NULL
 #define sfvmk_mgmtInterfaceListCallback NULL
+#define sfvmk_mgmtFecModeCallback NULL
 #endif
 
 #endif

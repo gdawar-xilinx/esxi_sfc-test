@@ -1204,3 +1204,89 @@ end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
   return VMK_OK;
 }
+
+/*! \brief  A Mgmt callback to get/ set the FEC mode settings
+ **
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pFecMode   Pointer to FEC mode structure
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:   In case of dev not found
+ **     VMK_BAD_PARAM:   Unknown command option or
+ **                      Null Pointer passed in parameter
+ **     VMK_FAILURE:     Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtFecModeCallback(vmk_MgmtCookies     *pCookies,
+                          vmk_MgmtEnvelope    *pEnvelope,
+                          sfvmk_mgmtDevInfo_t *pDevIface,
+                          sfvmk_fecMode_t     *pFecMode)
+{
+  sfvmk_adapter_t   *pAdapter = NULL;
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pFecMode) {
+    SFVMK_ERROR("pFecMode: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  EFX_STATIC_ASSERT(SFVMK_MGMT_FEC_NONE_BIT == SFVMK_PORT_FEC_NONE_BIT);
+  EFX_STATIC_ASSERT(SFVMK_MGMT_FEC_AUTO_BIT == SFVMK_PORT_FEC_AUTO_BIT);
+  EFX_STATIC_ASSERT(SFVMK_MGMT_FEC_OFF_BIT == SFVMK_PORT_FEC_OFF_BIT);
+  EFX_STATIC_ASSERT(SFVMK_MGMT_FEC_RS_BIT == SFVMK_PORT_FEC_RS_BIT);
+  EFX_STATIC_ASSERT(SFVMK_MGMT_FEC_BASER_BIT == SFVMK_PORT_FEC_BASER_BIT);
+
+  switch (pFecMode->type) {
+    case SFVMK_MGMT_DEV_OPS_SET:
+      status = sfvmk_phyFecSet(pAdapter, pFecMode->fec);
+      if (status != VMK_OK) {
+        SFVMK_ERROR("Set FEC mode failed with error code %s",
+                    vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+    case SFVMK_MGMT_DEV_OPS_GET:
+      status = sfvmk_phyFecGet(pAdapter, &pFecMode->fec, &pFecMode->activeFec);
+      if (status != VMK_OK) {
+        SFVMK_ERROR("Get FEC mode failed with error code %s",
+                    vmk_StatusToString(status));
+        pDevIface->status = status;
+        goto end;
+      }
+
+      break;
+    default:
+      pDevIface->status = VMK_BAD_PARAM;
+      goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}

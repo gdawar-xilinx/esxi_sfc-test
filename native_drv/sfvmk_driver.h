@@ -275,6 +275,26 @@ typedef enum {
    SFVMK_TSO_DEFRAG_SGES   = 1 << 1,
 } sfvmk_fixType_t;
 
+/* SFVMK_PORT_FEC_NONE_BIT   : FEC mode configuration is not supported
+ * SFVMK_PORT_FEC_AUTO_BIT   : Default/Best FEC mode provided by driver
+ * SFVMK_PORT_FEC_OFF_BIT    : NO FEC mode
+ * SFVMK_PORT_FEC_RS_BIT     : Reed-Solomon Forward Error Detection mode
+ * SFVMK_PORT_FEC_BASER_BIT  : Base-R/Reed-Solomon Forward Error Detection mode
+ */
+typedef enum sfvmk_fecConfigBits_e {
+  SFVMK_PORT_FEC_NONE_BIT,
+  SFVMK_PORT_FEC_AUTO_BIT,
+  SFVMK_PORT_FEC_OFF_BIT,
+  SFVMK_PORT_FEC_RS_BIT,
+  SFVMK_PORT_FEC_BASER_BIT
+}sfvmk_fecConfigBits_t;
+
+#define SFVMK_FEC_NONE          (1 << SFVMK_PORT_FEC_NONE_BIT)
+#define SFVMK_FEC_AUTO          (1 << SFVMK_PORT_FEC_AUTO_BIT)
+#define SFVMK_FEC_OFF           (1 << SFVMK_PORT_FEC_OFF_BIT)
+#define SFVMK_FEC_RS            (1 << SFVMK_PORT_FEC_RS_BIT)
+#define SFVMK_FEC_BASER         (1 << SFVMK_PORT_FEC_BASER_BIT)
+
 typedef struct sfvmk_xmitInfo_s {
    sfvmk_offloadType_t offloadFlag;
    sfvmk_fixType_t     fixFlag;
@@ -918,5 +938,11 @@ sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state);
 
 void
 sfvmk_updateDrvInfo(sfvmk_adapter_t *pAdapter);
+
+VMK_ReturnStatus
+sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec);
+
+VMK_ReturnStatus
+sfvmk_phyFecGet(sfvmk_adapter_t *pAdapter,  vmk_uint32 *advFec, vmk_uint32 *activeFec);
 
 #endif /* __SFVMK_DRIVER_H__ */

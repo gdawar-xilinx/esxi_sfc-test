@@ -78,6 +78,14 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
    (1 << EFX_PHY_CAP_10FDX) |           \
    (1 << EFX_PHY_CAP_10HDX))
 
+#define SFVMK_PHY_CAP_ALL_FEC_MASK                 \
+  ((1 << EFX_PHY_CAP_BASER_FEC)                |   \
+   (1 << EFX_PHY_CAP_BASER_FEC_REQUESTED)      |   \
+   (1 << EFX_PHY_CAP_RS_FEC)                   |   \
+   (1 << EFX_PHY_CAP_RS_FEC_REQUESTED)         |   \
+   (1 << EFX_PHY_CAP_25G_BASER_FEC)            |   \
+   (1 << EFX_PHY_CAP_25G_BASER_FEC_REQUESTED))
+
 /*! \brief  update the PHY link speed
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -902,4 +910,204 @@ sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PORT, SFVMK_LOG_LEVEL_DBG,
                       "No of supported modes = %u", index);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+}
+
+/*! \brief Convert requested FEC cap into MCDI FEC bitamsk
+**
+** \param[in]  supportedCapabilities supportedCapabilities
+** \param[in]  reqFec                requested FEC
+**
+** \return:  FEC bitmask in MCDI bit mask format
+**
+** OFF overrides any other bits, and means "disable all FEC" (with the
+** exception of 25G KR4/CR4, where it is not possible to reject it if AN
+** partner requests it).
+** AUTO on its own means use cable requirements and link partner autoneg with
+** fw-default preferences for the cable type.
+** AUTO and either RS or BASER means use the specified FEC type if cable and
+** link partner support it, otherwise autoneg/fw-default.
+** RS or BASER alone means use the specified FEC type if cable and link partner
+** support it and either requests it, otherwise no FEC.
+** Both RS and BASER (whether AUTO or not) means use FEC if cable and link
+** partner support it, preferring RS to BASER.
+*/
+static vmk_uint32
+sfvmk_phyPrepareFecCapMask(vmk_uint32 supportedCapabilities, vmk_uint32 reqFec)
+{
+  vmk_uint32 fecCfgMask = 0;
+
+  if (reqFec & SFVMK_FEC_OFF)
+    return 0;
+
+  if (reqFec & SFVMK_FEC_AUTO)
+    fecCfgMask |= ((1 << EFX_PHY_CAP_BASER_FEC) |
+                   (1 << EFX_PHY_CAP_25G_BASER_FEC) |
+                   (1 << EFX_PHY_CAP_RS_FEC)) &
+                  supportedCapabilities;
+
+  if (reqFec & SFVMK_FEC_RS)
+    fecCfgMask |= (1 << EFX_PHY_CAP_RS_FEC) |
+                  (1 << EFX_PHY_CAP_RS_FEC_REQUESTED);
+
+  if (reqFec & SFVMK_FEC_BASER)
+    fecCfgMask |= (1 << EFX_PHY_CAP_BASER_FEC) |
+                  (1 << EFX_PHY_CAP_25G_BASER_FEC) |
+                  (1 << EFX_PHY_CAP_BASER_FEC_REQUESTED) |
+                  (1 << EFX_PHY_CAP_25G_BASER_FEC_REQUESTED);
+
+  return fecCfgMask;
+}
+
+/*! \brief Convert MCDI FEC bitamsk into esxcli FEC cap
+**
+** \param[in]  advCaps   Advertised Capabilities
+** \param[in]  is25G     True if speed is 25G
+**
+** \return:  FEC bitmask in MCDI bit mask format
+**
+** Invert sfvmk_phyPrepareFecCapMask. There are two combinations
+** that function can never produce, (baser xor rs) and neither req;
+** the implementation below maps both of those to AUTO.
+*/
+static vmk_uint32
+sfvmk_phyGetFecCapMask(vmk_uint32 advCaps, vmk_Bool is25G)
+{
+  vmk_Bool rs, rsReq, baser, baserReq;
+
+  rs = (advCaps & (1 << EFX_PHY_CAP_RS_FEC)) ? VMK_TRUE : VMK_FALSE;
+  rsReq = (advCaps & (1 << EFX_PHY_CAP_RS_FEC_REQUESTED)) ? VMK_TRUE : VMK_FALSE;
+
+  baser = is25G ? ((advCaps & (1 << EFX_PHY_CAP_25G_BASER_FEC)) ?
+                   VMK_TRUE : VMK_FALSE)
+                : ((advCaps & (1 << EFX_PHY_CAP_BASER_FEC)) ?
+                   VMK_TRUE : VMK_FALSE);
+  baserReq = is25G ? ((advCaps & (1 << EFX_PHY_CAP_25G_BASER_FEC_REQUESTED)) ?
+                      VMK_TRUE : VMK_FALSE)
+                   : ((advCaps & (1 << EFX_PHY_CAP_BASER_FEC_REQUESTED)) ?
+                      VMK_TRUE : VMK_FALSE);
+
+  if (!baser && !rs)
+    return SFVMK_FEC_OFF;
+
+  return (rsReq ? SFVMK_FEC_RS : 0) |
+         (baserReq ? SFVMK_FEC_BASER : 0) |
+         (baser == baserReq && rs == rsReq ? 0 : SFVMK_FEC_AUTO);
+}
+
+/*! \brief  Configure FEC configuration
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  reqFec   Bit mask of the requested FEC
+**
+** \return: VMK_OK [success] error code [failure]
+**          VMK_BAD_PARAM:     Wrong speed or duplex value
+**          VMK_NOT_SUPPORTED: Requested capability not supported
+**          VMK_FAILURE:       Other failure
+*/
+VMK_ReturnStatus
+sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec)
+{
+  vmk_uint32 supportedCapabilities = 0;
+  vmk_uint32 advertisedCapabilities = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM,
+                      &supportedCapabilities);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &advertisedCapabilities);
+
+  /* Clear out existing FEC capability before appling requested capbility */
+  advertisedCapabilities &= ~SFVMK_PHY_CAP_ALL_FEC_MASK;
+
+  /* Set requested FEC capabilities mask */
+  advertisedCapabilities |= sfvmk_phyPrepareFecCapMask(supportedCapabilities, reqFec);
+
+  status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to set FEC with error %s",
+                        vmk_StatusToString(status));
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+
+  return status;
+}
+
+/*! \brief  Get advertised and active FEC configuration
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[out] pAdvFec    advertised FEC
+** \param[out] pActiveFec Active FEC
+**
+** \return: VMK_OK [success]   error code [failure]
+**          VMK_FAILURE:       Other failure
+*/
+VMK_ReturnStatus
+sfvmk_phyFecGet(sfvmk_adapter_t *pAdapter, vmk_uint32 *pAdvFec,
+                efx_phy_fec_type_t *pActiveFec)
+{
+  vmk_uint32 supportedCapabilities = 0;
+  vmk_uint32 advertisedCapabilities = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  efx_phy_fec_type_t fecType;
+  vmk_Bool is25G;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+  VMK_ASSERT_NOT_NULL(pAdvFec);
+  VMK_ASSERT_NOT_NULL(pActiveFec);
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM,
+                      &supportedCapabilities);
+
+  if ((supportedCapabilities & SFVMK_PHY_CAP_ALL_FEC_MASK) == 0) {
+    *pAdvFec = SFVMK_FEC_NONE;
+    *pActiveFec = SFVMK_FEC_NONE;
+    status = VMK_OK;
+    goto done;
+  }
+
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &advertisedCapabilities);
+
+  is25G = ((pAdapter->port.linkMode == EFX_LINK_25000FDX) ||
+           (pAdapter->port.linkMode == EFX_LINK_50000FDX)) ?
+           VMK_TRUE : VMK_FALSE;
+
+  *pAdvFec = sfvmk_phyGetFecCapMask(advertisedCapabilities, is25G);
+
+  /* Get active FEC configuration */
+  status = efx_phy_fec_type_get(pAdapter->pNic, &fecType);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to get active FEC cfg with error %s",
+                        vmk_StatusToString(status));
+    goto failed_fec_type_get;
+  }
+
+  switch (fecType) {
+  case EFX_PHY_FEC_NONE:
+    *pActiveFec = SFVMK_FEC_OFF;
+     break;
+  case EFX_PHY_FEC_BASER:
+    *pActiveFec = SFVMK_FEC_BASER;
+    break;
+  case EFX_PHY_FEC_RS:
+    *pActiveFec = SFVMK_FEC_RS;
+    break;
+  default:
+    *pActiveFec = SFVMK_FEC_NONE;
+    break;
+  }
+
+failed_fec_type_get:
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+
+  return status;
 }

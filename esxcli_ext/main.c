@@ -53,6 +53,7 @@ typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_STATS,
   SFVMK_OBJECT_VPD,
   SFVMK_OBJECT_FIRMWARE,
+  SFVMK_OBJECT_FEC,
   SFVMK_OBJECT_MAX
 } sfvmk_objectType_t;
 
@@ -60,7 +61,8 @@ static const char * supportedObjects[] = {
   "mclog",
   "stats",
   "vpd",
-  "firmware"
+  "firmware",
+  "fec"
 };
 
 /*
@@ -75,6 +77,8 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_firmwareType_t f
 static int sfvmk_getMACAddress(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_macAddress_t *pMacAddr);
 static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[]);
 static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo);
+static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
+static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
 
 static inline void sfvmk_strLwr(char string[])
 {
@@ -124,6 +128,8 @@ main(int argc, char **argv)
   char objectName[16];
   char fwTypeName[16];
   char fileName[128];
+  char fecModeName[16];
+  vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_INVALID;
   sfvmk_mgmtDevInfo_t mgmtParm;
 
@@ -144,6 +150,7 @@ main(int argc, char **argv)
       {"enable",     required_argument, 0, 'e'},
       {"file-name",  required_argument, 0, 'f'},
       {"type",       required_argument, 0, 't'},
+      {"mode",       required_argument, 0, 'm'},
       {0, 0, 0, 0}
     };
 
@@ -239,6 +246,28 @@ main(int argc, char **argv)
           fwType = SFVMK_FIRMWARE_INVALID;
 
         break;
+      case 'm':
+        if (!optarg) {
+          printf("ERROR: FEC mode is not provided\n");
+          goto end;
+        }
+
+        memset(&fecModeName, 0, 16);
+        strcpy(fecModeName, optarg);
+        sfvmk_strLwr(fecModeName);
+
+        if (!strcmp(fecModeName, "auto"))
+          fecMode = SFVMK_MGMT_FEC_AUTO_MASK;
+        else if (!strcmp(fecModeName, "off"))
+          fecMode = SFVMK_MGMT_FEC_OFF_MASK;
+        else if (!strcmp(fecModeName, "rs"))
+          fecMode = SFVMK_MGMT_FEC_RS_MASK;
+        else if (!strcmp(fecModeName, "baser"))
+          fecMode = SFVMK_MGMT_FEC_BASER_MASK;
+        else
+          fecMode = SFVMK_MGMT_FEC_NONE_MASK;
+
+        break;
       case '?':
       default:
         break;
@@ -296,6 +325,19 @@ main(int argc, char **argv)
         sfvmk_fwUpdate(&mgmtParm, fileName, fwType, fwTypeName);
       } else {
         sfvmk_fwVersion(&mgmtParm, SFVMK_FIRMWARE_ALL);
+      }
+
+      break;
+    case SFVMK_OBJECT_FEC:
+      if (opType == SFVMK_MGMT_DEV_OPS_SET) {
+        if (fecMode == SFVMK_MGMT_FEC_NONE_BIT) {
+          printf("ERROR: Invalid FEC mode settings\n");
+          goto destroy_handle;
+        }
+
+        sfvmk_fecModeSet(&mgmtParm, fecMode);
+      } else {
+        sfvmk_fecModeGet(&mgmtParm);
       }
 
       break;
@@ -748,3 +790,88 @@ static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblin
 
   return portCount;
 }
+
+static int sfvmk_postFecReq(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_fecMode_t *pFecMode)
+{
+  int status;
+
+  if (!pFecMode) {
+    printf("ERROR: Invalid input param\n");
+    return -EINVAL;
+  }
+
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_FEC_MODE_REQUEST, pMgmtParm,
+                                      pFecMode);
+  if (status != VMK_OK) {
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    return -EAGAIN;
+  }
+
+  if (pMgmtParm->status != VMK_OK) {
+    if (pMgmtParm->status == VMK_NOT_SUPPORTED) {
+      printf("ERROR: FEC mode information %s failed, feature not supported\n",
+             (pFecMode->type == SFVMK_MGMT_DEV_OPS_SET) ? (char *)"set" : (char *)"get");
+      return -ENOTSUP;
+    }
+
+    printf("ERROR: FEC mode information %s failed, error 0x%x\n",
+           (pFecMode->type == SFVMK_MGMT_DEV_OPS_SET) ? (char *)"set" : (char *)"get",
+           pMgmtParm->status);
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec)
+{
+  sfvmk_fecMode_t fecMode;
+  int ret;
+
+  memset(&fecMode, 0, sizeof(fecMode));
+
+  fecMode.type = SFVMK_MGMT_DEV_OPS_SET;
+  fecMode.fec = fec;
+  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
+  if (ret < 0)
+    return;
+
+  printf("FEC parameters for %s applied\n", pMgmtParm->deviceName);
+}
+
+static void sfvmk_printFecMode(vmk_uint32 fec)
+{
+  if (fec & SFVMK_MGMT_FEC_NONE_MASK)
+    printf(" None");
+  if (fec & SFVMK_MGMT_FEC_AUTO_MASK)
+    printf(" Auto");
+  if (fec & SFVMK_MGMT_FEC_OFF_MASK)
+    printf(" Off");
+  if (fec & SFVMK_MGMT_FEC_RS_MASK)
+    printf(" RS");
+  if (fec & SFVMK_MGMT_FEC_BASER_MASK)
+    printf(" BaseR");
+}
+
+static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)
+{
+  sfvmk_fecMode_t fecMode;
+  int ret;
+
+  memset(&fecMode, 0, sizeof(fecMode));
+
+  fecMode.type = SFVMK_MGMT_DEV_OPS_GET;
+  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
+  if (ret < 0)
+    return;
+
+  printf("FEC parameters for %s:\n", pMgmtParm->deviceName);
+  printf("Configured FEC encodings:");
+  sfvmk_printFecMode(fecMode.fec);
+  printf("\n");
+  printf("Active FEC encoding:");
+  sfvmk_printFecMode(fecMode.activeFec);
+  printf("\n");
+}
+

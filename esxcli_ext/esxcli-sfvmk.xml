@@ -22,6 +22,10 @@
       <namespace path="sfvmk.firmware">
          <description>esxcli extension to get firmware version and update firmware image</description>
       </namespace>
+      <!-- esxcli sfvmk fec -->
+      <namespace path="sfvmk.fec">
+         <description>esxcli extension to get/ set FEC mode settings</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -131,6 +135,42 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/solarflare/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} --type $val{type}</execute>
+      </command>
+
+      <!-- esxcli sfvmk fec get -->
+      <command path="sfvmk.fec.get">
+         <description>Gets FEC mode settings</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object fec --get --nic-name $val{nic-name}</execute>
+      </command>
+      <!-- esxcli sfvmk fec set -->
+      <command path="sfvmk.fec.set">
+         <description>Sets FEC mode settings</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+            <parameter name="mode" type="string" required="true" shortname="m">
+               <description>FEC mode (auto|off|rs|baser).</description>
+            </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/solarflare/bin/sfvmkcli --object fec --set --nic-name $val{nic-name} --mode $val{mode}</execute>
       </command>
    </commands>
 </plugin>

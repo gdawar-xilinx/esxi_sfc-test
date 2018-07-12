@@ -91,6 +91,8 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
   efx_nvram_type_t      type;
   efx_image_info_t      imageInfo;
   efx_image_header_t    *pImgHeader = NULL;
+  int                   subtype;
+  vmk_uint16            ver[4];
   VMK_ReturnStatus      status = VMK_FAILURE;
 
   VMK_ASSERT_NOT_NULL(pImgUpdate);
@@ -118,6 +120,17 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
 
   if ((status = sfvmk_getImageType(imageInfo.eii_headerp->eih_type, &type)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Image Type Failed %s", vmk_StatusToString(status));
+    goto fail1;
+  }
+
+  if ((status = efx_nvram_get_version(pNic, type, &subtype, &ver[0])) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Image Get Version Failed %s", vmk_StatusToString(status));
+    goto fail1;
+  }
+
+  if (subtype != imageInfo.eii_headerp->eih_subtype) {
+    status = VMK_INVALID_METADATA;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Image Sub Type Mismatch %s", vmk_StatusToString(status));
     goto fail1;
   }
 

@@ -5527,6 +5527,8 @@ sfvmk_pauseParamSet(vmk_AddrCookie cookie, vmk_UplinkPauseParams pParams)
     goto failed_mac_fcntl_set;
   }
 
+  pPort->fcRequested = fcntl;
+
   status = VMK_OK;
 
 failed_adapter_state:

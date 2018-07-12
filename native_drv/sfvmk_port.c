@@ -548,10 +548,14 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
     goto failed_mac_pdu;
   }
 
-  /* Setting flow control */
-  /* By default enable rx and tx flow control */
-  pPort->fcRequested |= EFX_FCNTL_GENERATE | EFX_FCNTL_RESPOND;
+  status = efx_phy_adv_cap_set(pAdapter->pNic, pPort->advertisedCapabilities);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_phy_adv_cap_set failed status %s",
+                        vmk_StatusToString(status));
+    goto failed_phy_adv_cap_set;
+  }
 
+  /* Setting flow control */
   status = efx_mac_fcntl_set(pNic, pPort->fcRequested, B_TRUE);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_fcntl failed status: %s",
@@ -613,6 +617,7 @@ failed_mac_drain:
 failed_mac_stats:
 failed_mac_filter_set:
 failed_mac_fcntl:
+failed_phy_adv_cap_set:
 failed_mac_pdu:
   efx_port_fini(pNic);
 
@@ -653,8 +658,6 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   }
 
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
-
-  pPort->advertisedCapabilities = 0;
 
   (void)efx_mac_stats_periodic(pNic, &pPort->macStatsDmaBuf, 0, B_FALSE);
 
@@ -740,6 +743,13 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
     goto failed_port_init;
   }
   efx_phy_media_type_get(pAdapter->pNic, &pPort->mediumType);
+
+  /* Store advertised capability to be set at IO start */
+  efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
+                      &pPort->advertisedCapabilities);
+
+  /* By default enable rx and tx flow control */
+  pPort->fcRequested = EFX_FCNTL_GENERATE | EFX_FCNTL_RESPOND;
 
   efx_port_fini(pAdapter->pNic);
   efx_filter_fini(pAdapter->pNic);

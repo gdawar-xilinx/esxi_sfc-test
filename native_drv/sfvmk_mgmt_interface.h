@@ -56,6 +56,7 @@
  ** SFVMK_CB_MAC_ADDRESS_GET:          Get MAC address of an interface
  ** SFVMK_CB_IFACE_LIST_GET:           Get list of all SFVMK interface
  ** SFVMK_CB_FEC_MODE_REQUEST:         Get/Set FEC mode settings
+ ** SFVMK_CB_IMG_UPDATE_V2:            Perform Image Update version 2
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -73,6 +74,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_MAC_ADDRESS_GET,
   SFVMK_CB_IFACE_LIST_GET,
   SFVMK_CB_FEC_MODE_REQUEST,
+  SFVMK_CB_IMG_UPDATE_V2,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -384,7 +386,8 @@ typedef enum sfvmk_nvramType_e {
   SFVMK_NVRAM_FPGA_BACKUP,
   SFVMK_NVRAM_UEFIROM,
   SFVMK_NVRAM_DYNAMIC_CFG,
-  SFVMK_NVRAM_TYPE_UNKNOWN
+  SFVMK_NVRAM_INVALID,
+  SFVMK_NVRAM_NTYPE
 } sfvmk_nvramType_t;
 
 /*! \brief struct sfvmk_nvramCmd_s for performing
@@ -429,6 +432,23 @@ typedef struct sfvmk_imgUpdate_s{
   vmk_uint64          pFileBuffer;
   vmk_uint32          size;
 } __attribute__((__packed__)) sfvmk_imgUpdate_t;
+
+/*! \brief struct sfvmk_imgUpdate_s to update
+ **       firmware image
+ **
+ ** pFileBuffer[in]    Pointer to Buffer Containing
+ **                    Update File's contents
+ **
+ ** size[in]           Size of the update file
+ **
+ ** type[in]           Type of NVRAM
+ **
+ */
+typedef struct sfvmk_imgUpdateV2_s{
+  vmk_uint64          pFileBuffer;
+  vmk_uint32          size;
+  sfvmk_nvramType_t   type;
+} __attribute__((__packed__)) sfvmk_imgUpdateV2_t;
 
 /*! \brief Sub command type for HW queue stats
  **
@@ -611,6 +631,11 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies *pCookies,
                                              sfvmk_mgmtDevInfo_t *pDevIface,
                                              sfvmk_imgUpdate_t *pImgUpdate);
 
+VMK_ReturnStatus sfvmk_mgmtImgUpdateV2Callback(vmk_MgmtCookies *pCookies,
+                                               vmk_MgmtEnvelope *pEnvelope,
+                                               sfvmk_mgmtDevInfo_t *pDevIface,
+                                               sfvmk_imgUpdateV2_t *pImgUpdateV2);
+
 VMK_ReturnStatus sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies *pCookies,
                                             vmk_MgmtEnvelope *pEnvelope,
                                             sfvmk_mgmtDevInfo_t *pDevIface,
@@ -647,6 +672,7 @@ VMK_ReturnStatus sfvmk_mgmtFecModeCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtIntrModerationCallback NULL
 #define sfvmk_mgmtNVRAMCallback NULL
 #define sfvmk_mgmtImgUpdateCallback NULL
+#define sfvmk_mgmtImgUpdateV2Callback NULL
 #define sfvmk_mgmtHWQStatsCallback NULL
 #define sfvmk_mgmtMACAddressCallback NULL
 #define sfvmk_mgmtInterfaceListCallback NULL

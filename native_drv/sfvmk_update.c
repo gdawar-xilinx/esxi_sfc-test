@@ -75,8 +75,8 @@ static VMK_ReturnStatus sfvmk_getImageType(sfvmk_imageReflash_t type, efx_nvram_
   return status;
 }
 
-VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
-                        sfvmk_adapter_t  *pAdapter)
+VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
+                                     sfvmk_imgUpdateV2_t *pImgUpdateV2)
 {
   size_t                chunkSize;
   vmk_uint32            offset = 0;
@@ -89,37 +89,46 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
   size_t                nvramSize;
   vmk_uint32            updateSize = 0;
   efx_nvram_type_t      type;
+  efx_nvram_type_t      nvrType;
   efx_image_info_t      imageInfo;
   efx_image_header_t    *pImgHeader = NULL;
   int                   subtype;
   vmk_uint16            ver[4];
   VMK_ReturnStatus      status = VMK_FAILURE;
 
-  VMK_ASSERT_NOT_NULL(pImgUpdate);
+  VMK_ASSERT_NOT_NULL(pImgUpdateV2);
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  pImgBuffer = (vmk_uint8 *)vmk_HeapAlloc(sfvmk_modInfo.heapID, pImgUpdate->size);
+  pImgBuffer = (vmk_uint8 *)vmk_HeapAlloc(sfvmk_modInfo.heapID, pImgUpdateV2->size);
   if (pImgBuffer == NULL) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Memory Allocation failed for size: %d", pImgUpdate->size);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Memory Allocation failed for size: %d", pImgUpdateV2->size);
     status = VMK_NO_MEMORY;
     goto end;
   }
 
-  if ((status =vmk_CopyFromUser((vmk_VA)pImgBuffer, (vmk_VA)pImgUpdate->pFileBuffer,
-                                 pImgUpdate->size)) != VMK_OK) {
+  if ((status =vmk_CopyFromUser((vmk_VA)pImgBuffer, (vmk_VA)pImgUpdateV2->pFileBuffer,
+                                 pImgUpdateV2->size)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Copy from user failed with error: %s", vmk_StatusToString(status));
     goto fail1;
   }
 
   pNic = pAdapter->pNic;
 
-  if ((status = efx_check_reflash_image(pImgBuffer, pImgUpdate->size, &imageInfo)) != VMK_OK) {
+  if ((status = efx_check_reflash_image(pImgBuffer, pImgUpdateV2->size, &imageInfo)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Image Checking Failed %s", vmk_StatusToString(status));
     goto fail1;
   }
 
   if ((status = sfvmk_getImageType(imageInfo.eii_headerp->eih_type, &type)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Image Type Failed %s", vmk_StatusToString(status));
+    goto fail1;
+  }
+
+  nvrType = nvramTypes[pImgUpdateV2->type];
+
+  if ((nvrType != EFX_NVRAM_INVALID) && (nvrType != type)) {
+    status = VMK_NO_PERMISSION;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Image Type mismatch %s", vmk_StatusToString(status));
     goto fail1;
   }
 
@@ -160,7 +169,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
 
     case EFX_IMAGE_FORMAT_UNSIGNED:
       pImgHeader = imageInfo.eii_headerp;
-      updateSize = pImgUpdate->size - sizeof(efx_image_header_t);
+      updateSize = pImgUpdateV2->size - sizeof(efx_image_header_t);
       if (updateSize > nvramSize) {
         SFVMK_ADAPTER_ERROR(pAdapter, "Image Size greater than NVRAM size");
         goto fail1;

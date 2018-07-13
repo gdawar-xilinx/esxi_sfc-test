@@ -98,6 +98,9 @@ typedef vmk_Semaphore sfvmk_Lock;
 #define sfvmk_MutexLock(lock)         vmk_SemaLock(&(lock))
 #endif
 
+/* Array for NVRAM types */
+extern const efx_nvram_type_t nvramTypes[];
+
 extern VMK_ReturnStatus sfvmk_driverRegister(void);
 extern void             sfvmk_driverUnregister(void);
 
@@ -929,9 +932,7 @@ typedef enum sfvmk_imageReflash_e {
 } sfvmk_imageReflash_t;
 
 VMK_ReturnStatus
-sfvmk_performUpdate(sfvmk_imgUpdate_t *pImgUpdate,
-                                     sfvmk_adapter_t  *pAdapter);
-
+sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter, sfvmk_imgUpdateV2_t *pImgUpdateV2);
 
 VMK_ReturnStatus
 sfvmk_setMacFilter(sfvmk_adapter_t *pAdapter, vmk_UplinkState state);

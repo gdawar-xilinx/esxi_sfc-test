@@ -28,19 +28,20 @@
 #include "efx_regs_mcdi.h"
 #include "sfvmk_driver.h"
 
-static const efx_nvram_type_t nvramTypes[] = {
-  [SFVMK_NVRAM_BOOTROM]     = EFX_NVRAM_BOOTROM,
-  [SFVMK_NVRAM_BOOTROM_CFG] = EFX_NVRAM_BOOTROM_CFG,
-  [SFVMK_NVRAM_MC]          = EFX_NVRAM_MC_FIRMWARE,
-  [SFVMK_NVRAM_MC_GOLDEN]   = EFX_NVRAM_MC_GOLDEN,
-  [SFVMK_NVRAM_PHY]         = EFX_NVRAM_PHY,
-  [SFVMK_NVRAM_NULL_PHY]    = EFX_NVRAM_NULLPHY,
-  [SFVMK_NVRAM_FPGA]        = EFX_NVRAM_FPGA,
-  [SFVMK_NVRAM_FCFW]        = EFX_NVRAM_FCFW,
-  [SFVMK_NVRAM_CPLD]        = EFX_NVRAM_CPLD,
-  [SFVMK_NVRAM_FPGA_BACKUP] = EFX_NVRAM_FPGA_BACKUP,
-  [SFVMK_NVRAM_UEFIROM]     = EFX_NVRAM_UEFIROM,
-  [SFVMK_NVRAM_DYNAMIC_CFG] = EFX_NVRAM_DYNAMIC_CFG,
+const efx_nvram_type_t nvramTypes[] = {
+  [SFVMK_NVRAM_INVALID]      = EFX_NVRAM_INVALID,
+  [SFVMK_NVRAM_BOOTROM]      = EFX_NVRAM_BOOTROM,
+  [SFVMK_NVRAM_BOOTROM_CFG]  = EFX_NVRAM_BOOTROM_CFG,
+  [SFVMK_NVRAM_MC]           = EFX_NVRAM_MC_FIRMWARE,
+  [SFVMK_NVRAM_MC_GOLDEN]    = EFX_NVRAM_MC_GOLDEN,
+  [SFVMK_NVRAM_PHY]          = EFX_NVRAM_PHY,
+  [SFVMK_NVRAM_NULL_PHY]     = EFX_NVRAM_NULLPHY,
+  [SFVMK_NVRAM_FPGA]         = EFX_NVRAM_FPGA,
+  [SFVMK_NVRAM_FCFW]         = EFX_NVRAM_FCFW,
+  [SFVMK_NVRAM_CPLD]         = EFX_NVRAM_CPLD,
+  [SFVMK_NVRAM_FPGA_BACKUP]  = EFX_NVRAM_FPGA_BACKUP,
+  [SFVMK_NVRAM_UEFIROM]      = EFX_NVRAM_UEFIROM,
+  [SFVMK_NVRAM_DYNAMIC_CFG]  = EFX_NVRAM_DYNAMIC_CFG,
 };
 
 /*! \brief  Get adapter pointer based on hash.
@@ -783,7 +784,7 @@ end:
  ** \param[in]      pCookies    Pointer to cookie
  ** \param[in]      pEnvelope   Pointer to vmk_MgmtEnvelope
  ** \param[in,out]  pDevIface   Pointer to device interface structure
- ** \param[in,out]  pImgUpdate  Pointer to sfvmk_imgUpdate_t structure
+ ** \param[in]      pImgUpdate  Pointer to sfvmk_imgUpdate_t structure
  **
  ** \return VMK_OK [success]
  **     Below error values are filled in the status field of
@@ -801,8 +802,61 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies     *pCookies,
                                              sfvmk_mgmtDevInfo_t *pDevIface,
                                              sfvmk_imgUpdate_t   *pImgUpdate)
 {
-  sfvmk_adapter_t  *pAdapter = NULL;
-  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_imgUpdateV2_t  imgInfoV2;
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pImgUpdate) {
+    SFVMK_ERROR("pImgUpdate: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  imgInfoV2.pFileBuffer = pImgUpdate->pFileBuffer;
+  imgInfoV2.size = pImgUpdate->size;
+  imgInfoV2.type = SFVMK_NVRAM_INVALID;
+
+  sfvmk_mgmtImgUpdateV2Callback(pCookies, pEnvelope, pDevIface, &imgInfoV2);
+
+end:
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback to perform Image Update V2
+ **         This management callback validates that the passed
+ **         image is correspoding to the passed  NVRAM type
+ **         before updating image
+ **
+ ** \param[in]      pCookies      Pointer to cookie
+ ** \param[in]      pEnvelope     Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface     Pointer to device interface structure
+ ** \param[in]      pImgUpdateV2  Pointer to sfvmk_imgUpdateV2_t structure
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Invalid Ioctl option or wrong
+ **                         input param
+ **     VMK_NO_MEMORY:      Memory Allocation failed
+ **     VMK_NOT_SUPPORTED:  Unsupported Firmware type
+ **     VMK_NO_PERMISSION:  Mismatch between firmware type and firmware image
+ **     VMK_FAILURE:        Copy from User or NVRAM operation failure
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtImgUpdateV2Callback(vmk_MgmtCookies      *pCookies,
+                              vmk_MgmtEnvelope     *pEnvelope,
+                              sfvmk_mgmtDevInfo_t  *pDevIface,
+                              sfvmk_imgUpdateV2_t  *pImgUpdateV2)
+{
+  sfvmk_adapter_t   *pAdapter = NULL;
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
 
   if (!pDevIface) {
     SFVMK_ERROR("pDevIface: NULL pointer passed as input");
@@ -811,47 +865,49 @@ VMK_ReturnStatus sfvmk_mgmtImgUpdateCallback(vmk_MgmtCookies     *pCookies,
 
   pDevIface->status = VMK_FAILURE;
 
-  if (!pImgUpdate) {
-    SFVMK_ERROR("pImgUpdate: NULL pointer passed as input");
+  if (!pImgUpdateV2) {
+    SFVMK_ERROR("pImgUpdateV2: NULL pointer passed as input");
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
 
-  if (pImgUpdate->size == 0) {
-    SFVMK_ERROR("pImgUpdate: Invalid file size");
+  if (pImgUpdateV2->size == 0) {
+    SFVMK_ERROR("pImgUpdateV2: Invalid file size");
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
 
-  if (!pImgUpdate->pFileBuffer) {
+  if (pImgUpdateV2->type >= SFVMK_NVRAM_NTYPE) {
+    SFVMK_ERROR("Invalid firmware image type");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (!pImgUpdateV2->pFileBuffer) {
     SFVMK_ERROR("pFileBuffer: NULL pointer passed as input");
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
 
-  vmk_SemaLock(&sfvmk_modInfo.lock);
-
   pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
   if (!pAdapter) {
-    SFVMK_ERROR("Adapter structure corresponding to %s device not found", pDevIface->deviceName);
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
     pDevIface->status = VMK_NOT_FOUND;
-    goto semunlock;
+    goto end;
   }
 
-  status = sfvmk_performUpdate(pImgUpdate, pAdapter);
-  if (status != VMK_OK)
-  {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Update Operation failed for deivce");
+  status = sfvmk_performUpdate(pAdapter, pImgUpdateV2);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Firmware update failed for deivce");
     pDevIface->status = status;
-    goto semunlock;
+    goto end;
   }
 
   pDevIface->status = VMK_OK;
 
-semunlock:
-  vmk_SemaUnlock(&sfvmk_modInfo.lock);
-
 end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
   return VMK_OK;
 }
 
@@ -897,7 +953,7 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
     goto end;
   }
 
-  if (pCmd->type >= SFVMK_NVRAM_TYPE_UNKNOWN) {
+  if (pCmd->type >= SFVMK_NVRAM_INVALID) {
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }

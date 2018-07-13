@@ -1017,6 +1017,7 @@ sfvmk_phyGetFecCapMask(vmk_uint32 advCaps, vmk_Bool is25G)
 VMK_ReturnStatus
 sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec)
 {
+  sfvmk_port_t *pPort;
   vmk_uint32 supportedCapabilities = 0;
   vmk_uint32 advertisedCapabilities = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -1024,6 +1025,8 @@ sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec)
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
+
+  pPort = &pAdapter->port;
 
   efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_PERM,
                       &supportedCapabilities);
@@ -1041,6 +1044,8 @@ sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Failed to set FEC with error %s",
                         vmk_StatusToString(status));
+  } else {
+    pPort->advertisedCapabilities = advertisedCapabilities;
   }
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

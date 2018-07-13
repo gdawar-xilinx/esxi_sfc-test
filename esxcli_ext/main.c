@@ -588,10 +588,34 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   return 0;
 }
 
+static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
+{
+  sfvmk_nvramType_t type;
+
+  switch(fwType) {
+    case SFVMK_FIRMWARE_MC:
+      type = SFVMK_NVRAM_MC;
+      break;
+
+    case SFVMK_FIRMWARE_BOOTROM:
+      type = SFVMK_NVRAM_BOOTROM;
+      break;
+
+    case SFVMK_FIRMWARE_UEFI:
+      type = SFVMK_NVRAM_UEFIROM;
+      break;
+
+    default:
+      type = SFVMK_NVRAM_NTYPE;
+  }
+
+  return type;
+}
+
 static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
                            char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName)
 {
-  sfvmk_imgUpdate_t imgUpdate;
+  sfvmk_imgUpdateV2_t imgUpdateV2;
   FILE *pFile = NULL;
   vmk_Name siblingPorts[SFVMK_MAX_INTERFACE];
   char *pBuf = NULL;
@@ -649,19 +673,24 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
     printf(" %s", siblingPorts[i].string);
   printf("...\n");
 
-  memset(&imgUpdate, 0, sizeof(imgUpdate));
-  imgUpdate.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
-  imgUpdate.size = fileSize;
+  memset(&imgUpdateV2, 0, sizeof(imgUpdateV2));
+  imgUpdateV2.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
+  imgUpdateV2.size = fileSize;
+  imgUpdateV2.type = sfvmk_getNvramType(fwType);
 
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_IMG_UPDATE, pMgmtParm, &imgUpdate);
+                                      SFVMK_CB_IMG_UPDATE_V2, pMgmtParm, &imgUpdateV2);
   if (status != VMK_OK) {
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto free_buffer;
   }
 
   if (pMgmtParm->status != VMK_OK) {
-    printf("ERROR: Firmware update failed, error 0x%x\n", pMgmtParm->status);
+    if (pMgmtParm->status == VMK_NO_PERMISSION) {
+      printf("ERROR: Firmware --type %s mismatch with firmware image\n", pFwTypeName);
+    } else {
+      printf("ERROR: Firmware update failed, error 0x%x\n", pMgmtParm->status);
+    }
     goto free_buffer;
   }
 

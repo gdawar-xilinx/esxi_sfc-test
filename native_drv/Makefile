@@ -76,7 +76,7 @@ endif
 # Driver requires common code files, import it from v5 repo
 # Common code would be used from v5 tag for the released version of sfvmk
 # or from the tip of v5 branch or tip of default branch for beta version
-V5_TAG          = v4_13_2_1000
+V5_TAG          = v4_13_2_1001
 V5_BRANCH       = v4_13_2_sfvmk
 
 ifeq ($(BUILDTYPE), beta)

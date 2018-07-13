@@ -776,7 +776,7 @@ static VMK_ReturnStatus sfvmk_panicPoll(vmk_AddrCookie cookie,
     pEvq->panicPktList = pktList;
     vmk_SpinlockUnlock(pEvq->lock);
 
-    sfvmk_evqPoll(pEvq);
+    sfvmk_evqPoll(pEvq, VMK_TRUE);
   }
 
 done:
@@ -1875,7 +1875,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
   if (pAdapter->isTsoFwAssisted) {
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                    VMK_UPLINK_CAP_IPV4_TSO, NULL);
-    if (status != VMK_OK) {
+    if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
       SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV4_TSO failed status: %s",
                           vmk_StatusToString(status));
       goto done;
@@ -1883,14 +1883,11 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
 
     status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
                                    VMK_UPLINK_CAP_IPV6_TSO, NULL);
-    if (status != VMK_OK) {
+    if ((status != VMK_OK) && (status != VMK_IS_DISABLED)) {
       SFVMK_ADAPTER_ERROR(pAdapter,"VMK_UPLINK_CAP_IPV6_TSO failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
-
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
-                        "IPV4_TSO and IPV6_TSO registered");
   } else {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
                         "TSO capability not registered: not supported by hw");
@@ -2676,9 +2673,11 @@ sfvmk_netPollCB(vmk_AddrCookie cookie, vmk_uint32 budget)
 
   VMK_ASSERT_NOT_NULL(pEvq);
   pEvq->rxBudget = budget;
+  pEvq->txBudget = SFVMK_NETPOLL_TX_BUDGET;
 
-  if (sfvmk_evqPoll(pEvq) == VMK_OK) {
-    if (pEvq->rxDone >= pEvq->rxBudget)
+  if (sfvmk_evqPoll(pEvq, VMK_FALSE) == VMK_OK) {
+    if ((pEvq->rxDone >= pEvq->rxBudget) ||
+       (pEvq->txDone >= pEvq->txBudget))
       pendCompletion = VMK_TRUE;
   }
 

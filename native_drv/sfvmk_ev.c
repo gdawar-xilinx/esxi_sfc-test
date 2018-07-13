@@ -40,7 +40,7 @@
 /* Number of RX desc processed per batch */
 #define SFVMK_RX_BATCH                128
 /* Number of events processed per batch */
-#define SFVMK_EV_BATCH                16384
+//#define SFVMK_EV_BATCH                16384
 /* Number of TX descriptors processed per batch */
 #define SFVMK_TX_BATCH                64
 
@@ -77,9 +77,8 @@ static const efx_ev_callbacks_t sfvmk_evCallbacks = {
 ** \param[in] size     Pkt size
 ** \param[in] flags    Pkt metadeta info
 **
-** \return: VMK_FALSE  In a single interrupt if number of RX events processed
-**                     is less than SFVMK_EV_BATCH
-** \return: VMK_True   Failure
+** \return: VMK_FALSE if number of pending RX packets to be completed hasn't
+**          reached budget, VMK_TRUE otherwise.
 */
 static boolean_t
 sfvmk_evRX(void *arg, uint32_t label, uint32_t id, uint32_t size, uint16_t flags)
@@ -163,8 +162,8 @@ fail:
 ** \param[in] label    queue label
 ** \param[in] id       last buffer descriptor index to process
 **
-** \return: VMK_FALSE if number of Tx events processed in single interrupt
-            is less than SFVMK_EV_BATCH, VMK_TRUE otherwise
+** \return: VMK_FALSE if number of pending TX packets to be completed hasn't
+**          reached budget, VMK_TRUE otherwise.
 */
 static boolean_t
 sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
@@ -173,7 +172,7 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   struct sfvmk_txq_s *pTxq;
   struct sfvmk_adapter_s *pAdapter;
   unsigned int stop;
-  unsigned int delta;
+  unsigned int delta, i;
   vmk_Bool status = VMK_TRUE;
   sfvmk_pktCompCtx_t compCtx = {
     .type = SFVMK_PKT_COMPLETION_NETPOLL,
@@ -211,9 +210,10 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   id = pTxq->pending & pTxq->ptrMask;
 
   delta = (stop >= id) ? (stop - id) : (pTxq->numDesc - id + stop);
-  pTxq->pending += delta;
-
-  pEvq->txDone++;
+  for (i = 0; i < delta; i++) {
+     sfvmk_txMapping_t *pTxMap = &pTxq->pTxMap[pTxq->pending++ & pTxq->ptrMask];
+     pEvq->txDone += !!(pTxMap->pXmitPkt) + !!(pTxMap->pOrigPkt);
+  }
 
   if (pTxq->pending - pTxq->completed >= SFVMK_TX_BATCH) {
     compCtx.netPoll = pEvq->netPoll;
@@ -221,7 +221,7 @@ sfvmk_evTx(void *arg, uint32_t label, uint32_t id)
   }
   vmk_SpinlockUnlock(pTxq->lock);
 
-  status = (pEvq->txDone >= SFVMK_EV_BATCH);
+  status = (pEvq->txDone >= pEvq->txBudget);
 
 done:
   return status;
@@ -534,9 +534,9 @@ sfvmk_evSoftware(void *arg, uint16_t magic)
 ** \return: VMK_TRUE  [failure]
 */
 VMK_ReturnStatus
-sfvmk_evqPoll(sfvmk_evq_t *pEvq)
+sfvmk_evqPoll(sfvmk_evq_t *pEvq, vmk_Bool panic)
 {
-  VMK_ReturnStatus status = VMK_FAILURE;
+  VMK_ReturnStatus status = VMK_OK;
 
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
@@ -562,11 +562,15 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq)
   sfvmk_evqComplete(pEvq);
 
   /* Re-prime the event queue for interrupts */
-  status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "efx_ev_qprime failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
+  if ((pEvq->rxDone < pEvq->rxBudget) &&
+      (pEvq->txDone < pEvq->txBudget) &&
+      (!panic)) {
+    status = efx_ev_qprime(pEvq->pCommonEvq, pEvq->readPtr);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pEvq->pAdapter, "efx_ev_qprime failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
   }
 
 done:

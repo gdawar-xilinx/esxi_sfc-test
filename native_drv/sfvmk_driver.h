@@ -146,6 +146,7 @@ typedef enum sfvmk_evqState_e {
   SFVMK_EVQ_STATE_STARTED
 } sfvmk_evqState_t;
 
+#define SFVMK_NETPOLL_TX_BUDGET      128
 typedef struct sfvmk_evq_s {
   struct sfvmk_adapter_s  *pAdapter;
   /* Memory for event queue */
@@ -166,6 +167,7 @@ typedef struct sfvmk_evq_s {
   vmk_uint32              rxDone;
   /* Maximum number of packets to be processed in each netPoll invocation */
   vmk_uint32              rxBudget;
+  vmk_uint32              txBudget;
   /* Used for storing pktList passed in sfvmk_panicPoll */
   vmk_PktList             panicPktList;
 } sfvmk_evq_t;
@@ -644,7 +646,7 @@ VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_evFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_evStart(sfvmk_adapter_t *pAdapter);
 void sfvmk_evStop(sfvmk_adapter_t *pAdapter);
-VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq);
+VMK_ReturnStatus sfvmk_evqPoll(sfvmk_evq_t *pEvq, vmk_Bool panic);
 VMK_ReturnStatus sfvmk_evqModerate(sfvmk_adapter_t *pAdapter,
                                    unsigned int qIndex,
                                    unsigned int uSec);

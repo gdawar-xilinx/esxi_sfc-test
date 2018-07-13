@@ -144,8 +144,10 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
     goto end;
   }
 
-  if (pPort->advertisedCapabilities == advertisedCapabilities)
+  if (pPort->advertisedCapabilities == advertisedCapabilities) {
+    status = VMK_OK;
     goto end;
+  }
 
   vmk_LogMessage("0xdeadbeaf Set the Capabilities");
   status = efx_phy_adv_cap_set(pAdapter->pNic, advertisedCapabilities);

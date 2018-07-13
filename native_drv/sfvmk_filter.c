@@ -559,6 +559,7 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
   sfvmk_filterDBEntry_t *pFdbEntry;
   VMK_ReturnStatus status = VMK_FAILURE;
   vmk_uint32 i;
+  vmk_uint32 qID;
 
   while (!vmk_HashIsEmpty(pAdapter->filterDBHashTable)) {
 
@@ -592,7 +593,13 @@ sfvmk_clearAllFilterRules(sfvmk_adapter_t *pAdapter)
       }
     }
 
-    sfvmk_removeUplinkFilter(pAdapter, pFdbEntry->qID);
+    if (pFdbEntry->qID == sfvmk_getRSSQStartIndex(pAdapter)) {
+       qID = pAdapter->uplink.rssUplinkQueue;
+    } else {
+       qID = pFdbEntry->qID;
+    }
+
+    sfvmk_removeUplinkFilter(pAdapter, qID);
     status = vmk_HashKeyDelete(pAdapter->filterDBHashTable,
                                (vmk_HashKey)(vmk_uint64)pFdbEntry->key,
                                NULL);

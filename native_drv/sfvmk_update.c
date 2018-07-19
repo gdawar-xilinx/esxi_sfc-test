@@ -268,7 +268,16 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
                 vmk_StatusToString(status));
       goto fail3;
     }
-    sfvmk_updateDrvInfo(pAdapter);
+
+    /* Update the new firmware version for all sibling ports */
+    status = sfvmk_updateVerAllPorts(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Firmware Version Update For "
+                          "Sibling Port Failed with err %s",
+                          vmk_StatusToString(status));
+      goto fail3;
+    }
+
   }
 
 fail3:

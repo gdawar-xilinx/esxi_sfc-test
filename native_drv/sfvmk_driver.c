@@ -894,6 +894,90 @@ sfvmk_tunnelFini(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
 
+/*! \brief Iterator used to iterate and update firmware version
+ **        for sibling ports
+ **
+ ** \param[in]     htbl   Hash handle.
+ ** \param[in]     key    Hash key.
+ ** \param[in]     value  Hash entry value stored at key
+ ** \param[in]     data   Pointer to sfvmk_adapter_t
+ **
+ ** \return: Key iterator commands.
+ **
+ */
+static vmk_HashKeyIteratorCmd
+sfvmk_verUpdateHashIter(vmk_HashTable htbl,
+                        vmk_HashKey key, vmk_HashValue value,
+                        vmk_AddrCookie data)
+{
+  sfvmk_adapter_t *pRefAdapter = data.ptr;
+  sfvmk_adapter_t *pIterAdapter = (sfvmk_adapter_t *)value;
+  vmk_HashKeyIteratorCmd returnCode;
+  vmk_int32 pciBDFStrLen = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pRefAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (!pRefAdapter || !pIterAdapter) {
+    SFVMK_ERROR("Failed to find vmk device");
+    returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
+    goto done;
+  }
+
+  pciBDFStrLen = vmk_Strnlen(pRefAdapter->pciDeviceName.string, 16);
+
+  if (pciBDFStrLen == 0) {
+    SFVMK_ADAPTER_ERROR(pRefAdapter, "Failed to get PCI BDF string length");
+    returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
+    goto done;
+  }
+
+  while (pRefAdapter->pciDeviceName.string[pciBDFStrLen] != '.')
+    pciBDFStrLen--;
+
+  if (vmk_Strncmp(pRefAdapter->pciDeviceName.string,
+                  pIterAdapter->pciDeviceName.string,
+                  pciBDFStrLen) == 0) {
+    sfvmk_updateDrvInfo(pIterAdapter);
+  }
+
+  returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pRefAdapter, SFVMK_DEBUG_DRIVER);
+  return returnCode;
+}
+
+/*! \brief  Routine to update firmware version for all
+**          sibling ports, semaphore lock is already taken.
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_updateVerAllPorts(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  status = vmk_HashKeyIterate(sfvmk_modInfo.vmkdevHashTable,
+                              sfvmk_verUpdateHashIter, pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"Iterator failed with error code %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+  return status;
+}
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/

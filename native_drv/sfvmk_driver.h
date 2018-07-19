@@ -946,4 +946,7 @@ sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec);
 VMK_ReturnStatus
 sfvmk_phyFecGet(sfvmk_adapter_t *pAdapter,  vmk_uint32 *advFec, vmk_uint32 *activeFec);
 
+VMK_ReturnStatus
+sfvmk_updateVerAllPorts(sfvmk_adapter_t *pAdapter);
+
 #endif /* __SFVMK_DRIVER_H__ */

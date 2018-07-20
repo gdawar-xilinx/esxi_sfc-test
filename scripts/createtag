@@ -435,12 +435,14 @@ makeSfvmkTag () {
 tagV5Repo () {
     pullV5Repo
     verifyV5Tag
+
     if [ "${v5_tag}" != "" ]; then
        createV5Tag
+    else
+      v5_tag=${v5_lasttag}
     fi
-    removeV5Repo
 
-    v5_tag=${v5_lasttag}
+    removeV5Repo
 }
 
 bumpVersion () {

@@ -2606,7 +2606,7 @@ sfvmk_updateSupportedCap(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap)
     goto done;
   }
 
-  if (efxPhyCap == EFX_PHY_CAP_DEFAULT) {
+  if (efxPhyCap == EFX_PHY_CAP_PERM) {
     pSupportedModes = pAdapter->uplink.supportedModes;
     pCount = &pAdapter->uplink.numSupportedModes;
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
@@ -3489,7 +3489,7 @@ sfvmk_uplinkDataInit(sfvmk_adapter_t * pAdapter)
     goto failed_create_lock;
   }
 
-  sfvmk_updateSupportedCap(pAdapter, EFX_PHY_CAP_DEFAULT);
+  sfvmk_updateSupportedCap(pAdapter, EFX_PHY_CAP_PERM);
 
   pAdapter->uplink.rssUplinkQueue = pAdapter->defRxqIndex;
 

@@ -205,7 +205,7 @@ sfvmk_calcHeapSize(void)
 
   allocDesc[index].size = SFVMK_STATS_BUFFER_SZ;
   allocDesc[index].alignment = 0;
-  allocDesc[index].count = 1;
+  allocDesc[index++].count = 1;
 
   VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);
 

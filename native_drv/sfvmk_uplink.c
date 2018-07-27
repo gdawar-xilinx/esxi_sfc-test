@@ -4497,6 +4497,10 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);
     if (status == VMK_OK) {
+      /* The reset could be scheduled after firmware update,
+       * therefore update the new firmware version in adpater
+       * shared data info */
+      sfvmk_updateDrvInfo(pAdapter);
       goto end;
     }
 

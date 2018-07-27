@@ -259,25 +259,6 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
                 vmk_StatusToString(status));
       goto fail3;
     }
-    status = vmk_WorldWait((vmk_WorldEventID) &pAdapter->startIO_compl_event,
-                            VMK_LOCK_INVALID,
-                            SFVMK_MC_REBOOT_TIME_OUT_MSEC,
-                            "sfvmk_mc_reboot_wait");
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "World Sleep Failed with err %s",
-                vmk_StatusToString(status));
-      goto fail3;
-    }
-
-    /* Update the new firmware version for all sibling ports */
-    status = sfvmk_updateVerAllPorts(pAdapter);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "Firmware Version Update For "
-                          "Sibling Port Failed with err %s",
-                          vmk_StatusToString(status));
-      goto fail3;
-    }
-
   }
 
 fail3:

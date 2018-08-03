@@ -416,7 +416,7 @@ static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
   }
 
   memset(pBuffer, 0, stats.size);
-  stats.statsBuffer = (vmk_uint64)pBuffer;
+  stats.statsBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
   stats.subCmd = SFVMK_MGMT_STATS_GET;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
                                       SFVMK_CB_HW_QUEUE_STATS_GET, mgmtParm, &stats);

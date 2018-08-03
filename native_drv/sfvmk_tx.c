@@ -654,7 +654,7 @@ sfvmk_txStart(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter,"efx_tx_init failed status: %s",
                         vmk_StatusToString(status));
     status = VMK_FAILURE;
-    goto failed_tx_init;
+    goto done;
   }
 
   for (qIndex = 0; qIndex < pAdapter->numTxqsAllocated; qIndex++) {
@@ -675,9 +675,6 @@ failed_txq_start:
   sfvmk_txFlushWaitAndDestroy(pAdapter);
 
   efx_tx_fini(pAdapter->pNic);
-
-failed_tx_init:
-  pAdapter->numTxqsAllocated = 0;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);

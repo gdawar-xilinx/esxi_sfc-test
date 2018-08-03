@@ -927,6 +927,9 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   goto done;
 
 failed_rx_qcreate:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pRxq->pQueue);
+  pRxq->pQueue = NULL;
+
 failed_desc_alloc:
   sfvmk_freeDMAMappedMem(pRxq->mem.esmHandle,
                          pRxq->mem.pEsmBase,

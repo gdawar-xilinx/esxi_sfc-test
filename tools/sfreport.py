@@ -246,31 +246,32 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode, esx_ver)
     get_pause_cmd = "esxcli "+ server + " network nic pauseParams list"
     get_pause_settings = execute(get_pause_cmd)
     get_pause_settings = get_pause_settings.split('\n')
-    for intf in sfvmk_adapter_list:
-         rxq_html = '<table><th>%s RX Queue Info table</th></tr>\
-                                     <table border="1">' % intf
-         rxq_cmd = "vsish -e cat /net/pNics/%s/rxqueues/info"%intf
-         rxq_count = execute(rxq_cmd)
-         for l in rxq_count.splitlines():
-              if not l.startswith("rx ") and not l.endswith('}'):
-                  lhs, rhs = l.split(":",1)
-                  rxq_html += '<th align=left>%s</th>' % lhs
-                  rxq_html += '<td> %s</td>'% rhs
-                  rxq_html += '</tr>'
-         rxq_html += '</table>'
-         output_file.write(rxq_html)
-         txq_html = '<table><th>%s TX Queue Info table</th></tr>\
-                                              <table border="1">' % intf
-         txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
-         txq_count = execute(txq_cmd)
-         for t in txq_count.splitlines():
-             if not t.startswith("tx ") and not t.endswith('}'):
-                 tlhs, trhs = t.split(":", 1)
-                 txq_html += '<th align=left>%s</th>' % tlhs
-                 txq_html += '<td> %s</td>' % trhs
-                 txq_html += '</tr>'
-         txq_html += '</table>'
-         output_file.write(txq_html)
+    if mode == 'esxi':
+       for intf in sfvmk_adapter_list:
+            rxq_html = '<table><th>%s RX Queue Info table</th></tr>\
+                                        <table border="1">' % intf
+            rxq_cmd = "vsish -e cat /net/pNics/%s/rxqueues/info"%intf
+            rxq_count = execute(rxq_cmd)
+            for l in rxq_count.splitlines():
+                 if not l.startswith("rx ") and not l.endswith('}'):
+                     lhs, rhs = l.split(":",1)
+                     rxq_html += '<th align=left>%s</th>' % lhs
+                     rxq_html += '<td> %s</td>'% rhs
+                     rxq_html += '</tr>'
+            rxq_html += '</table>'
+            output_file.write(rxq_html)
+            txq_html = '<table><th>%s TX Queue Info table</th></tr>\
+                                                 <table border="1">' % intf
+            txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
+            txq_count = execute(txq_cmd)
+            for t in txq_count.splitlines():
+                 if not t.startswith("tx ") and not t.endswith('}'):
+                     tlhs, trhs = t.split(":", 1)
+                     txq_html += '<th align=left>%s</th>' % tlhs
+                     txq_html += '<td> %s</td>' % trhs
+                     txq_html += '</tr>'
+            txq_html += '</table>'
+            output_file.write(txq_html)
     # fetch the sfvmk parameters for all sfvmk adapters.
     for interface in sfvmk_adapter_list:
         # fetch interface specific interrupt mod settings
@@ -903,6 +904,7 @@ if __name__ == "__main__":
     CURRENT_MODE = OPTIONS.mode.lower()
     SFVMK_ADAPTERS = []
     SFVMK_TLPS = []
+    ESX_VER = None
     OS_TYPE = execute("uname -o", CURRENT_MODE)
     if CURRENT_MODE not in ['vcli', 'esxi']:
         print("\nOption Error: -m|--mode can be either 'vcli' or 'esxi'\n")
@@ -945,7 +947,12 @@ if __name__ == "__main__":
                 SFVMK_ADAPTERS.append(iface.group(1))
                 SFVMK_TLPS.append(iface.group(2))
     # get ESX version
-    ESX_VER = execute("uname -r")
+    esx_ver_cmd = 'esxcli ' + SERVER_NAME + ' system version get'
+    esx_ver = execute(esx_ver_cmd, CURRENT_MODE)
+    for line in esx_ver.splitlines():
+        lhs, rhs = line.split(':', 1)
+        if lhs.lower().strip(' ') == "version":
+            ESX_VER = rhs.strip(' ')
     if "sfvmk" in SF_ADAPTERS:
         print("sfreport version: "+ SFREPORT_VERSION)
         print("Solarflare Adapters detected..")

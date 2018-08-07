@@ -167,6 +167,45 @@ def system_summary(output_file, server, mode):
     output_file.write(table)
     return 0
 
+def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
+    """function to fetch Solarflare Module versions"""
+    cnt = 0
+    keys = ['VMNIC']
+    output_file.write('<h1 id="Software Versions"style="font-size:26px;"\
+                          > Software Versions: <br></H1>')
+    html = '<table><table border="1">'
+    for key,val in sf_ver.iteritems():
+        html += '<th align=left> %s &nbsp</th>' % key
+        html += '<td>%s &nbsp</td>' % val
+    html += '</table>'
+    output_file.write(html)
+    if cli_vib:
+        fw_html = '<table><th>Firmware Version Table</th></tr><table border="1">'
+        for nic in nic_list:
+            values = [nic]
+            cmd = 'esxcli ' + server + ' sfvmk firmware get -n ' + nic
+            out = execute(cmd, mode)
+            for line in out.splitlines():
+                if line.startswith('Solarflare') or line == "":
+                    continue
+                else:
+                    lhs, rhs = line.split(':',1)
+                    if lhs.startswith('vmnic'):
+                        lhs = "MAC"
+                    keys.append(lhs)
+                    values.append(rhs)
+            if cnt == 0:
+               for key in keys:
+                   fw_html += '<th>%s &nbsp' % key + '</th>'
+               fw_html += '</tr>'
+            for value in values:
+                fw_html += '<td> %s &nbsp</td>' % value
+            fw_html += '</tr>'
+            cnt += 1
+        fw_html += '</table>'
+        output_file.write(fw_html)
+    return 0
+
 def driver_binding(output_file, server, mode):
     """function to fetch driver specific information"""
     output_file.write('<h1 id="Driver Bindings"style="font-size:26px;"\
@@ -905,6 +944,11 @@ if __name__ == "__main__":
     SFVMK_ADAPTERS = []
     SFVMK_TLPS = []
     ESX_VER = None
+    CIM_VER = None
+    SFVMK_VER = None
+    CLI_VER = None
+    SF_VER = {}
+    CLI_VIB = False
     OS_TYPE = execute("uname -o", CURRENT_MODE)
     if CURRENT_MODE not in ['vcli', 'esxi']:
         print("\nOption Error: -m|--mode can be either 'vcli' or 'esxi'\n")
@@ -953,6 +997,29 @@ if __name__ == "__main__":
         lhs, rhs = line.split(':', 1)
         if lhs.lower().strip(' ') == "version":
             ESX_VER = rhs.strip(' ')
+    SF_VER['ESX Version'] = ESX_VER
+    # get sfvmk driver version
+    sfvmk_vib_list = execute("esxcli  " + SERVER_NAME + " software vib list |grep 'sfvmk ' ")
+    if sfvmk_vib_list:
+        for i in sfvmk_vib_list.splitlines():
+            j = re.split(r'\s+', i)
+            SFVMK_VER = j[1] #sfvmk version
+            SF_VER['Driver Version'] = SFVMK_VER
+    # get esxcli_ext vib info:
+    cli_vib_list = execute("esxcli " + SERVER_NAME + "  software vib list |grep solar |grep cli")
+    if cli_vib_list:
+       for k in cli_vib_list.splitlines():
+            l = re.split(r'\s+',k)
+            CLI_VER = l[1] #esxcli ext version
+            SF_VER['CLI Version'] = CLI_VER
+            CLI_VIB = True
+    # get CIM vib info:
+    cim_vib_list = execute("esxcli " + SERVER_NAME + " software vib list |grep solar |grep cim")
+    if cim_vib_list:
+       for m in cim_vib_list.splitlines():
+            n = re.split(r'\s+',m)
+            CIM_VER = n[1] # cim version
+            SF_VER['CIM Version'] = CIM_VER
     if "sfvmk" in SF_ADAPTERS:
         print("sfreport version: "+ SFREPORT_VERSION)
         print("Solarflare Adapters detected..")
@@ -965,6 +1032,7 @@ if __name__ == "__main__":
         file_header(OUT_FILE, CURRENT_TIME, CURRENT_MODE, SFREPORT_VERSION)
         OUT_FILE.write('<h1 style="font-size:26px;">-> Report Index:<br></H1>')
         OUT_FILE.write('<a href="#System Summary">-> System Summary</a><br>')
+        OUT_FILE.write('<a href="#Software Versions">-> Software Versions</a><br>')
         OUT_FILE.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')
         OUT_FILE.write('<a href="#SFVMK Parameters">-> sfvmk Parameters</a><br>\
                        ')
@@ -997,6 +1065,8 @@ if __name__ == "__main__":
                             </a><br>')
 
         system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        sw_versions(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
+                    SF_VER, CLI_VIB)
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                              ESX_VER)

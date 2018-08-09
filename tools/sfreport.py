@@ -250,7 +250,7 @@ def vmkernel_logs(output_file):
     return 0
 
 def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
-                         esx_ver, cim_ver):
+                         esx_ver, cli_vib):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
                       Parameters of sfvmk : <br></H1>')
@@ -286,7 +286,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
     html += '</table>'
     output_file.write(html)
     # fetch mclog status of all vmnic interfaces
-    if cim_ver:
+    if cli_vib:
         mclog_html = '<table><th>MC-log status</th></tr>\
                       <table border="1">'
         mclog_html += '<th> Interface <th> Status</th>'
@@ -1113,7 +1113,7 @@ if __name__ == "__main__":
                     SF_VER, CLI_VIB)
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
-                             ESX_VER, CIM_VER)
+                             ESX_VER, CLI_VIB)
         sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
         network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
         ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)

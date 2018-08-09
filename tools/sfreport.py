@@ -249,10 +249,54 @@ def vmkernel_logs(output_file):
     output_file.write('%s</p>'%lines)
     return 0
 
-def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode, esx_ver):
+def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
+                         esx_ver, cim_ver):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
                       Parameters of sfvmk : <br></H1>')
+    # module parameters list
+    mod_param_cmd = "esxcli " + server + " system module parameters list -m sfvmk"
+    mod_param_list = execute(mod_param_cmd, mode)
+    html = '<table style="font-size:18px;"><th>Module Parameters\
+                         </th></tr><table border="1">'
+    cnt = 0
+    word_no = 0
+    for line in mod_param_list.splitlines():
+         if not line.startswith("--"):
+            if cnt == 0:
+               for word in re.split(r'\s{2,}', line):
+                   if len(word) != 0:
+                      html += '<th>%s &nbsp' % word + '</th>'
+            else:
+               l = re.search('((?i)\w+)\s+(\w+)\s+(\w+)\s+(.*)',
+                                 line, re.DOTALL)
+               name = l.group(1)
+               var = l.group(2)
+               val = l.group(3)
+               description = l.group(4)
+               # to handle the blank value of the mod params,
+               # following handling is needed
+               if val.isalpha():
+                   description = val + description
+                   val = ''
+               html += '</tr><td>%s' % name + '<td>%s' % var + '<td>%s' % val \
+                       + '<td>%s' % description
+            html += '</tr>'
+            cnt += 1
+    html += '</table>'
+    output_file.write(html)
+    # fetch mclog status of all vmnic interfaces
+    if cim_ver:
+        mclog_html = '<table><th>MC-log status</th></tr>\
+                      <table border="1">'
+        mclog_html += '<th> Interface <th> Status</th>'
+        for nic in sfvmk_adapter_list:
+            cmd = "esxcli " + server + " sfvmk mclog get -n " + nic
+            mclog_status = execute(cmd, mode)
+            mclog_html += '</tr><td>%s' % nic + '<td>%s' % mclog_status
+            mclog_html += '</tr>'
+        mclog_html += '</table>'
+        output_file.write(mclog_html)
     # intrpt_html table for interrupt moderation settings.
     intrpt_html = '<table><th>Interrupt moderation table</th></tr>\
                    <table border="1">'
@@ -1069,7 +1113,7 @@ if __name__ == "__main__":
                     SF_VER, CLI_VIB)
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
-                             ESX_VER)
+                             ESX_VER, CIM_VER)
         sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
         network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
         ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)

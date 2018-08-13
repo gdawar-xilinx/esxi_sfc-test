@@ -914,6 +914,67 @@ def portgroup_details(output_file, server, mode):
     output_file.write(table)
     return 0
 
+def sf_statistics(output_file, server, mode, adapter_list):
+    """function to fetch Solarflare statistic counters"""
+    hw_q_start = False
+    direction = None
+    failed_nic_stats = []
+    no_of_interfaces = len(adapter_list)
+    output_file.write('<h1 id="SF Statistics"style="font-size:26px;"> \
+                        SF Statistics: <br></H1>')
+    interface_count = 1
+    sf_table = '<table><table border="1">'
+    sf_table += '<th>Interface_name</th>'
+    sf_stats_dict = defaultdict()
+    for interface in adapter_list:
+         sf_stats_cmd = 'esxcli ' + server + ' sfvmk stats  get -n '\
+                        + interface
+         sf_stats_values = execute(sf_stats_cmd, mode)
+         if sf_stats_values == 1:
+             failed_nic_stats.append(interface)
+             continue
+         sf_table += '<td> %s </td>' % interface
+         if interface_count == no_of_interfaces:
+             sf_table += '</tr>'
+         for line in sf_stats_values.splitlines():
+             if len(line):
+                 if line.startswith("  -- Per Hardware Queue Statistics"):
+                     hw_q_start = True
+                     continue
+                 if hw_q_start == False:
+                     lhs, rhs = line.split(':', 1)
+                     if lhs not in sf_stats_dict:
+                         sf_stats_dict[lhs] = []
+                     sf_stats_dict[lhs.strip()].append(rhs.strip())
+             if hw_q_start  == True:
+                 if ":" in line and line not in sf_stats_dict:
+                      direction = line
+                 else:
+                      stats_parse = line.split()
+                      num_stats = len(stats_parse) // 2
+                      if num_stats*2 != len(stats_parse):
+                          continue
+                      for i in xrange(0,len(stats_parse),2):
+                           stats_param = direction + stats_parse[i]
+                           stats_value = stats_parse[i+1]
+                           if stats_param not in sf_stats_dict:
+                               sf_stats_dict[stats_param] = []
+                           sf_stats_dict[stats_param].append(stats_value)
+         interface_count += 1
+         hw_q_start = False
+    stats_dict = sorted(sf_stats_dict.items())
+    for key, values in stats_dict:
+         sf_table += '<th align=left>%s</th>' % key
+         for value in values:
+             sf_table += '<td> %s </td>' % value
+         sf_table += '</tr>'
+    sf_table += '</table>'
+    output_file.write(sf_table)
+    if failed_nic_stats:
+        output_file.write("SF statistics not available for interfaces:%s"
+                          %failed_nic_stats)
+    return 0
+
 def vswitch_details(output_file, server, mode):
     """function to fetch Vswitch portgroup informations"""
     output_file.write('<h1 id="vSwitch"style="font-size:26px;">\
@@ -1074,7 +1135,7 @@ if __name__ == "__main__":
         OUT_FILE = open(HTML_FILE, 'w')
         # Call the feature specific funtions.
         file_header(OUT_FILE, CURRENT_TIME, CURRENT_MODE, SFREPORT_VERSION)
-        OUT_FILE.write('<h1 style="font-size:26px;">-> Report Index:<br></H1>')
+        OUT_FILE.write('<h1 style="font-size:26px;"> Report Index:<br></H1>')
         OUT_FILE.write('<a href="#System Summary">-> System Summary</a><br>')
         OUT_FILE.write('<a href="#Software Versions">-> Software Versions</a><br>')
         OUT_FILE.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')
@@ -1087,6 +1148,9 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#SF PCI devices">-> SF PCI devices</a><br>')
         OUT_FILE.write('<a href="#Interface Statistics">-> Interface Statistics\
                         </a><br>')
+        if CLI_VIB:
+            OUT_FILE.write('<a href="#SF Statistics">-> SF Statistics\
+                                </a><br>')
         OUT_FILE.write('<a href="#File Properties">-> File Properties</a><br>')
         OUT_FILE.write('<a href="#ARP Cache">-> ARP Cache</a><br>')
         OUT_FILE.write('<a href="#Virtual Machine">-> Virtual Machine</a><br>')
@@ -1123,6 +1187,8 @@ if __name__ == "__main__":
         virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        if CLI_VIB:
+            sf_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
         # run esxi specific functions under this check.
         if CURRENT_MODE == "esxi":
             sf_module_file(OUT_FILE)

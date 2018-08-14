@@ -4101,8 +4101,7 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_OK;
 
   if (!pAdapter) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Adapter pointer is NULL");
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter pointer is NULL");
     status = VMK_FAILURE;
     goto end;
   }
@@ -4112,8 +4111,7 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
 
   /* Nothing to do if adapter is down already and filters were all gone */
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Adapter not started, Ignoring filterKey:%u", filterKey);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter not started, Ignoring filterKey:%u", filterKey);
     goto done;
   }
 
@@ -4127,18 +4125,16 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   pQueueData = &pQueueInfo->queueData[0];
 
   if (pQueueData[qidVal].activeFilters == 0) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "qData[%u].activeFilters = %u (max %u), Ignoring",
-                         qidVal, pQueueData[qidVal].activeFilters,
-                         pQueueData[qidVal].maxFilters);
+    SFVMK_ADAPTER_ERROR(pAdapter, "qData[%u].activeFilters = %u (max %u), Ignoring",
+                        qidVal, pQueueData[qidVal].activeFilters,
+                        pQueueData[qidVal].maxFilters);
     status = VMK_FAILURE;
     goto done;
   }
 
   pFdbEntry = sfvmk_removeFilterRule(pAdapter, filterKey);
   if (!pFdbEntry) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Filter not found for filterKey: %u", filterKey);
+    SFVMK_ADAPTER_ERROR(pAdapter, "Filter not found for filterKey: %u", filterKey);
     status = VMK_FAILURE;
     goto done;
   }
@@ -4146,6 +4142,13 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
   status = vmk_HashKeyDelete(pAdapter->filterDBHashTable,
                              (vmk_HashKey)(vmk_uint64)filterKey,
                              (vmk_HashValue *)&pFdbEntry);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Hash key (%u) delete failed, status: %s",
+                        filterKey, vmk_StatusToString(status));
+    status = VMK_FAILURE;
+    goto done;
+  }
+
   sfvmk_removeUplinkFilter(pAdapter, qidVal);
   sfvmk_freeFilterRule(pAdapter, pFdbEntry);
 
@@ -4186,8 +4189,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   VMK_ReturnStatus status = VMK_OK;
 
   if (!pAdapter) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Adapter pointer is NULL");
+    SFVMK_ADAPTER_ERROR(pAdapter, "Adapter pointer is NULL");
     status = VMK_FAILURE;
     goto end;
   }
@@ -4214,6 +4216,7 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
 
   pFdbEntry = sfvmk_allocFilterRule(pAdapter);
   if (!pFdbEntry) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Memory allocation for filter entry failed");
     status = VMK_FAILURE;
     goto done;
   }
@@ -4239,8 +4242,8 @@ sfvmk_applyQueueFilter(vmk_AddrCookie cookie,
   status = sfvmk_prepareFilterRule(pAdapter, pFilter, pFdbEntry,
                                    filterKey, hwQid, hwFilterFlag);
   if (status != VMK_OK) {
-    vmk_LogMessage("Failed to prepare filter rule with error %s",
-                   vmk_StatusToString(status));
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to prepare filter rule with error %s",
+                        vmk_StatusToString(status));
     status = VMK_FAILURE;
     goto free_filter_rule;
   }

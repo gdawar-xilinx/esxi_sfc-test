@@ -4128,14 +4128,12 @@ sfvmk_removeQueueFilter(vmk_AddrCookie cookie,
     SFVMK_ADAPTER_ERROR(pAdapter, "qData[%u].activeFilters = %u (max %u), Ignoring",
                         qidVal, pQueueData[qidVal].activeFilters,
                         pQueueData[qidVal].maxFilters);
-    status = VMK_FAILURE;
     goto done;
   }
 
   pFdbEntry = sfvmk_removeFilterRule(pAdapter, filterKey);
   if (!pFdbEntry) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Filter not found for filterKey: %u", filterKey);
-    status = VMK_FAILURE;
     goto done;
   }
 

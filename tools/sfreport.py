@@ -842,6 +842,33 @@ def net_queue_status(output_file, sfvmk_adapter_list):
         output_file.write('%s</p>' % lines)
     return 0
 
+def get_geneve_info(output_file, server, mode):
+    """function to fetch information related to GENEVE"""
+    output_file.write('<h1 id="GENEVE"style="font-size:26px;">\
+                          GENEVE: <br></H1>')
+    # get GENEVE vib info:
+    geneve_vib = execute("esxcli " + server + " software vib list |grep nsx")
+    if not geneve_vib:
+        output_file.write("INFO: No GENEVE VIBs were installed")
+        return 0
+    #list the geneve related vibs:
+    if mode == "vcli" or mode == "esxi":
+       output_file.write('<h1"style="font-size:18px;"><b>Geneve VIBs:</b><br></H1>')
+       words = ('<p>')
+       for line in geneve_vib.splitlines():
+           words += '<small>%s</small><br>' % line
+       output_file.write('%s</p>' % words)
+    # fetch geneve configuration:
+    if mode == "esxi":
+       output_file.write('<h1"style="font-size:18px;"><b>Geneve Configuration Summary:</b><br></H1>')
+       cmd = "net-vdl2 -l"
+       geneve_info = execute(cmd)
+       lines = ('<p>')
+       for l in geneve_info.splitlines():
+           lines += '<small>%s</small><br>' %l
+       output_file.write('%s</p>' % lines)
+    return 0
+
 def file_properties(output_file, server, mode):
     """function to get file properties of SF drivers"""
     file_cmd = "esxcli "+ server + " software vib get"
@@ -1200,6 +1227,7 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#vSwitch">-> vSwitch</a><br>')
         OUT_FILE.write('<a href="#Portgroup Information">-> Portgroup \
                         Information </a><br>')
+        OUT_FILE.write('<a href="#GENEVE">-> GENEVE </a><br>')
         OUT_FILE.write('<a href="#Interface Statistics">-> Interface Statistics\
                         </a><br>')
         if CLI_VIB:
@@ -1236,6 +1264,7 @@ if __name__ == "__main__":
         virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        get_geneve_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         if CLI_VIB:
             hw_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)

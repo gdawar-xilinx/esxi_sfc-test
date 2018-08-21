@@ -233,6 +233,39 @@ def driver_binding(output_file, server, mode):
     output_file.write(html)
     return 0
 
+def vpd_information(output_file, server, mode, adapter_list):
+    """function to fetch VPD & FEC information"""
+    output_file.write('<h1 id="VPD information"style="font-size:26px;">\
+                              VPD information: <br></H1>')
+    vpd_table = '<table><th>VPD information</th></tr><table border="1">'
+    vpd_table += '<th align=left> Interface_name</th>'
+    interface_count = 1
+    vpd_dict = defaultdict()
+    no_of_interfaces = len(adapter_list)
+    for nic in adapter_list:
+        vpd_table += '<td> %s </td>' % nic
+        if interface_count == no_of_interfaces:
+           vpd_table += '</tr>'
+        cmd = "esxcli " + server + " sfvmk vpd get -n " + nic
+        vpd_info = execute(cmd, mode)
+        for line in vpd_info.splitlines():
+             if line == "":
+                 continue
+             lhs, rhs = line.split(":",1)
+             if interface_count == 1:
+                 vpd_dict[lhs] = []
+                 vpd_dict[lhs].append(rhs)
+             else:
+                 vpd_dict[lhs].append(rhs)
+        interface_count += 1
+    for key, values in sorted(vpd_dict.items()):
+        vpd_table += '<th align=left>%s</th>' % key
+        for value in values:
+            vpd_table += '<td> %s </td>' % value
+        vpd_table += '</tr>'
+    vpd_table += '</table>'
+    output_file.write(vpd_table)
+
 def vmkernel_logs(output_file):
     """function to fetch sfvmk specific vmkernel logs [dmesg]"""
     output_file.write('<h1 id="VMkernel logs"style="font-size:26px;">\
@@ -660,13 +693,13 @@ def network_configuration(output_file, server, mode, esx_ver):
     output_file.write(route_table)
     return 0
 
-def ethernet_settings(output_file, sfvmk_adapter_list, server, mode):
+def ethernet_settings(output_file, sfvmk_adapter_list, server, mode, cli_vib):
     """Fetch ethernet setting of SF adapters"""
     for interface in sfvmk_adapter_list:
         output_file.write('<h1 id="Ethernet Settings"style="font-size:26px;"> \
                           Ethernet Settings for %s: <br></H1>' % interface)
         nic_info_cmd = "esxcli " + server + " network nic get -n " + interface
-        nic_info = execute(nic_info_cmd)
+        nic_info = execute(nic_info_cmd, mode)
         nic_info = nic_info.split('\n')
         lines = ('<p>')
         for line in nic_info:
@@ -674,7 +707,7 @@ def ethernet_settings(output_file, sfvmk_adapter_list, server, mode):
         output_file.write('%s</p>' % lines)
         ring_info_cmd = "esxcli " + server + " network nic ring current get -n "\
                         + interface
-        ring_info = execute(ring_info_cmd)
+        ring_info = execute(ring_info_cmd, mode)
         ring_info = ring_info.split('\n')
         lines = ('<p>')
         output_file.write('<h1 style="font-size:18px;"> Rx/Tx Ring configurations\
@@ -682,6 +715,17 @@ def ethernet_settings(output_file, sfvmk_adapter_list, server, mode):
         for line in ring_info:
             lines += '%s<br>' % line
         output_file.write('%s</p>' % lines)
+        if cli_vib:
+            fec_cmd = "esxcli " + server + " sfvmk fec get -n " + interface
+            fec_info = execute(fec_cmd, mode)
+            fec_info = fec_info.split('\n')
+            lines = ('<p>')
+            output_file.write('<h1 style="font-size:18px;"> FEC configuration \
+                                      for %s: </H1>' % interface)
+            for line in fec_info:
+                lines += '%s<br>' % line
+            output_file.write('%s</p>' % lines)
+
     return 0
 
 def interface_statistics(output_file, sfvmk_adapter_list, server, mode):
@@ -1138,9 +1182,12 @@ if __name__ == "__main__":
         OUT_FILE.write('<h1 style="font-size:26px;"> Report Index:<br></H1>')
         OUT_FILE.write('<a href="#System Summary">-> System Summary</a><br>')
         OUT_FILE.write('<a href="#Software Versions">-> Software Versions</a><br>')
+        if CLI_VIB:
+            OUT_FILE.write('<a href="#VPD information">-> VPD information</a><br>')
         OUT_FILE.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')
         OUT_FILE.write('<a href="#SFVMK Parameters">-> sfvmk Parameters</a><br>\
                        ')
+
         OUT_FILE.write('<a href="#Ethernet Settings">-> Ethernet Settings\
                         </a><br>')
         OUT_FILE.write('<a href="#Network Configurations">-> Network\
@@ -1175,12 +1222,14 @@ if __name__ == "__main__":
         system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         sw_versions(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                     SF_VER, CLI_VIB)
+        if CLI_VIB:
+            vpd_information(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                              ESX_VER, CLI_VIB)
         sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
         network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
-        ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
+        ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE, CLI_VIB)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)

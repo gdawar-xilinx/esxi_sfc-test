@@ -1073,6 +1073,27 @@ def vswitch_details(output_file, server, mode):
     output_file.write('%s</p>' % lines)
     return 0
 
+def lacp_details(output_file, server, mode):
+    """function to fetch information about LACP"""
+    output_file.write('<h1 id="LACP"style="font-size:26px;">\
+                          LACP: <br></H1>')
+    output_file.write('<h1"style="font-size:18px;"><b>LACP Status:</b><br></H1>')
+    lacp_status_cmd = "esxcli " + server + " network vswitch dvs vmware lacp status get"
+    if lacp_status.startswith("LACP is supported"):
+        output_file.write("INFO: LACP is not configured on ESXi host")
+        return 1
+    lacp_status = execute(lacp_status_cmd, mode)
+    output_file.write('<p><PRE>%s</PRE></p>' % lacp_status)
+    lacp_config_cmd = "esxcli " + server + " network vswitch dvs vmware lacp config get"
+    lacp_config = execute(lacp_config_cmd, mode)
+    output_file.write('<h1"style="font-size:18px;"><b>LACP Configuration:</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>'% lacp_config )
+    output_file.write('<h1"style="font-size:18px;"><b>LACP Stats:</b><br></H1>')
+    lacp_stats_cmd = "esxcli " + server + " network vswitch dvs vmware lacp stats get"
+    lacp_stats = execute(lacp_stats_cmd, mode)
+    output_file.write('<p><PRE>%s</PRE></p>' % lacp_stats)
+    return 0
+
 def numa_information(output_file):
     """function to fetch the memory information."""
     output_file.write('<h1 id="NUMA Information"style="font-size:26px;">\
@@ -1225,6 +1246,7 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#ARP Cache">-> ARP Cache</a><br>')
         OUT_FILE.write('<a href="#Virtual Machine">-> Virtual Machine</a><br>')
         OUT_FILE.write('<a href="#vSwitch">-> vSwitch</a><br>')
+        OUT_FILE.write('<a href="#LACP">-> LACP</a><br>')
         OUT_FILE.write('<a href="#Portgroup Information">-> Portgroup \
                         Information </a><br>')
         OUT_FILE.write('<a href="#GENEVE">-> GENEVE </a><br>')
@@ -1263,6 +1285,7 @@ if __name__ == "__main__":
         arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        lacp_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         get_geneve_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)

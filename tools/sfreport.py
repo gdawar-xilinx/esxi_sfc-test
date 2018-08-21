@@ -174,7 +174,7 @@ def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
     output_file.write('<h1 id="Software Versions"style="font-size:26px;"\
                           > Software Versions: <br></H1>')
     html = '<table><table border="1">'
-    for key,val in sf_ver.iteritems():
+    for key,val in sf_ver.items():
         html += '<th align=left> %s &nbsp</th>' % key
         html += '<td>%s &nbsp</td>' % val
     html += '</table>'
@@ -235,9 +235,9 @@ def driver_binding(output_file, server, mode):
 
 def vpd_information(output_file, server, mode, adapter_list):
     """function to fetch VPD & FEC information"""
-    output_file.write('<h1 id="VPD information"style="font-size:26px;">\
-                              VPD information: <br></H1>')
-    vpd_table = '<table><th>VPD information</th></tr><table border="1">'
+    output_file.write('<h1 id="VPD Information"style="font-size:26px;">\
+                              VPD Information: <br></H1>')
+    vpd_table = '<table><th>VPD Information</th></tr><table border="1">'
     vpd_table += '<th align=left> Interface_name</th>'
     interface_count = 1
     vpd_dict = defaultdict()
@@ -268,8 +268,8 @@ def vpd_information(output_file, server, mode, adapter_list):
 
 def vmkernel_logs(output_file):
     """function to fetch sfvmk specific vmkernel logs [dmesg]"""
-    output_file.write('<h1 id="VMkernel logs"style="font-size:26px;">\
-                      VMkernel logs: <br></H1>')
+    output_file.write('<h1 id="VMkernel Logs"style="font-size:26px;">\
+                      VMkernel Logs: <br></H1>')
     dmesg_logs = execute('dmesg -c |grep sfvmk')
     lines = ('<p>')
     if dmesg_logs == 1 or dmesg_logs is None:
@@ -286,7 +286,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
                          esx_ver, cli_vib):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
-                      Parameters of sfvmk : <br></H1>')
+                      SFVMK Parameters: <br></H1>')
     # module parameters list
     mod_param_cmd = "esxcli " + server + " system module parameters list -m sfvmk"
     mod_param_list = execute(mod_param_cmd, mode)
@@ -331,7 +331,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
         mclog_html += '</table>'
         output_file.write(mclog_html)
     # intrpt_html table for interrupt moderation settings.
-    intrpt_html = '<table><th>Interrupt moderation table</th></tr>\
+    intrpt_html = '<table><th>Interrupt Moderation Table</th></tr>\
                    <table border="1">'
     intrpt_mod_hdr_list = ['NIC', 'rx_microsecs', 'rx_max_frames',\
                            'tx_microsecs', 'tx_max_frames',\
@@ -342,7 +342,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
         intrpt_html += '<th>%s' % hdr + '</th>'
     intrpt_html += '</tr>'
     # rxtx_ring_html table for rx/tx ring settings.
-    rxtx_ring_html = '<table><th>RX_TX Ring/TSO-CSO table</th></tr>\
+    rxtx_ring_html = '<table><th>RX_TX Ring/TSO-CSO Table</th></tr>\
                       <table border="1">'
     rxtx_ring_hdr_list = ['NIC', 'RX', 'RX_Mini', 'RX_Jumbo', 'TX', 'TSO',\
                           'CSO']
@@ -350,7 +350,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
         rxtx_ring_html += '<th>%s' % hdr + '</th>'
     rxtx_ring_html += '</tr>'
     # Pause Params settings
-    pause_params_html = '<table><th>Pause parameters table</th></tr>\
+    pause_params_html = '<table><th>Pause parameters Table</th></tr>\
                          <table border="1">'
     pause_params_hdr_list = ['NIC', 'Pause_Support', 'Pause_RX', 'Pause_TX',\
                              'Auto_Neg', 'Auto_Neg_Res_Avail',\
@@ -364,7 +364,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
     get_pause_settings = get_pause_settings.split('\n')
     if mode == 'esxi':
        for intf in sfvmk_adapter_list:
-            rxq_html = '<table><th>%s RX Queue Info table</th></tr>\
+            rxq_html = '<table><th>%s RX Queue Info Table</th></tr>\
                                         <table border="1">' % intf
             rxq_cmd = "vsish -e cat /net/pNics/%s/rxqueues/info"%intf
             rxq_count = execute(rxq_cmd)
@@ -376,7 +376,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
                      rxq_html += '</tr>'
             rxq_html += '</table>'
             output_file.write(rxq_html)
-            txq_html = '<table><th>%s TX Queue Info table</th></tr>\
+            txq_html = '<table><th>%s TX Queue Info Table</th></tr>\
                                                  <table border="1">' % intf
             txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
             txq_count = execute(txq_cmd)
@@ -457,8 +457,8 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
 
 def sf_pci_devices(output_file, sfvmk_tlp_list, server, mode):
     """function to fetch sf pci info"""
-    output_file.write('<h1 id="SF PCI devices"style="font-size:26px;">\
-                      Solarflare PCI devices: <br></H1>')
+    output_file.write('<h1 id="SF PCI Devices"style="font-size:26px;">\
+                      SF PCI Devices: <br></H1>')
     tlp_dict = defaultdict(list)
     tlp_count = 0
     #create html table for all system_summary_header elements.
@@ -493,9 +493,9 @@ def sf_pci_devices(output_file, sfvmk_tlp_list, server, mode):
     return 0
 
 def pci_configuration_space(output_file):
-    """function to fetch PCI configuration space dump"""
-    output_file.write('<h1 id="PCI configuration"style="font-size:26px;">\
-                      PCI configuration space: <br></H1>')
+    """function to fetch PCI Configuration space dump"""
+    output_file.write('<h1 id="PCI Configuration"style="font-size:26px;">\
+                      PCI Configuration: <br></H1>')
     dmesg = execute("lspci -d")
     lines = ('<p>')
     for line in dmesg.splitlines():
@@ -506,7 +506,7 @@ def pci_configuration_space(output_file):
 def sf_kernel_modules(output_file):
     """function to fetch the solarflare specific kernel modules on the server"""
     output_file.write('<h1 id="Known Kernel Modules"style="font-size:26px;">\
-                      Known kernel modules for Solarflare PCI IDs: <br></H1>')
+                      Known Kernel Modules: <br></H1>')
     kernel_modules = execute('lspci -p |grep sfvmk')
     kernel_modules = kernel_modules.split('\n')
     html = '<table><table border="1">'
@@ -540,8 +540,8 @@ def sf_kernel_modules(output_file):
 
 def network_configuration(output_file, server, mode, esx_ver):
     """function to fetch network configuration informations"""
-    output_file.write('<h1 id="Network Configurations"style="font-size:26px;"> \
-                      Network Configurations: <br></H1>')
+    output_file.write('<h1 id="Network Configuration"style="font-size:26px;"> \
+                      Network Configuration: <br></H1>')
     nw_config_cmd = "esxcli "+ server + " network nic list"
     nw_config_val = execute(nw_config_cmd)
     nw_config_val = nw_config_val.split('\n')
@@ -585,7 +585,7 @@ def network_configuration(output_file, server, mode, esx_ver):
     ip_list = ['v4', 'v6']
     for ip_type in ip_list:
         if ip_type == "v4":
-            ip4_table = '<table style="font-size:18px;"><th>IP%s configurations:\
+            ip4_table = '<table style="font-size:18px;"><th>IP%s Configuration:\
                          </th></tr><table border="1">'% ip_type
             hdr_list = ['Interface', 'IPV4 address', 'IPv4 netmask', \
                         'IPv4Bcast address', 'Type', 'Gateway', 'DHCP DNS']
@@ -599,7 +599,7 @@ def network_configuration(output_file, server, mode, esx_ver):
             for hdr in hdr_list:
                 ip4_table += '<th>%s' % hdr + '</th>'
         elif ip_type == "v6":
-            ip6_table = '<table style="font-size:18px;"><th>IP%s configurations: \
+            ip6_table = '<table style="font-size:18px;"><th>IP%s Configuration: \
                          </th></tr><table border="1">' % ip_type
             hdr_list = ('Interface', 'Address', 'Netmask', 'Type', 'Status')
             ipv_ip_cmd = "esxcli " + server + " network ip interface ip" + \
@@ -664,7 +664,7 @@ def network_configuration(output_file, server, mode, esx_ver):
     output_file.write(ip4_table)
     output_file.write(ip6_table)
     route_table = '<table><table border="1">'
-    output_file.write('<h1 style="font-size:26px;"> IPv4 Routing Table: <br></H1>')
+    output_file.write('<h1 style="font-size:18px;"> IPv4 Routing Table: <br></H1>')
     ipv4_route_cmd = "esxcli "+ server + " network ip route ipv4 list"
     ipv4_route_info = execute(ipv4_route_cmd)
     ipv4_route_info = ipv4_route_info.split('\n')
@@ -691,6 +691,8 @@ def network_configuration(output_file, server, mode, esx_ver):
                            '<td>%s'%interface +'<td>%s'%source
     route_table += '</table>'
     output_file.write(route_table)
+    if mode == 'esxi':
+        dns_information(OUT_FILE)
     return 0
 
 def ethernet_settings(output_file, sfvmk_adapter_list, server, mode, cli_vib):
@@ -710,7 +712,7 @@ def ethernet_settings(output_file, sfvmk_adapter_list, server, mode, cli_vib):
         ring_info = execute(ring_info_cmd, mode)
         ring_info = ring_info.split('\n')
         lines = ('<p>')
-        output_file.write('<h1 style="font-size:18px;"> Rx/Tx Ring configurations\
+        output_file.write('<h1 style="font-size:18px;"> Rx/Tx Ring Configuration\
                           for %s: </H1>'% interface)
         for line in ring_info:
             lines += '%s<br>' % line
@@ -720,7 +722,7 @@ def ethernet_settings(output_file, sfvmk_adapter_list, server, mode, cli_vib):
             fec_info = execute(fec_cmd, mode)
             fec_info = fec_info.split('\n')
             lines = ('<p>')
-            output_file.write('<h1 style="font-size:18px;"> FEC configuration \
+            output_file.write('<h1 style="font-size:18px;"> FEC Configuration \
                                       for %s: </H1>' % interface)
             for line in fec_info:
                 lines += '%s<br>' % line
@@ -813,8 +815,8 @@ def interface_statistics(output_file, sfvmk_adapter_list, server, mode):
 def sf_module_file(output_file):
     """Fetch information of SF modules loaded"""
     lines = ('<p>')
-    output_file.write('<h1 id="module file"style="font-size:26px;">\
-                      SF Module file names : <br></H1>')
+    output_file.write('<h1 id="SF Module File Names"style="font-size:26px;">\
+                      SF Module File Names : <br></H1>')
     module_cmd = "vmkload_mod -s sfvmk"
     module_info = execute(module_cmd)
     module_info = module_info.split('\n')
@@ -848,7 +850,7 @@ def file_properties(output_file, server, mode):
                             file_status, re.DOTALL)
     sfvmk_info = file_status.group(2)
     table = '<table id="File Properties"style="font-size:26px;"><th>\
-             Driver File properties: </th><table border="1">'
+             File Properties: </th><table border="1">'
     for line in sfvmk_info.split('\n'):
         line_len = len(line.strip())
         if line_len != 0:
@@ -867,7 +869,7 @@ def file_properties(output_file, server, mode):
 
 def arp_cache(output_file, server, mode):
     """function to fetch arp information."""
-    table = '<table id="ARP Cache"style="font-size:26px;"><th>ARP cache:</th>\
+    table = '<table id="ARP Cache"style="font-size:26px;"><th>ARP Cache:</th>\
             <table border="1">'
     for hdr in ('Neighbor', 'MAC Address', 'Vmknic', 'Expiry', 'State/Type'):
         table += '<th>%s' % hdr + '</th>'
@@ -899,7 +901,7 @@ def arp_cache(output_file, server, mode):
 def virtual_machine_info(output_file, server, mode):
     """function to fetch Virtual Machine information on the host"""
     table = '<table id="Virtual Machine"style="font-size:26px;">\
-             <th>Virtual Machine Information: </th><table border="1">'
+             <th>Virtual Machine: </th><table border="1">'
     vm_cmd = "esxcli " + server + " network vm list"
     for hdr in ('World ID', 'Name', 'Num Ports', 'Networks'):
         table += '<th>%s' % hdr + '</th>'
@@ -907,7 +909,7 @@ def virtual_machine_info(output_file, server, mode):
     if vm_info == 1 or vm_info is None:
         table = '<table id="Virtual Machine"style="font-size:26px;">\
                 <th>Virtual Machine Information:</th><table border="1">'
-        table += "INFO:No Active Virtual Machines found.."
+        table += "INFO:No Active Virtual Machines found."
         output_file.write(table)
         return 1
     for line in vm_info.split('\n'):
@@ -958,14 +960,14 @@ def portgroup_details(output_file, server, mode):
     output_file.write(table)
     return 0
 
-def sf_statistics(output_file, server, mode, adapter_list):
+def hw_statistics(output_file, server, mode, adapter_list):
     """function to fetch Solarflare statistic counters"""
     hw_q_start = False
     direction = None
     failed_nic_stats = []
     no_of_interfaces = len(adapter_list)
-    output_file.write('<h1 id="SF Statistics"style="font-size:26px;"> \
-                        SF Statistics: <br></H1>')
+    output_file.write('<h1 id="HW Statistics"style="font-size:26px;"> \
+                        HW Statistics: <br></H1>')
     interface_count = 1
     sf_table = '<table><table border="1">'
     sf_table += '<th>Interface_name</th>'
@@ -998,7 +1000,7 @@ def sf_statistics(output_file, server, mode, adapter_list):
                       num_stats = len(stats_parse) // 2
                       if num_stats*2 != len(stats_parse):
                           continue
-                      for i in xrange(0,len(stats_parse),2):
+                      for i in range(0,len(stats_parse),2):
                            stats_param = direction + stats_parse[i]
                            stats_value = stats_parse[i+1]
                            if stats_param not in sf_stats_dict:
@@ -1022,7 +1024,7 @@ def sf_statistics(output_file, server, mode, adapter_list):
 def vswitch_details(output_file, server, mode):
     """function to fetch Vswitch portgroup informations"""
     output_file.write('<h1 id="vSwitch"style="font-size:26px;">\
-                      vSwitch Information: <br></H1>')
+                      vSwitch: <br></H1>')
     vswitch_cmd = "esxcli " + server + " network vswitch standard list"
     vswitch_info = execute(vswitch_cmd)
     vswitch_info = vswitch_info.split('\n')
@@ -1046,7 +1048,7 @@ def vswitch_details(output_file, server, mode):
 
 def numa_information(output_file):
     """function to fetch the memory information."""
-    output_file.write('<h1 id="NUMA info"style="font-size:26px;">\
+    output_file.write('<h1 id="NUMA Information"style="font-size:26px;">\
                       NUMA Information: <br></H1>')
     meminfo_cmd = "vsish -e cat /memory/memInfo"
     mem_info = execute(meminfo_cmd)
@@ -1183,40 +1185,39 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#System Summary">-> System Summary</a><br>')
         OUT_FILE.write('<a href="#Software Versions">-> Software Versions</a><br>')
         if CLI_VIB:
-            OUT_FILE.write('<a href="#VPD information">-> VPD information</a><br>')
+            OUT_FILE.write('<a href="#VPD Information">-> VPD Information</a><br>')
         OUT_FILE.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')
-        OUT_FILE.write('<a href="#SFVMK Parameters">-> sfvmk Parameters</a><br>\
+        OUT_FILE.write('<a href="#SFVMK Parameters">-> Sfvmk Parameters</a><br>\
                        ')
-
         OUT_FILE.write('<a href="#Ethernet Settings">-> Ethernet Settings\
                         </a><br>')
-        OUT_FILE.write('<a href="#Network Configurations">-> Network\
-                        Configurations  </a><br>')
-        OUT_FILE.write('<a href="#SF PCI devices">-> SF PCI devices</a><br>')
-        OUT_FILE.write('<a href="#Interface Statistics">-> Interface Statistics\
-                        </a><br>')
-        if CLI_VIB:
-            OUT_FILE.write('<a href="#SF Statistics">-> SF Statistics\
-                                </a><br>')
+        OUT_FILE.write('<a href="#Network Configuration">-> Network\
+                        Configuration  </a><br>')
+        OUT_FILE.write('<a href="#SF PCI Devices">-> SF PCI Devices</a><br>')
         OUT_FILE.write('<a href="#File Properties">-> File Properties</a><br>')
         OUT_FILE.write('<a href="#ARP Cache">-> ARP Cache</a><br>')
         OUT_FILE.write('<a href="#Virtual Machine">-> Virtual Machine</a><br>')
-        OUT_FILE.write('<a href="#vSwitch">-> vSwitch Information</a><br>')
+        OUT_FILE.write('<a href="#vSwitch">-> vSwitch</a><br>')
         OUT_FILE.write('<a href="#Portgroup Information">-> Portgroup \
                         Information </a><br>')
+        OUT_FILE.write('<a href="#Interface Statistics">-> Interface Statistics\
+                        </a><br>')
+        if CLI_VIB:
+            OUT_FILE.write('<a href="#HW Statistics">-> HW Statistics\
+                                </a><br>')
         if CURRENT_MODE == "esxi":
             # Following module needs to be imported here as vcli python version
             # doesn't have this module included [python-ver < 3]
             from collections import OrderedDict
-            OUT_FILE.write('<a href="#module file">-> SF Module File names\
-                            </a><br>')
-            OUT_FILE.write('<a href="#Known Kernel Modules">->\
-                           Known SF Kernel Modules </a><br>')
-            OUT_FILE.write('<a href="#NUMA info">-> NUMA info</a><br>')
             OUT_FILE.write('<a href="#NetQueue Status">-> NetQueue Status\
                             </a><br>')
-            OUT_FILE.write('<a href="#VMkernel logs">-> VMkernel logs</a><br>')
-            OUT_FILE.write('<a href="#PCI configuration">-> PCI configuration\
+            OUT_FILE.write('<a href="#SF Module File Names">-> SF Module File Names\
+                            </a><br>')
+            OUT_FILE.write('<a href="#Known Kernel Modules">->\
+                           Known Kernel Modules </a><br>')
+            OUT_FILE.write('<a href="#NUMA Information">-> NUMA Information</a><br>')
+            OUT_FILE.write('<a href="#VMkernel Logs">-> VMkernel Logs</a><br>')
+            OUT_FILE.write('<a href="#PCI Configuration">-> PCI Configuration\
                             </a><br>')
 
         system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
@@ -1227,24 +1228,23 @@ if __name__ == "__main__":
         driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                              ESX_VER, CLI_VIB)
-        sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
-        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
         ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE, CLI_VIB)
-        interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
+        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
+        sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
         file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         if CLI_VIB:
-            sf_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            hw_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
         # run esxi specific functions under this check.
         if CURRENT_MODE == "esxi":
+            net_queue_status(OUT_FILE, SFVMK_ADAPTERS)
             sf_module_file(OUT_FILE)
             sf_kernel_modules(OUT_FILE)
             numa_information(OUT_FILE)
-            net_queue_status(OUT_FILE, SFVMK_ADAPTERS)
-            dns_information(OUT_FILE)
             vmkernel_logs(OUT_FILE)
             pci_configuration_space(OUT_FILE)
         print('Generated output file: '+HTML_FILE)

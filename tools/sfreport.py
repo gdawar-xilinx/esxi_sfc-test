@@ -1079,10 +1079,10 @@ def lacp_details(output_file, server, mode):
                           LACP: <br></H1>')
     output_file.write('<h1"style="font-size:18px;"><b>LACP Status:</b><br></H1>')
     lacp_status_cmd = "esxcli " + server + " network vswitch dvs vmware lacp status get"
+    lacp_status = execute(lacp_status_cmd, mode)
     if lacp_status.startswith("LACP is supported"):
         output_file.write("INFO: LACP is not configured on ESXi host")
         return 1
-    lacp_status = execute(lacp_status_cmd, mode)
     output_file.write('<p><PRE>%s</PRE></p>' % lacp_status)
     lacp_config_cmd = "esxcli " + server + " network vswitch dvs vmware lacp config get"
     lacp_config = execute(lacp_config_cmd, mode)

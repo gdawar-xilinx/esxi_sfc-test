@@ -144,14 +144,14 @@ do
          exit
       fi
       echo "Copying esxcli_ext.vib"
-      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/vib/solar*.vib" $pkg_dir
+      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/vib/SFC*.vib" $pkg_dir
       if [ $? -ne 0 ] ;then
          echo "ERROR: SCP failed"
          echo "Aborting!.."
          exit
       fi
       echo "Copying esxcli_ext_bundle.zip"
-      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/solar*.zip" $pkg_dir
+      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/SFC*.zip" $pkg_dir
       if [ $? -ne 0 ] ;then
          echo "ERROR: SCP failed"
          echo "Aborting!.."

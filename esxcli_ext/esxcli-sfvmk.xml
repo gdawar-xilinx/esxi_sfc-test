@@ -43,7 +43,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object mclog --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object mclog --get --nic-name $val{nic-name}</execute>
       </command>
       <!-- esxcli sfvmk mclog set -->
       <command path="sfvmk.mclog.set">
@@ -62,7 +62,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object mclog --set --nic-name $val{nic-name} --enable $val{enable}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object mclog --set --nic-name $val{nic-name} --enable $val{enable}</execute>
       </command>
       <!-- esxcli sfvmk statistics get -->
       <command path="sfvmk.stats.get">
@@ -78,7 +78,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object stats --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object stats --get --nic-name $val{nic-name}</execute>
       </command>
       <!-- esxcli sfvmk vpd get -->
       <command path="sfvmk.vpd.get">
@@ -94,7 +94,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object vpd --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object vpd --get --nic-name $val{nic-name}</execute>
       </command>
 
       <!-- esxcli sfvmk firmware get -->
@@ -111,7 +111,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object firmware --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object firmware --get --nic-name $val{nic-name}</execute>
       </command>
 
       <!-- esxcli sfvmk firmware set -->
@@ -134,7 +134,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} --type $val{type}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} --type $val{type}</execute>
       </command>
 
       <!-- esxcli sfvmk fec get -->
@@ -151,7 +151,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object fec --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object fec --get --nic-name $val{nic-name}</execute>
       </command>
       <!-- esxcli sfvmk fec set -->
       <command path="sfvmk.fec.set">
@@ -170,7 +170,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/solarflare/bin/sfvmkcli --object fec --set --nic-name $val{nic-name} --mode $val{mode}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object fec --set --nic-name $val{nic-name} --mode $val{mode}</execute>
       </command>
    </commands>
 </plugin>

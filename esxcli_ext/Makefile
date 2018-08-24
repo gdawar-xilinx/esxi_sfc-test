@@ -39,7 +39,7 @@ PLUGIN_XML = esxcli-sfvmk.xml
 
 DESC_VENDOR_EMAIL=support@solarflare.com
 DESC_VERSION=$(UWTOOL_VERSION)-03
-DESC_VENDOR=SolarFlare
+DESC_VENDOR=SFC
 DESC_SUMMARY=esxcli extension for SFVMK driver
 DESC_DESCRIPTION=Userworld Tool to communicate with a VMKAPI driver module
 DESC_URLS=descriptor-urls.xml
@@ -58,7 +58,7 @@ DEV_SIGNING_PREFIX=vmpartner
 
 BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
-BULL_VENDOR_CODE=solarflare
+BULL_VENDOR_CODE=SFC
 
 DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 DEV_release_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast

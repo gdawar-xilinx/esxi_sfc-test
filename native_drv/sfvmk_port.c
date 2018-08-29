@@ -907,6 +907,11 @@ sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
         SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
+      case EFX_PHY_CAP_AN:
+        pSupportedModes[index].speed = VMK_LINK_SPEED_AUTO;
+        pSupportedModes[index].duplex = VMK_LINK_DUPLEX_AUTO;
+        break;
+
       default:
         SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
                             "Unsupported cap = %d", cap);

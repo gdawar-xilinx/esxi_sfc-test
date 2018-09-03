@@ -849,7 +849,7 @@ def get_geneve_info(output_file, server, mode):
     # get GENEVE vib info:
     geneve_vib = execute("esxcli " + server + " software vib list |grep nsx")
     if not geneve_vib:
-        output_file.write("INFO: No GENEVE VIBs were installed")
+        output_file.write("INFO: No GENEVE VIBs installed")
         return 0
     #list the geneve related vibs:
     if mode == "vcli" or mode == "esxi":
@@ -867,6 +867,101 @@ def get_geneve_info(output_file, server, mode):
        for l in geneve_info.splitlines():
            lines += '<small>%s</small><br>' %l
        output_file.write('%s</p>' % lines)
+    return 0
+
+def table_parser(output):
+    """ Generic table parser for output tables
+        returns a dict of headers and their values
+    """
+    v = {}
+    hdr = True
+    hdr_list = []
+    for line in output.splitlines():
+        if line.startswith("--"):
+           continue
+        else:
+           val_list = []
+           for h in re.split(r'\s{2}', line):
+               if h:
+                  if hdr == True:
+                     hdr_list.append(h.lower().strip())
+                  else:
+                     val_list.append(h.strip())
+           hdr = False
+        for key, val in zip(hdr_list, val_list):
+            v[key] = val
+    return v
+
+def get_vxlan_info(output_file, server, mode):
+    """function to fetch information related to VXLAN"""
+    output_file.write('<h1 id="VXLAN"style="font-size:26px;">\
+                              VXLAN: <br></H1>')
+    # Verify if any vxlan vibs are installed, only then proceed
+    vxlan_vib = execute("esxcli " + server + " software vib list "
+                        "|grep -E '(esx-vxlan|nsxv)'")
+    if not vxlan_vib:
+        output_file.write("INFO: No VXLAN VIBs installed")
+        return 0
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN VIBs:</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>' % vxlan_vib)
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN Configuration:'
+                      '</b><br></H1>')
+    vxlan_list_cmd = "esxcli " + server + " network vswitch dvs vmware vxlan list"
+    vxlan_list = execute(vxlan_list_cmd, mode)
+    output_file.write('<p><PRE>%s</PRE></p>' % vxlan_list)
+    # parse vds_name from vxlan_list
+    vxlan_list_dict = table_parser(vxlan_list)
+    try:
+        vds_name = vxlan_list_dict["vds name"]
+    except (TypeError, KeyError):
+        output_file.write("INFO: No VXLAN Distributed switch found.")
+        return 1
+    # get VXlan stats level
+    vxlan_stats_level_cmd = "esxcli " + server + " network vswitch dvs vmware \
+                            vxlan config stats get"
+    vxlan_stats_level = execute(vxlan_stats_level_cmd, mode)
+    output_file.write('<p>VXLAN stats %s</p>' % vxlan_stats_level)
+    # get VXlan stats
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN Stats:</b><br></H1>')
+    vxlan_stats_cmd = "esxcli " + server + " network vswitch dvs vmware vxlan \
+                        stats list --vds-name " + vds_name
+    vxlan_stats = execute(vxlan_stats_cmd, mode)
+    output_file.write('<p><PRE>%s</PRE></p>' % vxlan_stats)
+    # list the segment IDs
+    seg_id_cmd = "esxcli " + server + " network vswitch dvs vmware vxlan network\
+                  list --vds-name " + vds_name
+    seg_id_list = execute(seg_id_cmd, mode)
+    # fetch vxlan id from segment id list
+    seg_id_dict = table_parser(seg_id_list)
+    try:
+        vxlan_id = seg_id_dict["vxlan id"]
+    except (TypeError, KeyError):
+        output_file.write("INFO: No VXLAN found for Distributed Switch:%s"
+                          %vds_name)
+        return 1
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN Segment Id list:'
+                      '</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>' % seg_id_list)
+    #fetch network statistics for segment-ids
+    seg_id_nw_statistics_cmd = "esxcli " + server + " network vswitch dvs vmware \
+        vxlan network stats list --vds-name " + vds_name + " --vxlan-id " + vxlan_id
+    seg_id_nw_stats = execute(seg_id_nw_statistics_cmd, mode)
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN Segment Id N/W Stats:'
+                      '</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>' % seg_id_nw_stats)
+    #fetch n/w port list
+    nw_port_list_cmd = "esxcli " + server + " network vswitch dvs vmware vxlan network\
+                    port list --vds-name " + vds_name + " --vxlan-id " + vxlan_id
+    nw_port_list = execute(nw_port_list_cmd, mode)
+    output_file.write('<h1"style="font-size:18px;"><b>VXLAN Port Id List:'
+                      '</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>' % nw_port_list)
+    # fetch VXLAN configuration details
+    if mode == "esxi":
+       output_file.write('<h1"style="font-size:18px;"><b>VXLAN Configuration:</b><br></H1>')
+       net_vdl_cmd = "net-vdl2 -l"
+       net_vdl_info = execute(net_vdl_cmd)
+       output_file.write('<p><PRE>%s</PRE></p>' % net_vdl_info)
     return 0
 
 def file_properties(output_file, server, mode):
@@ -1250,6 +1345,7 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#Portgroup Information">-> Portgroup \
                         Information </a><br>')
         OUT_FILE.write('<a href="#GENEVE">-> GENEVE </a><br>')
+        OUT_FILE.write('<a href="#VXLAN">-> VXLAN </a><br>')
         OUT_FILE.write('<a href="#Interface Statistics">-> Interface Statistics\
                         </a><br>')
         if CLI_VIB:
@@ -1288,6 +1384,7 @@ if __name__ == "__main__":
         lacp_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         get_geneve_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        get_vxlan_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         if CLI_VIB:
             hw_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)

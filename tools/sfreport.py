@@ -824,19 +824,36 @@ def sf_module_file(output_file):
 
 def net_queue_status(output_file, sfvmk_adapter_list):
     """function to retrieve info on Netqueue status"""
-    output_file.write('<h1 id="NetQueue Status"style="font-size:26px;">\
-                      NetQueue Status: <br></H1>')
+    output_file.write('<h1 id="NetQueue Summary"style="font-size:26px;">\
+                      NetQueue Summary: <br></H1>')
     for interface in sfvmk_adapter_list:
-        lines = ('<p>')
-        output_file.write('<h1"style="font-size:18px;"> Network queue status of\
-                          %s: <br></H1>'  % interface)
-        netq_cmd = "vsish -e cat /net/pNics/"+ interface \
-                   +"/txqueues/queues/0/stats"
-        netq_status = execute(netq_cmd)
-        netq_status = netq_status.split('\n')
-        for line in netq_status:
-            lines += '<small>%s</small><br>' % line
-        output_file.write('%s</p>' % lines)
+        q_count_cmd = "vsish -pe ls /net/pNics/%s/txqueues/queues" % interface
+        netq_stats = execute(q_count_cmd)
+        # get no. of tx queues available
+        queue_count = []
+        for line in netq_stats.splitlines():
+            q = line.replace('/', '')
+            queue_count.append(q)
+        if queue_count:
+            for qno in queue_count:
+                 output_file.write('<h>%s ' % interface + 'TX Stats Q# %s</h>'
+                                   % qno)
+                 stats_cmd = "vsish -e cat /net/pNics/"+ interface \
+                            +"/txqueues/queues/%s/stats" % qno
+                 netq_stats = execute(stats_cmd)
+                 output_file.write('<p><PRE>%s</PRE></p>' % netq_stats)
+                 output_file.write('<h>%s ' % interface + 'TX Info Q# %s</h>'
+                                   % qno)
+                 tx_info_cmd = "vsish -e cat /net/pNics/" + interface \
+                            + "/txqueues/queues/%s/info" % qno
+                 tx_info = execute(tx_info_cmd)
+                 output_file.write('<p><PRE>%s</PRE></p>' % tx_info)
+                 output_file.write('<h>%s ' % interface + 'RX Info Q# %s</h>'
+                                   % qno)
+                 rx_info_cmd = "vsish -e cat /net/pNics/" + interface \
+                            + "/rxqueues/queues/%s/info" % qno
+                 rx_info = execute(rx_info_cmd)
+                 output_file.write('<p><PRE>%s</PRE></p>' % rx_info)
     return 0
 
 def get_geneve_info(output_file, server, mode):
@@ -1353,7 +1370,7 @@ if __name__ == "__main__":
             # Following module needs to be imported here as vcli python version
             # doesn't have this module included [python-ver < 3]
             from collections import OrderedDict
-            OUT_FILE.write('<a href="#NetQueue Status">-> NetQueue Status\
+            OUT_FILE.write('<a href="#NetQueue Summary">-> NetQueue Summary\
                             </a><br>')
             OUT_FILE.write('<a href="#SF Module File Names">-> SF Module File Names\
                             </a><br>')

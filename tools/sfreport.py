@@ -6,14 +6,12 @@
  Copyright Solarflare Communications 2017
 """
 from __future__ import print_function
-from threading import Timer
-from collections import defaultdict
-import io
 import subprocess
 import re
 import sys
 import optparse
-
+from threading import Timer
+from collections import defaultdict
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
@@ -174,7 +172,7 @@ def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
     output_file.write('<h1 id="Software Versions"style="font-size:26px;"\
                           > Software Versions: <br></H1>')
     html = '<table><table border="1">'
-    for key,val in sf_ver.items():
+    for key, val in sf_ver.items():
         html += '<th align=left> %s &nbsp</th>' % key
         html += '<td>%s &nbsp</td>' % val
     html += '</table>'
@@ -189,15 +187,15 @@ def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
                 if line.startswith('Solarflare') or line == "":
                     continue
                 else:
-                    lhs, rhs = line.split(':',1)
+                    lhs, rhs = line.split(':', 1)
                     if lhs.startswith('vmnic'):
                         lhs = "MAC"
                     keys.append(lhs)
                     values.append(rhs)
             if cnt == 0:
-               for key in keys:
-                   fw_html += '<th>%s &nbsp' % key + '</th>'
-               fw_html += '</tr>'
+                for key in keys:
+                    fw_html += '<th>%s &nbsp' % key + '</th>'
+                fw_html += '</tr>'
             for value in values:
                 fw_html += '<td> %s &nbsp</td>' % value
             fw_html += '</tr>'
@@ -211,7 +209,7 @@ def driver_binding(output_file, server, mode):
     output_file.write('<h1 id="Driver Bindings"style="font-size:26px;"\
                       > Driver Bindings: <br></H1>')
     cmd = 'esxcli ' + server + ' network nic list |grep sfvmk'
-    sf_nw_list = execute(cmd)
+    sf_nw_list = execute(cmd, mode)
     sf_nw_list = sf_nw_list.split('\n')
     html = '<table><table border="1">'
     for hdr in ('address', 'interface', 'driver_name'):
@@ -245,18 +243,18 @@ def vpd_information(output_file, server, mode, adapter_list):
     for nic in adapter_list:
         vpd_table += '<td> %s </td>' % nic
         if interface_count == no_of_interfaces:
-           vpd_table += '</tr>'
+            vpd_table += '</tr>'
         cmd = "esxcli " + server + " sfvmk vpd get -n " + nic
         vpd_info = execute(cmd, mode)
         for line in vpd_info.splitlines():
-             if line == "":
-                 continue
-             lhs, rhs = line.split(":",1)
-             if interface_count == 1:
-                 vpd_dict[lhs] = []
-                 vpd_dict[lhs].append(rhs)
-             else:
-                 vpd_dict[lhs].append(rhs)
+            if line == "":
+                continue
+            lhs, rhs = line.split(":", 1)
+            if interface_count == 1:
+                vpd_dict[lhs] = []
+                vpd_dict[lhs].append(rhs)
+            else:
+                vpd_dict[lhs].append(rhs)
         interface_count += 1
     for key, values in sorted(vpd_dict.items()):
         vpd_table += '<th align=left>%s</th>' % key
@@ -283,7 +281,7 @@ def vmkernel_logs(output_file):
     return 0
 
 def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
-                         esx_ver, cli_vib):
+                         cli_vib):
     """function to fetch the parameter list of sfvmk driver"""
     output_file.write('<h1 id="SFVMK Parameters"style="font-size:26px;">\
                       SFVMK Parameters: <br></H1>')
@@ -293,26 +291,25 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
     html = '<table style="font-size:18px;"><th>Module Parameters\
                          </th></tr><table border="1">'
     cnt = 0
-    word_no = 0
     for line in mod_param_list.splitlines():
-         if not line.startswith("--"):
+        if not line.startswith("--"):
             if cnt == 0:
-               for word in re.split(r'\s{2,}', line):
-                   if len(word) != 0:
-                      html += '<th>%s &nbsp' % word + '</th>'
+                for word in re.split(r'\s{2,}', line):
+                    if len(word) != 0:
+                        html += '<th>%s &nbsp' % word + '</th>'
             else:
-               l = re.search('((?i)\w+)\s+(\w+)\s+(\w+)\s+(.*)',
-                                 line, re.DOTALL)
-               name = l.group(1)
-               var = l.group(2)
-               val = l.group(3)
-               description = l.group(4)
-               # to handle the blank value of the mod params,
-               # following handling is needed
-               if val.isalpha():
-                   description = val + description
-                   val = ''
-               html += '</tr><td>%s' % name + '<td>%s' % var + '<td>%s' % val \
+                l = re.search('((?i)\w+)\s+(\w+)\s+(\w+)\s+(.*)',
+                              line, re.DOTALL)
+                name = l.group(1)
+                var = l.group(2)
+                val = l.group(3)
+                description = l.group(4)
+                # to handle the blank value of the mod params,
+                # following handling is needed
+                if val.isalpha():
+                    description = val + description
+                    val = ''
+                html += '</tr><td>%s' % name + '<td>%s' % var + '<td>%s' % val \
                        + '<td>%s' % description
             html += '</tr>'
             cnt += 1
@@ -363,17 +360,17 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
     get_pause_settings = execute(get_pause_cmd)
     get_pause_settings = get_pause_settings.split('\n')
     if mode == 'esxi':
-       for intf in sfvmk_adapter_list:
+        for intf in sfvmk_adapter_list:
             rxq_html = '<table><th>%s RX Queue Info Table</th></tr>\
                                         <table border="1">' % intf
             rxq_cmd = "vsish -e cat /net/pNics/%s/rxqueues/info"%intf
             rxq_count = execute(rxq_cmd)
             for l in rxq_count.splitlines():
-                 if not l.startswith("rx ") and not l.endswith('}'):
-                     lhs, rhs = l.split(":",1)
-                     rxq_html += '<th align=left>%s</th>' % lhs
-                     rxq_html += '<td> %s</td>'% rhs
-                     rxq_html += '</tr>'
+                if not l.startswith("rx ") and not l.endswith('}'):
+                    lhs, rhs = l.split(":", 1)
+                    rxq_html += '<th align=left>%s</th>' % lhs
+                    rxq_html += '<td> %s</td>'% rhs
+                    rxq_html += '</tr>'
             rxq_html += '</table>'
             output_file.write(rxq_html)
             txq_html = '<table><th>%s TX Queue Info Table</th></tr>\
@@ -381,11 +378,11 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
             txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
             txq_count = execute(txq_cmd)
             for t in txq_count.splitlines():
-                 if not t.startswith("tx ") and not t.endswith('}'):
-                     tlhs, trhs = t.split(":", 1)
-                     txq_html += '<th align=left>%s</th>' % tlhs
-                     txq_html += '<td> %s</td>' % trhs
-                     txq_html += '</tr>'
+                if not t.startswith("tx ") and not t.endswith('}'):
+                    tlhs, trhs = t.split(":", 1)
+                    txq_html += '<th align=left>%s</th>' % tlhs
+                    txq_html += '<td> %s</td>' % trhs
+                    txq_html += '</tr>'
             txq_html += '</table>'
             output_file.write(txq_html)
     # fetch the sfvmk parameters for all sfvmk adapters.
@@ -465,7 +462,7 @@ def sf_pci_devices(output_file, sfvmk_tlp_list, server, mode):
     table = '<table><table border="1">'
     for tlp in sfvmk_tlp_list:
         sf_tlp_cmd = "esxcli "+ server + " hardware pci list |grep -A30 " + tlp
-        sf_tlp_info = execute(sf_tlp_cmd)
+        sf_tlp_info = execute(sf_tlp_cmd, mode)
         for line in sf_tlp_info.split('\n'):
             if line != "" and line != tlp:
                 try:
@@ -853,20 +850,21 @@ def get_geneve_info(output_file, server, mode):
         return 0
     #list the geneve related vibs:
     if mode == "vcli" or mode == "esxi":
-       output_file.write('<h1"style="font-size:18px;"><b>Geneve VIBs:</b><br></H1>')
-       words = ('<p>')
-       for line in geneve_vib.splitlines():
-           words += '<small>%s</small><br>' % line
-       output_file.write('%s</p>' % words)
+        output_file.write('<h1"style="font-size:18px;"><b>Geneve VIBs:</b><br></H1>')
+        words = ('<p>')
+        for line in geneve_vib.splitlines():
+            words += '<small>%s</small><br>' % line
+        output_file.write('%s</p>' % words)
     # fetch geneve configuration:
     if mode == "esxi":
-       output_file.write('<h1"style="font-size:18px;"><b>Geneve Configuration Summary:</b><br></H1>')
-       cmd = "net-vdl2 -l"
-       geneve_info = execute(cmd)
-       lines = ('<p>')
-       for l in geneve_info.splitlines():
-           lines += '<small>%s</small><br>' %l
-       output_file.write('%s</p>' % lines)
+        output_file.write('<h1"style="font-size:18px;"><b>Geneve Configuration '
+                          'Summary:</b><br></H1>')
+        cmd = "net-vdl2 -l"
+        geneve_info = execute(cmd)
+        lines = ('<p>')
+        for l in geneve_info.splitlines():
+            lines += '<small>%s</small><br>' %l
+        output_file.write('%s</p>' % lines)
     return 0
 
 def table_parser(output):
@@ -878,16 +876,16 @@ def table_parser(output):
     hdr_list = []
     for line in output.splitlines():
         if line.startswith("--"):
-           continue
+            continue
         else:
-           val_list = []
-           for h in re.split(r'\s{2}', line):
-               if h:
-                  if hdr == True:
-                     hdr_list.append(h.lower().strip())
-                  else:
-                     val_list.append(h.strip())
-           hdr = False
+            val_list = []
+            for h in re.split(r'\s{2}', line):
+                if h:
+                    if hdr:
+                        hdr_list.append(h.lower().strip())
+                    else:
+                        val_list.append(h.strip())
+            hdr = False
         for key, val in zip(hdr_list, val_list):
             v[key] = val
     return v
@@ -958,16 +956,16 @@ def get_vxlan_info(output_file, server, mode):
     output_file.write('<p><PRE>%s</PRE></p>' % nw_port_list)
     # fetch VXLAN configuration details
     if mode == "esxi":
-       output_file.write('<h1"style="font-size:18px;"><b>VXLAN Configuration:</b><br></H1>')
-       net_vdl_cmd = "net-vdl2 -l"
-       net_vdl_info = execute(net_vdl_cmd)
-       output_file.write('<p><PRE>%s</PRE></p>' % net_vdl_info)
+        output_file.write('<h1"style="font-size:18px;"><b>VXLAN Configuration:</b><br></H1>')
+        net_vdl_cmd = "net-vdl2 -l"
+        net_vdl_info = execute(net_vdl_cmd)
+        output_file.write('<p><PRE>%s</PRE></p>' % net_vdl_info)
     return 0
 
 def file_properties(output_file, server, mode):
     """function to get file properties of SF drivers"""
     file_cmd = "esxcli "+ server + " software vib get"
-    file_status = execute(file_cmd)
+    file_status = execute(file_cmd, mode)
     file_status = re.search('(.*)Name\:\ssfvmk(.*)Payloads\:\ssfvmk',\
                             file_status, re.DOTALL)
     sfvmk_info = file_status.group(2)
@@ -996,7 +994,7 @@ def arp_cache(output_file, server, mode):
     for hdr in ('Neighbor', 'MAC Address', 'Vmknic', 'Expiry', 'State/Type'):
         table += '<th>%s' % hdr + '</th>'
     arp_cmd = "esxcli " + server + " network ip neighbor list"
-    arp_info = execute(arp_cmd)
+    arp_info = execute(arp_cmd, mode)
     for line in arp_info.split('\n'):
         if line != "" and not line.startswith("---") \
                       and not line.startswith("Neighbor"):
@@ -1027,7 +1025,7 @@ def virtual_machine_info(output_file, server, mode):
     vm_cmd = "esxcli " + server + " network vm list"
     for hdr in ('World ID', 'Name', 'Num Ports', 'Networks'):
         table += '<th>%s' % hdr + '</th>'
-    vm_info = execute(vm_cmd)
+    vm_info = execute(vm_cmd, mode)
     if vm_info == 1 or vm_info is None:
         table = '<table id="Virtual Machine"style="font-size:26px;">\
                 <th>Virtual Machine Information:</th><table border="1">'
@@ -1061,7 +1059,7 @@ def portgroup_details(output_file, server, mode):
     pg_cmd = "esxcli " + server + " network vswitch standard portgroup list"
     for hdr in ('Name', 'vSwitch', 'Active_Clients', 'VLAN-id'):
         table += '<th>%s' % hdr + '</th>'
-    pg_info = execute(pg_cmd)
+    pg_info = execute(pg_cmd, mode)
     for line in pg_info.split('\n'):
         if line != "" and not line.startswith("---") \
                       and not line.startswith("Name"):
@@ -1095,47 +1093,47 @@ def hw_statistics(output_file, server, mode, adapter_list):
     sf_table += '<th>Interface_name</th>'
     sf_stats_dict = defaultdict()
     for interface in adapter_list:
-         sf_stats_cmd = 'esxcli ' + server + ' sfvmk stats  get -n '\
-                        + interface
-         sf_stats_values = execute(sf_stats_cmd, mode)
-         if sf_stats_values == 1:
-             failed_nic_stats.append(interface)
-             continue
-         sf_table += '<td> %s </td>' % interface
-         if interface_count == no_of_interfaces:
-             sf_table += '</tr>'
-         for line in sf_stats_values.splitlines():
-             if len(line):
-                 if line.startswith("  -- Per Hardware Queue Statistics"):
-                     hw_q_start = True
-                     continue
-                 if hw_q_start == False:
-                     lhs, rhs = line.split(':', 1)
-                     if lhs not in sf_stats_dict:
-                         sf_stats_dict[lhs] = []
-                     sf_stats_dict[lhs.strip()].append(rhs.strip())
-             if hw_q_start  == True:
-                 if ":" in line and line not in sf_stats_dict:
-                      direction = line
-                 else:
-                      stats_parse = line.split()
-                      num_stats = len(stats_parse) // 2
-                      if num_stats*2 != len(stats_parse):
-                          continue
-                      for i in range(0,len(stats_parse),2):
-                           stats_param = direction + stats_parse[i]
-                           stats_value = stats_parse[i+1]
-                           if stats_param not in sf_stats_dict:
-                               sf_stats_dict[stats_param] = []
-                           sf_stats_dict[stats_param].append(stats_value)
-         interface_count += 1
-         hw_q_start = False
+        sf_stats_cmd = 'esxcli ' + server + ' sfvmk stats  get -n '\
+                       + interface
+        sf_stats_values = execute(sf_stats_cmd, mode)
+        if sf_stats_values == 1:
+            failed_nic_stats.append(interface)
+            continue
+        sf_table += '<td> %s </td>' % interface
+        if interface_count == no_of_interfaces:
+            sf_table += '</tr>'
+        for line in sf_stats_values.splitlines():
+            if len(line):
+                if line.startswith("  -- Per Hardware Queue Statistics"):
+                    hw_q_start = True
+                    continue
+                if not hw_q_start:
+                    lhs, rhs = line.split(':', 1)
+                    if lhs not in sf_stats_dict:
+                        sf_stats_dict[lhs] = []
+                    sf_stats_dict[lhs.strip()].append(rhs.strip())
+            if hw_q_start:
+                if ":" in line and line not in sf_stats_dict:
+                    direction = line
+                else:
+                    stats_parse = line.split()
+                    num_stats = len(stats_parse) // 2
+                    if num_stats*2 != len(stats_parse):
+                        continue
+                    for i in range(0, len(stats_parse), 2):
+                        stats_param = direction + stats_parse[i]
+                        stats_value = stats_parse[i+1]
+                        if stats_param not in sf_stats_dict:
+                            sf_stats_dict[stats_param] = []
+                        sf_stats_dict[stats_param].append(stats_value)
+        interface_count += 1
+        hw_q_start = False
     stats_dict = sorted(sf_stats_dict.items())
     for key, values in stats_dict:
-         sf_table += '<th align=left>%s</th>' % key
-         for value in values:
-             sf_table += '<td> %s </td>' % value
-         sf_table += '</tr>'
+        sf_table += '<th align=left>%s</th>' % key
+        for value in values:
+            sf_table += '<td> %s </td>' % value
+        sf_table += '</tr>'
     sf_table += '</table>'
     output_file.write(sf_table)
     if failed_nic_stats:
@@ -1157,7 +1155,7 @@ def vswitch_details(output_file, server, mode):
     output_file.write('<h1 style="font-size:26px;">Distributed vSwitch \
                       Information: <br></H1>')
     dvs_cmd = "esxcli " + server + " network vswitch dvs vmware list"
-    dvs_info = execute(dvs_cmd)
+    dvs_info = execute(dvs_cmd, mode)
     if dvs_info == 1 or dvs_info is None:
         output_file.write("INFO:No Distributed vSwitches were found")
         return 1
@@ -1182,7 +1180,7 @@ def lacp_details(output_file, server, mode):
     lacp_config_cmd = "esxcli " + server + " network vswitch dvs vmware lacp config get"
     lacp_config = execute(lacp_config_cmd, mode)
     output_file.write('<h1"style="font-size:18px;"><b>LACP Configuration:</b><br></H1>')
-    output_file.write('<p><PRE>%s</PRE></p>'% lacp_config )
+    output_file.write('<p><PRE>%s</PRE></p>'% lacp_config)
     output_file.write('<h1"style="font-size:18px;"><b>LACP Stats:</b><br></H1>')
     lacp_stats_cmd = "esxcli " + server + " network vswitch dvs vmware lacp stats get"
     lacp_stats = execute(lacp_stats_cmd, mode)
@@ -1273,7 +1271,7 @@ if __name__ == "__main__":
     SF_ADAPTERS = execute(GET_NIC_CMD, CURRENT_MODE)
     # check if connection not established between vcli server and host:
     if not SF_ADAPTERS and CURRENT_MODE == 'vcli':
-       sys.exit()
+        sys.exit()
     if SF_ADAPTERS == 1 or SF_ADAPTERS is None:
         print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare "
               "NIC is NOT visible\n")
@@ -1285,33 +1283,33 @@ if __name__ == "__main__":
                 SFVMK_ADAPTERS.append(iface.group(1))
                 SFVMK_TLPS.append(iface.group(2))
     # get ESX version
-    esx_ver_cmd = 'esxcli ' + SERVER_NAME + ' system version get'
-    esx_ver = execute(esx_ver_cmd, CURRENT_MODE)
-    for line in esx_ver.splitlines():
-        lhs, rhs = line.split(':', 1)
-        if lhs.lower().strip(' ') == "version":
-            ESX_VER = rhs.strip(' ')
+    ESX_VER_CMD = 'esxcli ' + SERVER_NAME + ' system version get'
+    ESX_VER_GET = execute(ESX_VER_CMD, CURRENT_MODE)
+    for LINE in ESX_VER_GET.splitlines():
+        LHS, RHS = LINE.split(':', 1)
+        if LHS.lower().strip(' ') == "version":
+            ESX_VER = RHS.strip(' ')
     SF_VER['ESX Version'] = ESX_VER
     # get sfvmk driver version
-    sfvmk_vib_list = execute("esxcli  " + SERVER_NAME + " software vib list |grep 'sfvmk ' ")
-    if sfvmk_vib_list:
-        for i in sfvmk_vib_list.splitlines():
-            j = re.split(r'\s+', i)
-            SFVMK_VER = j[1] #sfvmk version
+    SFVMK_VIB_LIST = execute("esxcli  " + SERVER_NAME + " software vib list |grep 'sfvmk ' ")
+    if SFVMK_VIB_LIST:
+        for I in SFVMK_VIB_LIST.splitlines():
+            J = re.split(r'\s+', I)
+            SFVMK_VER = J[1] #sfvmk version
             SF_VER['Driver Version'] = SFVMK_VER
     # get esxcli_ext vib info:
-    cli_vib_list = execute("esxcli " + SERVER_NAME + "  software vib list |grep solar |grep cli")
-    if cli_vib_list:
-       for k in cli_vib_list.splitlines():
-            l = re.split(r'\s+',k)
-            CLI_VER = l[1] #esxcli ext version
+    CLI_VIB_LIST = execute("esxcli " + SERVER_NAME + "  software vib list |grep solar |grep cli")
+    if CLI_VIB_LIST:
+        for k in CLI_VIB_LIST.splitlines():
+            L = re.split(r'\s+', k)
+            CLI_VER = L[1] #esxcli ext version
             SF_VER['CLI Version'] = CLI_VER
             CLI_VIB = True
     # get CIM vib info:
-    cim_vib_list = execute("esxcli " + SERVER_NAME + " software vib list |grep solar |grep cim")
-    if cim_vib_list:
-       for m in cim_vib_list.splitlines():
-            n = re.split(r'\s+',m)
+    CIM_VIB_LIST = execute("esxcli " + SERVER_NAME + " software vib list |grep solar |grep cim")
+    if CIM_VIB_LIST:
+        for m in CIM_VIB_LIST.splitlines():
+            n = re.split(r'\s+', m)
             CIM_VER = n[1] # cim version
             SF_VER['CIM Version'] = CIM_VER
     if "sfvmk" in SF_ADAPTERS:
@@ -1371,9 +1369,9 @@ if __name__ == "__main__":
                     SF_VER, CLI_VIB)
         if CLI_VIB:
             vpd_information(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
-        driver_binding(OUT_FILE, SERVER_NAME,CURRENT_MODE)
+        driver_binding(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
-                             ESX_VER, CLI_VIB)
+                             CLI_VIB)
         ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE, CLI_VIB)
         network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
         sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)

@@ -827,7 +827,7 @@ def net_queue_status(output_file, sfvmk_adapter_list):
     output_file.write('<h1 id="NetQueue Summary"style="font-size:26px;">\
                       NetQueue Summary: <br></H1>')
     for interface in sfvmk_adapter_list:
-        q_count_cmd = "vsish -pe ls /net/pNics/%s/txqueues/queues" % interface
+        q_count_cmd = "vsish -e ls /net/pNics/%s/txqueues/queues" % interface
         netq_stats = execute(q_count_cmd)
         # get no. of tx queues available
         queue_count = []

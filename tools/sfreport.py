@@ -946,6 +946,8 @@ def get_vxlan_info(output_file, server, mode):
     seg_id_cmd = "esxcli " + server + " network vswitch dvs vmware vxlan network\
                   list --vds-name " + vds_name
     seg_id_list = execute(seg_id_cmd, mode)
+    if not seg_id_list:
+        return 1
     # fetch vxlan id from segment id list
     seg_id_dict = table_parser(seg_id_list)
     try:
@@ -1071,30 +1073,11 @@ def virtual_machine_info(output_file, server, mode):
 
 def portgroup_details(output_file, server, mode):
     """function to fetch Vswitch portgroup informations"""
-    table = '<table id="Portgroup Information"style="font-size:26px;">\
-             <th>Portgroup Information: </th><table border="1">'
+    output_file.write('<h1 id="Portgroup Information"style="font-size:26px;"> \
+                       Portgroup Information: <br></H1>')
     pg_cmd = "esxcli " + server + " network vswitch standard portgroup list"
-    for hdr in ('Name', 'vSwitch', 'Active_Clients', 'VLAN-id'):
-        table += '<th>%s' % hdr + '</th>'
     pg_info = execute(pg_cmd, mode)
-    for line in pg_info.split('\n'):
-        if line != "" and not line.startswith("---") \
-                      and not line.startswith("Name"):
-            try:
-                line = re.search('(.*)\s+(\w+)\s+(\d+)\s+(\d+)', line)
-                name = line.group(1)
-                vswitch = line.group(2)
-                active_client = line.group(3)
-                vlan_id = line.group(4)
-            except AttributeError:
-                name = "not updated"
-                vswitch = "not updated"
-                active_client = "not updated"
-                vlan_id = "not updated"
-            table += '</tr><td>%s' % name + '<td>%s' % vswitch + '<td>%s' \
-                     % active_client + '<td>%s' % vlan_id
-    table += '</table>'
-    output_file.write(table)
+    output_file.write('<p><PRE>%s</PRE></p>' % pg_info)
     return 0
 
 def hw_statistics(output_file, server, mode, adapter_list):

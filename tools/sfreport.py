@@ -1277,7 +1277,7 @@ if __name__ == "__main__":
             SFVMK_VER = J[1] #sfvmk version
             SF_VER['Driver Version'] = SFVMK_VER
     # get esxcli_ext vib info:
-    CLI_VIB_LIST = execute("esxcli " + SERVER_NAME + "  software vib list |grep solar |grep cli")
+    CLI_VIB_LIST = execute("esxcli " + SERVER_NAME + "  software vib list |grep sfvmkcli")
     if CLI_VIB_LIST:
         for k in CLI_VIB_LIST.splitlines():
             L = re.split(r'\s+', k)

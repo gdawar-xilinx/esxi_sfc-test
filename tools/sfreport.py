@@ -836,24 +836,24 @@ def net_queue_status(output_file, sfvmk_adapter_list):
             queue_count.append(q)
         if queue_count:
             for qno in queue_count:
-                 output_file.write('<h>%s ' % interface + 'TX Stats Q# %s</h>'
-                                   % qno)
-                 stats_cmd = "vsish -e cat /net/pNics/"+ interface \
-                            +"/txqueues/queues/%s/stats" % qno
-                 netq_stats = execute(stats_cmd)
-                 output_file.write('<p><PRE>%s</PRE></p>' % netq_stats)
-                 output_file.write('<h>%s ' % interface + 'TX Info Q# %s</h>'
-                                   % qno)
-                 tx_info_cmd = "vsish -e cat /net/pNics/" + interface \
-                            + "/txqueues/queues/%s/info" % qno
-                 tx_info = execute(tx_info_cmd)
-                 output_file.write('<p><PRE>%s</PRE></p>' % tx_info)
-                 output_file.write('<h>%s ' % interface + 'RX Info Q# %s</h>'
-                                   % qno)
-                 rx_info_cmd = "vsish -e cat /net/pNics/" + interface \
-                            + "/rxqueues/queues/%s/info" % qno
-                 rx_info = execute(rx_info_cmd)
-                 output_file.write('<p><PRE>%s</PRE></p>' % rx_info)
+                output_file.write('<h>%s ' % interface + 'TX Stats Q# %s</h>'
+                                  % qno)
+                stats_cmd = "vsish -e cat /net/pNics/"+ interface \
+                           +"/txqueues/queues/%s/stats" % qno
+                netq_stats = execute(stats_cmd)
+                output_file.write('<p><PRE>%s</PRE></p>' % netq_stats)
+                output_file.write('<h>%s ' % interface + 'TX Info Q# %s</h>'
+                                  % qno)
+                tx_info_cmd = "vsish -e cat /net/pNics/" + interface \
+                           + "/txqueues/queues/%s/info" % qno
+                tx_info = execute(tx_info_cmd)
+                output_file.write('<p><PRE>%s</PRE></p>' % tx_info)
+                output_file.write('<h>%s ' % interface + 'RX Info Q# %s</h>'
+                                  % qno)
+                rx_info_cmd = "vsish -e cat /net/pNics/" + interface \
+                           + "/rxqueues/queues/%s/info" % qno
+                rx_info = execute(rx_info_cmd)
+                output_file.write('<p><PRE>%s</PRE></p>' % rx_info)
     return 0
 
 def get_geneve_info(output_file, server, mode):
@@ -1039,36 +1039,15 @@ def arp_cache(output_file, server, mode):
 
 def virtual_machine_info(output_file, server, mode):
     """function to fetch Virtual Machine information on the host"""
-    table = '<table id="Virtual Machine"style="font-size:26px;">\
-             <th>Virtual Machine: </th><table border="1">'
+    output_file.write('<h1 id="Virtual Machine"style="font-size:26px;"> \
+                           Virtual Machine: <br></H1>')
     vm_cmd = "esxcli " + server + " network vm list"
-    for hdr in ('World ID', 'Name', 'Num Ports', 'Networks'):
-        table += '<th>%s' % hdr + '</th>'
     vm_info = execute(vm_cmd, mode)
-    if vm_info == 1 or vm_info is None:
-        table = '<table id="Virtual Machine"style="font-size:26px;">\
-                <th>Virtual Machine Information:</th><table border="1">'
-        table += "INFO:No Active Virtual Machines found."
-        output_file.write(table)
+    if vm_info is None:
+        output_file.write("INFO:No Active Virtual Machines found.")
         return 1
-    for line in vm_info.split('\n'):
-        if line != "" and not line.startswith("---") \
-                      and not line.startswith("World"):
-            try:
-                line = re.search('(\d+)\s+(\w+)\s+(\d+)\s+(.*)', line)
-                world_id = line.group(1)
-                vm_name = line.group(2)
-                num_port = line.group(3)
-                network = line.group(4)
-            except AttributeError:
-                world_id = "not updated"
-                vm_name = "not updated"
-                num_port = "not updated"
-                network = "not updated"
-            table += '</tr><td>%s'%world_id + '<td>%s'%vm_name + '<td>%s'%num_port +\
-                      '<td>%s'%network
-    table += '</table>'
-    output_file.write(table)
+    output_file.write('<p><PRE>%s</PRE></p>' % vm_info)
+
     return 0
 
 def portgroup_details(output_file, server, mode):

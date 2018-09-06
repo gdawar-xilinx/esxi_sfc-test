@@ -137,6 +137,12 @@ def system_summary(output_file, server, mode):
                                  'Patch']
         host_info_cmd = "vicfg-hostops  "+ server +" -o info"
         host_info = execute(host_info_cmd)
+        output_file.write('<h1 id="System Summary"style="font-size:26px;"\
+                              > System Summary: </H1>')
+        # check if host_info_cmd returns error-bug#81723
+        if host_info == 1:
+            output_file.write("ERROR: System Summary Unavailable")
+            return 1
         for line in host_info.split('\n'):
             if line != "":
                 try:
@@ -153,10 +159,7 @@ def system_summary(output_file, server, mode):
                     system_values.append(line.group(2))
                 except AttributeError:
                     system_values.append("not updated")
-
     #create html table for all system_summary_header elements.
-    output_file.write('<h1 id="System Summary"style="font-size:26px;"\
-                      > System Summary: </H1>')
     table = '<table><table border="1">'
     for key, value in zip(system_summary_header, system_values):
         table += '<tr><th align=left> %s' % key + '</th><td> %s </td><tr>'\

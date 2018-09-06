@@ -1253,6 +1253,7 @@ if __name__ == "__main__":
     SF_ADAPTERS = execute(GET_NIC_CMD, CURRENT_MODE)
     # check if connection not established between vcli server and host:
     if not SF_ADAPTERS and CURRENT_MODE == 'vcli':
+        print("\nERROR: Failed to establish connection with ",SERVER_NAME)
         sys.exit()
     if SF_ADAPTERS == 1 or SF_ADAPTERS is None:
         print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare "

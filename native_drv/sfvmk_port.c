@@ -733,7 +733,7 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_filter_init failed status: %s",
                         vmk_StatusToString(status));
-    goto done;
+    goto failed_filter_init;
   }
 
   status = efx_port_init(pAdapter->pNic);
@@ -762,6 +762,12 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
 
 failed_port_init:
   efx_filter_fini(pAdapter->pNic);
+
+failed_filter_init:
+  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine,
+                         pMacStatsBuf->pEsmBase,
+                         pMacStatsBuf->ioElem.ioAddr,
+                         pMacStatsBuf->ioElem.length);
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);

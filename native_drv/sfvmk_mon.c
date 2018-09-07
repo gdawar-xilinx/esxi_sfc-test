@@ -135,3 +135,69 @@ sfvmk_monFini(sfvmk_adapter_t *pAdapter)
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MON);
 }
+
+/*! \brief  Releases resource and deinit mon module.
+ **
+ ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
+ ** \param[in]  pStatVal     pointer to efx_mon_stat_value_t
+ ** \param[in]  pStatLimit   pointer to efx_mon_stat_limits_t
+ **
+ ** \return: VMK_OK [success] Error code [failure]
+ */
+VMK_ReturnStatus
+sfvmk_monStatsUpdate(sfvmk_adapter_t *pAdapter,
+                     efx_mon_stat_value_t *pStatVal,
+                     efx_mon_stat_limits_t *pStatLimit)
+{
+  sfvmk_mon_t *pMon = NULL;
+  efsys_mem_t *pMonStatsBuf = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_MON);
+
+  if (pAdapter == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL adapter error");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  if (pStatVal == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL pStatVal error");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  pMon = &pAdapter->mon;
+  if (pMon->state != SFVMK_MON_STATE_INITIALIZED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MON Module uninitialized");
+    status = VMK_NOT_READY;
+    goto done;
+  }
+
+  pMonStatsBuf = &pMon->monStatsDmaBuf;
+
+  status = efx_mon_stats_update(pAdapter->pNic,
+                                pMonStatsBuf, pStatVal);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mon_stats_update failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_stats_update;
+  }
+
+  if (pStatLimit != NULL) {
+    status = efx_mon_limits_update(pAdapter->pNic, pStatLimit);
+	if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_mon_limits_update failed status: %s",
+                          vmk_StatusToString(status));
+	  goto failed_limit_update;
+    }
+  }
+
+failed_stats_update:
+failed_limit_update:
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MON);
+  return status;
+}
+

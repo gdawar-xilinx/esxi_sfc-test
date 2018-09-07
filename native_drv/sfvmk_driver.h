@@ -734,6 +734,10 @@ void sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
 /* Functions for mon module handling */
 VMK_ReturnStatus sfvmk_monInit(sfvmk_adapter_t *pAdapter);
 void sfvmk_monFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_monStatsUpdate(sfvmk_adapter_t *pAdapter,
+                     efx_mon_stat_value_t *pStatVal,
+                     efx_mon_stat_limits_t *pStatLimit);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

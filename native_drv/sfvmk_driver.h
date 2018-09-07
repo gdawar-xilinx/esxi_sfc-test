@@ -738,6 +738,8 @@ VMK_ReturnStatus
 sfvmk_monStatsUpdate(sfvmk_adapter_t *pAdapter,
                      efx_mon_stat_value_t *pStatVal,
                      efx_mon_stat_limits_t *pStatLimit);
+VMK_ReturnStatus
+sfvmk_scheduleMonitorUpdate(sfvmk_adapter_t *pAdapter);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

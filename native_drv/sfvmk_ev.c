@@ -53,6 +53,8 @@ static boolean_t sfvmk_evSoftware(void *arg, uint16_t magic);
 static boolean_t sfvmk_evRX(void *arg, uint32_t label, uint32_t id,
                             uint32_t size, uint16_t flags);
 static boolean_t sfvmk_evTx(void *arg, uint32_t label, uint32_t id);
+static boolean_t sfvmk_evMonitor(void *arg, efx_mon_stat_t id,
+                                       efx_mon_stat_value_t value);
 
 static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_tx = sfvmk_evTx,
@@ -64,6 +66,9 @@ static const efx_ev_callbacks_t sfvmk_evCallbacks = {
   .eec_txq_flush_done = sfvmk_evTxqFlushDone,
   .eec_rxq_flush_done = sfvmk_evRxqFlushDone,
   .eec_rxq_flush_failed = sfvmk_evRxqFlushFailed,
+#if EFSYS_OPT_MON_STATS
+  .eec_monitor = sfvmk_evMonitor,
+#endif
 };
 
 /*! \brief Called when a RX event received on eventQ
@@ -453,6 +458,51 @@ sfvmk_evRxqFlushFailed(void *arg, uint32_t rxqIndex)
 {
   return sfvmk_evRxqFlush(arg, rxqIndex, SFVMK_FLUSH_STATE_FAILED);
 }
+
+/*! \brief  Gets called when sensor state changes
+**
+** \param[in] arg       Pointer to event queue
+** \param[in] id        Sensor Index
+** \param[in] value     Sensor Value
+**
+** \return: VMK_FALSE [success]
+** \return: VMK_TRUE  [failure]
+*/
+static boolean_t
+sfvmk_evMonitor(void *arg, efx_mon_stat_t id, efx_mon_stat_value_t value)
+{
+  sfvmk_evq_t *pEvq = (sfvmk_evq_t *)arg;
+  sfvmk_adapter_t *pAdapter = NULL;
+  VMK_ReturnStatus status;
+
+  if (pEvq == NULL) {
+    SFVMK_ERROR("NULL event queue ptr");
+    goto fail;
+  }
+
+  vmk_SpinlockAssertHeldByWorld(pEvq->lock);
+
+  pAdapter = pEvq->pAdapter;
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto fail;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_EVQ, SFVMK_LOG_LEVEL_INFO,
+                      "Sensor Event detected");
+
+  status = sfvmk_scheduleMonitorUpdate(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "sfvmk_scheduleMonitorUpdate failed status: %s",
+                        vmk_StatusToString(status));
+    goto fail;
+  }
+
+  fail:
+  return VMK_TRUE;
+}
+
 
 /*! \brief  Called when TXQ flush is done.
 **

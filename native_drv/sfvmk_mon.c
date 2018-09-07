@@ -26,6 +26,14 @@
 
 #include "sfvmk_driver.h"
 
+static const char * sensorStateName[] = {
+  "OK",        /* EFX_MON_STAT_STATE_OK */
+  "Warn",      /* EFX_MON_STAT_STATE_WARNING */
+  "Fatal",     /* EFX_MON_STAT_STATE_FATAL */
+  "Broken",    /* EFX_MON_STAT_STATE_BROKEN */
+  "No reading" /* EFX_MON_STAT_STATE_NO_READING */
+};
+
 /*! \brief  Allocate resource and initialize mon module.
 **
 ** \param[in]  pAdapter     pointer to sfvmk_adapter_t
@@ -198,6 +206,118 @@ failed_limit_update:
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MON);
+  return status;
+}
+
+/*! \brief  Helper world function for sensor event
+ **
+ ** \param[in] data  Pointer to sfvmk_adapter_t
+ **
+ ** \return: void
+ */
+void sfvmk_monUpdateHelper(vmk_AddrCookie data)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)data.ptr;
+  efx_mon_stat_value_t sensorVal[EFX_MON_NSTATS];
+  efx_mon_stat_t id;
+  sfvmk_mon_t *pMon = NULL;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  efx_mon_stat_value_t *pValue = NULL;
+  efx_mon_stat_state_t *pLastState = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    goto exit;
+  }
+
+  sfvmk_MutexLock(pAdapter->lock);
+
+  pMon = &pAdapter->mon;
+  if (pMon->state != SFVMK_MON_STATE_INITIALIZED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MON Module uninitialized");
+    status = VMK_NOT_READY;
+    goto done;
+  }
+
+  if ((status = sfvmk_monStatsUpdate(pAdapter, sensorVal, NULL)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_monStatsUpdate failed");
+    goto done;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+
+  for (id = 0; id < EFX_MON_NSTATS; id++) {
+    if (pNicCfg->enc_mon_stat_mask[id / EFX_MON_MASK_ELEMENT_SIZE] &
+         (1 << (id % EFX_MON_MASK_ELEMENT_SIZE))) {
+
+      pValue = &(sensorVal[id]);
+      pLastState = &(pMon->lastState[id]);
+
+      if (pValue->emsv_state != *pLastState) {
+        if (pValue->emsv_state != EFX_MON_STAT_STATE_OK &&
+            pValue->emsv_state != EFX_MON_STAT_STATE_NO_READING) {
+          SFVMK_ADAPTER_ERROR(pAdapter, "State of Sensor: %s"
+                              "[Value : %d] changed from : %s to : %s",
+                              (char *)efx_mon_stat_description(pAdapter->pNic, id),
+                              pValue->emsv_value,
+                              sensorStateName[*pLastState],
+                              sensorStateName[pValue->emsv_state]);
+        }
+        *pLastState = pValue->emsv_state;
+
+      }
+    }
+  }
+
+done:
+  sfvmk_MutexUnlock(pAdapter->lock);
+exit:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+}
+
+/*! \brief Fuction to schedule monitor update
+ **
+ ** \param[in] pAdapter  pointer to sfvmk_adapter_t
+ **
+ ** \return: VMK_OK [success] error code [failure]
+ **
+ */
+VMK_ReturnStatus
+sfvmk_scheduleMonitorUpdate(sfvmk_adapter_t *pAdapter)
+{
+  vmk_HelperRequestProps props;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PORT);
+
+  if (pAdapter == NULL) {
+    SFVMK_ERROR("NULL adapter ptr");
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  vmk_HelperRequestPropsInit(&props);
+
+  /* Create a request and submit */
+  props.requestMayBlock = VMK_FALSE;
+  props.tag = (vmk_AddrCookie)NULL;
+  props.cancelFunc = NULL;
+  props.worldToBill = VMK_INVALID_WORLD_ID;
+  status = vmk_HelperSubmitRequest(pAdapter->helper,
+                                   sfvmk_monUpdateHelper,
+                                   (vmk_AddrCookie *)pAdapter,
+                                   &props);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HelperSubmitRequest failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PORT);
+
   return status;
 }
 

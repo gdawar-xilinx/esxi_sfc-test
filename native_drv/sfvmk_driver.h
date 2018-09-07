@@ -207,6 +207,18 @@ typedef enum sfvmk_portState_e {
   SFVMK_PORT_STATE_STARTED
 } sfvmk_portState_t;
 
+typedef enum sfvmk_monState_e {
+  SFVMK_MON_STATE_UNINITIALIZED = 0,
+  SFVMK_MON_STATE_INITIALIZED
+} sfvmk_monState_t;
+
+typedef struct sfvmk_mon_s {
+  sfvmk_monState_t      state;
+  efsys_mem_t	        monStatsDmaBuf;
+  /* Sensor state copy */
+  efx_mon_stat_state_t	lastState[EFX_MON_NSTATS];
+} sfvmk_mon_t;
+
 typedef struct sfvmk_port_s {
   sfvmk_portState_t     state;
   efx_link_mode_t       linkMode;
@@ -587,6 +599,8 @@ typedef struct sfvmk_adapter_s {
 
   sfvmk_port_t               port;
 
+  sfvmk_mon_t                mon;
+
   sfvmk_uplink_t             uplink;
   /* Dev Name ptr ( pointing to PCI device name or uplink Name).
    * Used only for debugging */
@@ -716,6 +730,10 @@ void sfvmk_phyLinkSpeedGet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed *pSpeed,
 void sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
                          vmk_UplinkSupportedMode *pSupportedModes,
                          vmk_uint32 *pCount);
+
+/* Functions for mon module handling */
+VMK_ReturnStatus sfvmk_monInit(sfvmk_adapter_t *pAdapter);
+void sfvmk_monFini(sfvmk_adapter_t *pAdapter);
 
 /* Functions for TXQ module handling */
 VMK_ReturnStatus sfvmk_txInit(sfvmk_adapter_t *pAdapter);

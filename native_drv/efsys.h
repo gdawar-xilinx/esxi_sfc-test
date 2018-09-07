@@ -145,8 +145,8 @@ typedef struct __efsys_identifier_s efsys_identifier_t;
 
 #define EFSYS_OPT_LOOPBACK 0
 
-#define EFSYS_OPT_MON_MCDI 0
-#define EFSYS_OPT_MON_STATS 0
+#define EFSYS_OPT_MON_MCDI 1
+#define EFSYS_OPT_MON_STATS 1
 
 #define EFSYS_OPT_PHY_STATS 0
 #define EFSYS_OPT_BIST 1

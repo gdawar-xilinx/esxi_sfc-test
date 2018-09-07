@@ -1077,6 +1077,13 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_port_init;
   }
 
+  status = sfvmk_monInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_monInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_mon_init;
+  }
+
   status = sfvmk_txInit(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_txInit failed status: %s",
@@ -1175,6 +1182,9 @@ failed_rx_init:
   sfvmk_txFini(pAdapter);
 
 failed_tx_init:
+  sfvmk_monFini(pAdapter);
+
+failed_mon_init:
   sfvmk_portFini(pAdapter);
 
 failed_port_init:
@@ -1378,6 +1388,8 @@ sfvmk_detachDevice(vmk_Device dev)
     sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);
+  /* Deinit mon */
+  sfvmk_monFini(pAdapter);
   /* Deinit port */
   sfvmk_portFini(pAdapter);
   /* Deinit EVQs */

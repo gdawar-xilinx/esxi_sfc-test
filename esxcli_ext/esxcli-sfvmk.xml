@@ -52,8 +52,8 @@
            <parameter name="nic-name" type="string" required="true" shortname="n">
             <description>The name of the NIC to configured.</description>
            </parameter>
-            <parameter name="enable" type="string" required="true" shortname="e">
-               <description>Enable/ Disable MC logging (Y/ Yes/ N / No).</description>
+            <parameter name="enable" type="bool" required="true" shortname="e">
+               <description>Enable/ Disable MC logging (y[es], n[o]).</description>
             </parameter>
          </input-spec>
          <output-spec>

@@ -124,7 +124,7 @@ main(int argc, char **argv)
   int stringLength = 0;
   vmk_Bool optionEnable = VMK_FALSE;
   vmk_Bool nicNameSet = VMK_FALSE;
-  char optionValue = ' ';
+  char mclogOption[10];
   char objectName[16];
   char fwTypeName[16];
   char fileName[128];
@@ -215,7 +215,9 @@ main(int argc, char **argv)
           goto end;
         }
 
-        optionValue = optarg[0];
+        memset(&mclogOption, 0, 10);
+        strcpy(mclogOption, optarg);
+        sfvmk_strLwr(mclogOption);
         break;
 
       case 'f':
@@ -297,14 +299,12 @@ main(int argc, char **argv)
   switch (sfvmk_findObjectType(objectName)) {
     case SFVMK_OBJECT_MCLOG:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
-        if (!strchr("yYnN", optionValue)) {
-          printf("ERROR: --enable Enable/ Disable MC "
-                 "logging (Y/ Yes/ N / No) required\n");
+        if (!strcmp(mclogOption, "true"))
+          optionEnable = VMK_TRUE;
+        else if (!strcmp(mclogOption, "false"))
+          optionEnable = VMK_FALSE;
+        else
           goto destroy_handle;
-        }
-
-        optionEnable = ((optionValue == 'y') || (optionValue == 'Y')) ?
-                        VMK_TRUE : VMK_FALSE;
       }
 
       sfvmk_mcLog(opType, &mgmtParm, optionEnable);

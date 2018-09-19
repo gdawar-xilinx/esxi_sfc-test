@@ -970,4 +970,7 @@ sfvmk_phyFecSet(sfvmk_adapter_t *pAdapter, vmk_uint32 reqFec);
 VMK_ReturnStatus
 sfvmk_phyFecGet(sfvmk_adapter_t *pAdapter,  vmk_uint32 *advFec, vmk_uint32 *activeFec);
 
+VMK_ReturnStatus
+sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCount size, vmk_ByteCount *pBytesCopied);
+
 #endif /* __SFVMK_DRIVER_H__ */

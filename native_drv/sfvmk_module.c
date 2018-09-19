@@ -98,7 +98,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  22
+#define SFVMK_ALLOC_DESC_SIZE  25
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -204,6 +204,18 @@ sfvmk_calcHeapSize(void)
 #endif
 
   allocDesc[index].size = SFVMK_STATS_BUFFER_SZ;
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
+
+  allocDesc[index].size = (sizeof(efx_mon_stat_value_t) * EFX_MON_NSTATS);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
+
+  allocDesc[index].size = (sizeof(efx_mon_stat_limits_t) * EFX_MON_NSTATS);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = 1;
+
+  allocDesc[index].size = (SFVMK_SENSOR_INFO_MAX_WIDTH * EFX_MON_NSTATS);
   allocDesc[index].alignment = 0;
   allocDesc[index++].count = 1;
 

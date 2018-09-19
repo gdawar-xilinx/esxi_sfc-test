@@ -321,3 +321,136 @@ done:
   return status;
 }
 
+/*! \brief  Get the updated sensor info with sensor limits
+ *          and format output in tabular form.
+ **
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pSensorBuf    pointer to start position in sensor buffer
+** \param[in]  size          maximum number of bytes to output
+** \param[out] pBytesCopied  pointer to number of bytes copied in stats buffer
+**
+** \return: VMK_OK [success]
+**     Below error values are returned in case of failure,
+**           VMK_LIMIT_EXCEEDED  If stats buffer overflowed
+**           VMK_FAILURE         Any other error
+**           VMK_NO_MEMORY       Failed to allocate memory
+**
+*/
+VMK_ReturnStatus
+sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf,
+                        vmk_ByteCount size, vmk_ByteCount *pBytesCopied)
+{
+  efx_mon_stat_value_t *pSensorValue = NULL;
+  efx_mon_stat_limits_t *pLimits = NULL;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  efx_nic_t *pNic = NULL;
+  vmk_ByteCount bytesCopied = 0;
+  vmk_ByteCount maxBytes = size;
+  vmk_uint32 id;
+  char noValue[] = "--";
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  if ((pAdapter == NULL) || (pSensorBuf == NULL)) {
+    SFVMK_ERROR("Invalid parameter");
+    status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pNic = pAdapter->pNic;
+  pNicCfg = efx_nic_cfg_get(pNic);
+
+  pSensorValue = vmk_HeapAlloc(sfvmk_modInfo.heapID,
+                               (sizeof(efx_mon_stat_value_t) * EFX_MON_NSTATS));
+  if (pSensorValue == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "HW sensor value buffer memory allocation failed");
+    status = VMK_NO_MEMORY;
+    goto freemem;
+  }
+
+  pLimits = vmk_HeapAlloc(sfvmk_modInfo.heapID,
+                          (sizeof(efx_mon_stat_limits_t) * EFX_MON_NSTATS));
+  if (pLimits == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "HW sensor limit buffer memory allocation failed");
+    status = VMK_NO_MEMORY;
+    goto freemem;
+  }
+
+  vmk_Memset(pSensorValue, 0, (sizeof(efx_mon_stat_value_t) * EFX_MON_NSTATS));
+  vmk_Memset(pLimits, 0, (sizeof(efx_mon_stat_limits_t) * EFX_MON_NSTATS));
+
+  if ((status = sfvmk_monStatsUpdate(pAdapter, pSensorValue, pLimits)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_monStatsUpdate failed with error: %s",
+                        vmk_StatusToString(status));
+    goto freemem;
+  }
+
+  status = vmk_StringFormat(pSensorBuf, maxBytes, &bytesCopied,
+                   "Sensor                                      Warn   Warn   Fatal  Fatal  Read   Sensor    \n"
+                   "Name                                        Min.   Max.   Min.   Max.   Value  State     \n"
+                   "--------------------------------------      -----  -----  -----  -----  -----  ----------\n");
+  if (status != VMK_OK)
+    goto freemem;
+
+  maxBytes -= bytesCopied;
+  pSensorBuf += bytesCopied;
+  *pBytesCopied += bytesCopied;
+
+  for (id = 0; id < EFX_MON_NSTATS; id++) {
+    if (pNicCfg->enc_mon_stat_mask[id / EFX_MON_MASK_ELEMENT_SIZE] &
+        (1 << (id % EFX_MON_MASK_ELEMENT_SIZE))) {
+       /* If there is no meaningful range information the suppress the
+        * range values. */
+       if ((pLimits[id].emlv_warning_min == pLimits[id].emlv_warning_max) &&
+           (pLimits[id].emlv_fatal_min == pLimits[id].emlv_fatal_max)) {
+         /* Apply a horrendous heuristic to detect sensors that probably
+          * don't have any meaningful value and are only capable of fault
+          * reporting. */
+         if (pSensorValue[id].emsv_value < 2) {
+           status = vmk_StringFormat(pSensorBuf, maxBytes, &bytesCopied,
+                                     "%-42s  %-5s  %-5s  %-5s  %-5s  %-5s  %s\n",
+                                     (char *)efx_mon_stat_description(pNic, id),
+                                     noValue, noValue, noValue, noValue, noValue,
+                                     sensorStateName[pSensorValue[id].emsv_state]);
+         } else {
+           status = vmk_StringFormat(pSensorBuf, maxBytes, &bytesCopied,
+                                     "%-42s  %-5s  %-5s  %-5s  %-5s  %-5u  %s\n",
+                                     (char *)efx_mon_stat_description(pNic, id),
+                                     noValue, noValue, noValue, noValue,
+                                     pSensorValue[id].emsv_value,
+                                     sensorStateName[pSensorValue[id].emsv_state]);
+         }
+       } else {
+         status = vmk_StringFormat(pSensorBuf, maxBytes, &bytesCopied,
+                                   "%-42s  %-5u  %-5u  %-5u  %-5u  %-5u  %s\n",
+                                   (char *)efx_mon_stat_description(pNic, id),
+                                   pLimits[id].emlv_warning_min, pLimits[id].emlv_warning_max,
+                                   pLimits[id].emlv_fatal_min, pLimits[id].emlv_fatal_max,
+                                   pSensorValue[id].emsv_value, sensorStateName[pSensorValue[id].emsv_state]);
+       }
+
+       if (status != VMK_OK)
+         goto freemem;
+
+       maxBytes -= bytesCopied;
+       pSensorBuf += bytesCopied;
+       *pBytesCopied += bytesCopied;
+    }
+  }
+
+  status = VMK_OK;
+
+freemem:
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Get sensor info failed with error: %s",
+                        vmk_StatusToString(status));
+  }
+
+  if (pSensorValue)
+    vmk_HeapFree(sfvmk_modInfo.heapID, pSensorValue);
+
+  if (pLimits)
+    vmk_HeapFree(sfvmk_modInfo.heapID, pLimits);
+
+end:
+  return status;
+}

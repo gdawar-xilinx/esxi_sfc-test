@@ -57,6 +57,7 @@
  ** SFVMK_CB_IFACE_LIST_GET:           Get list of all SFVMK interface
  ** SFVMK_CB_FEC_MODE_REQUEST:         Get/Set FEC mode settings
  ** SFVMK_CB_IMG_UPDATE_V2:            Perform Image Update version 2
+ ** SFVMK_CB_SENSOR_INFO_GET:          Get hardware sensor information
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -75,6 +76,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_IFACE_LIST_GET,
   SFVMK_CB_FEC_MODE_REQUEST,
   SFVMK_CB_IMG_UPDATE_V2,
+  SFVMK_CB_SENSOR_INFO_GET,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -96,6 +98,8 @@ typedef enum sfvmk_mgmtCbTypes_e {
 /* Max limit of Solarflare NIC */
 #define SFVMK_MAX_INTERFACE    16
 
+/* Max width of sensor information in a single line */
+#define SFVMK_SENSOR_INFO_MAX_WIDTH 80
 /*
  * The vendor name for interface. The vendor name cannot be changed for
  * any internal or customers build.
@@ -554,6 +558,35 @@ typedef enum sfvmk_mgmtFecConfigBits_e {
 #define SFVMK_MGMT_FEC_RS_MASK    (1 << SFVMK_MGMT_FEC_RS_BIT)
 #define SFVMK_MGMT_FEC_BASER_MASK (1 << SFVMK_MGMT_FEC_BASER_BIT)
 
+/*! \brief Sub command type for HW sensor info
+ **
+ **  SFVMK_MGMT_STATS_GET_SIZE: Sub command to request size of the HW sensor info
+ **
+ **  SFVMK_MGMT_STATS_GET_SIZE: Sub command to request HW sensor info
+ **
+ */
+typedef enum sfvmk_mgmtSensorOps_e {
+  SFVMK_MGMT_SENSOR_GET_SIZE = 1,
+  SFVMK_MGMT_SENSOR_GET,
+  SFVMK_MGMT_SENSOR_INVALID
+} sfvmk_mgmtSensorOps_t;
+
+/*! \brief struct sfvmk_hwSensor_s to get
+ **        hardware sensors information
+ **
+ ** sensorBuffer[out]  Pointer to Buffer Containing
+ **                    sensors info
+ **
+ ** size[in,out]       size of the buffer allocated
+ **                    from user
+ **
+ */
+typedef struct sfvmk_hwSensor_s{
+  sfvmk_mgmtSensorOps_t subCmd;
+  vmk_uint64            sensorBuffer;
+  vmk_uint32            size;
+} __attribute__((__packed__)) sfvmk_hwSensor_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -656,6 +689,11 @@ VMK_ReturnStatus sfvmk_mgmtFecModeCallback(vmk_MgmtCookies *pCookies,
                                            sfvmk_mgmtDevInfo_t *pDevIface,
                                            sfvmk_fecMode_t *pFecMode);
 
+VMK_ReturnStatus sfvmk_mgmtHWSensorInfoCallback(vmk_MgmtCookies *pCookies,
+                                                vmk_MgmtEnvelope *pEnvelope,
+                                                sfvmk_mgmtDevInfo_t *pDevIface,
+                                                sfvmk_hwSensor_t *pUserSensorBuffer);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -677,6 +715,7 @@ VMK_ReturnStatus sfvmk_mgmtFecModeCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtMACAddressCallback NULL
 #define sfvmk_mgmtInterfaceListCallback NULL
 #define sfvmk_mgmtFecModeCallback NULL
+#define sfvmk_mgmtHWSensorInfoCallback NULL
 #endif
 
 #endif

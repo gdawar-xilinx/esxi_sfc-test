@@ -1346,3 +1346,115 @@ end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
   return VMK_OK;
 }
+
+/*! \brief  A Mgmt callback routine to get HW hardware sensor info
+ **
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pHwSensor  Pointer to hw sensor info
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_BAD_PARAM:      Unknown option or NULL input param
+ **     VMK_NO_MEMORY:      Memory Allocation failed
+ **     VMK_NO_SPACE:       Not enough space available in user buffer
+ **     VMK_WRITE_ERROR:    Copy to user buffer failed
+ **     VMK_FAILURE:        Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtHWSensorInfoCallback(vmk_MgmtCookies      *pCookies,
+                               vmk_MgmtEnvelope     *pEnvelope,
+                               sfvmk_mgmtDevInfo_t  *pDevIface,
+                               sfvmk_hwSensor_t     *pHwSensor)
+{
+  sfvmk_adapter_t   *pAdapter = NULL;
+  char              *pSensorBuffer = NULL;
+  vmk_ByteCount     bytesCopied = 0;
+  VMK_ReturnStatus  status = VMK_FAILURE;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pHwSensor) {
+    SFVMK_ERROR("pHwSensor: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pAdapter = sfvmk_mgmtFindAdapter(pDevIface);
+  if (!pAdapter) {
+    SFVMK_ERROR("Adapter structure corresponding to %s device not found",
+                pDevIface->deviceName);
+    pDevIface->status = VMK_NOT_FOUND;
+    goto end;
+  }
+
+  if (pHwSensor->subCmd == SFVMK_MGMT_SENSOR_GET_SIZE) {
+    /* Set size of the hardware sensor buffer as requested
+     * by user before allocating memory and requesting the
+     * hardware sensor data */
+    pHwSensor->size = (SFVMK_SENSOR_INFO_MAX_WIDTH * EFX_MON_NSTATS);
+    pDevIface->status = VMK_OK;
+    goto end;
+  } else if (pHwSensor->subCmd != SFVMK_MGMT_SENSOR_GET) {
+    SFVMK_ERROR("Invalid sub command");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (!pHwSensor->sensorBuffer) {
+    SFVMK_ERROR("sensorBuffer: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  if (pHwSensor->size < (SFVMK_SENSOR_INFO_MAX_WIDTH * EFX_MON_NSTATS)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is not sufficient");
+    pDevIface->status = VMK_NO_SPACE;
+    goto end;
+  }
+
+  pSensorBuffer = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, pHwSensor->size);
+  if (pSensorBuffer == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "HW sensor info buffer memory allocation failed");
+    pDevIface->status = VMK_NO_MEMORY;
+    goto end;
+  }
+
+  vmk_Memset(pSensorBuffer, 0, pHwSensor->size);
+
+  status = sfvmk_requestSensorData(pAdapter, pSensorBuffer, pHwSensor->size, &bytesCopied);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Sensor info failed with error: %s",
+                        vmk_StatusToString(status));
+    pDevIface->status = status;
+    goto freemem;
+  }
+
+  if ((status = vmk_CopyToUser((vmk_VA)pHwSensor->sensorBuffer, (vmk_VA)pSensorBuffer,
+                                pHwSensor->size)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Copy to user failed with error: %s",
+                        vmk_StatusToString(status));
+    pDevIface->status = VMK_WRITE_ERROR;
+    goto freemem;
+  }
+
+  pHwSensor->size = bytesCopied;
+  pDevIface->status = VMK_OK;
+
+freemem:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pSensorBuffer);
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}

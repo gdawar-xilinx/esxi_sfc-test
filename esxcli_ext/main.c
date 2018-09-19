@@ -54,6 +54,7 @@ typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_VPD,
   SFVMK_OBJECT_FIRMWARE,
   SFVMK_OBJECT_FEC,
+  SFVMK_OBJECT_SENSOR,
   SFVMK_OBJECT_MAX
 } sfvmk_objectType_t;
 
@@ -62,7 +63,8 @@ static const char * supportedObjects[] = {
   "stats",
   "vpd",
   "firmware",
-  "fec"
+  "fec",
+  "sensor"
 };
 
 /*
@@ -79,6 +81,7 @@ static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblin
 static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo);
 static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
 static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
+static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType);
 
 static inline void sfvmk_strLwr(char string[])
 {
@@ -340,6 +343,9 @@ main(int argc, char **argv)
         sfvmk_fecModeGet(&mgmtParm);
       }
 
+      break;
+    case SFVMK_OBJECT_SENSOR:
+      sfvmk_hwSensorGet(&mgmtParm, opType);
       break;
     default:
       printf("ERROR: Unknown object - %s\n", objectName);
@@ -902,5 +908,65 @@ static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)
   printf("Active FEC encoding:");
   sfvmk_printFecMode(fecMode.activeFec);
   printf("\n");
+}
+
+static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *mgmtParm, int opType)
+{
+  sfvmk_hwSensor_t sensor;
+  char *pBuffer;
+  int status;
+
+  if (opType != SFVMK_MGMT_DEV_OPS_GET) {
+    printf("ERROR: Set operation not supported\n");
+    goto end;
+  }
+
+  sensor.subCmd = SFVMK_MGMT_SENSOR_GET_SIZE;
+  sensor.size = 0;
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_SENSOR_INFO_GET, mgmtParm, &sensor);
+  if (status != VMK_OK){
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    goto end;
+  }
+
+  if (mgmtParm->status != VMK_OK) {
+    printf("ERROR: Hardware sensor info size get failed, error 0x%x\n", mgmtParm->status);
+    goto end;
+  }
+
+  if (!sensor.size) {
+    printf("ERROR: Invalid sensor info buffer size\n");
+    goto end;
+  }
+
+  pBuffer = malloc(sensor.size);
+  if (!pBuffer) {
+    printf("ERROR: Unable to allocate memmory for sensor info buffer\n");
+    goto end;
+  }
+
+  memset(pBuffer, 0, sensor.size);
+  sensor.sensorBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
+  sensor.subCmd = SFVMK_MGMT_SENSOR_GET;
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_SENSOR_INFO_GET, mgmtParm, &sensor);
+  if (status != VMK_OK){
+    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+    goto free_buffer;
+  }
+
+  if (mgmtParm->status != VMK_OK) {
+    printf("ERROR: Hardware sensor info get failed, error 0x%x\n", mgmtParm->status);
+    goto free_buffer;
+  }
+
+  printf("%s", pBuffer);
+
+free_buffer:
+  free(pBuffer);
+
+end:
+  return;
 }
 

@@ -26,6 +26,10 @@
       <namespace path="sfvmk.fec">
          <description>esxcli extension to get/ set FEC mode settings</description>
       </namespace>
+      <!-- esxcli sfvmk sensor -->
+      <namespace path="sfvmk.sensor">
+         <description>esxcli extension to get hardware sensor information</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -171,6 +175,22 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/sfc/bin/sfvmkcli --object fec --set --nic-name $val{nic-name} --mode $val{mode}</execute>
+      </command>
+      <!-- esxcli sfvmk sensor get -->
+      <command path="sfvmk.sensor.get">
+         <description>Gets hardware sensor information</description>
+         <input-spec>
+           <parameter name="nic-name" type="string" required="true" shortname="n">
+            <description>The name of the NIC to configured.</description>
+           </parameter>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/sfc/bin/sfvmkcli --object sensor --get --nic-name $val{nic-name}</execute>
       </command>
    </commands>
 </plugin>

@@ -39,6 +39,8 @@
 #define	RX_REFILL_THRESHOLD(_entries)	(EFX_RXQ_LIMIT(_entries) * 9 / 10)
 /* Refill delay */
 #define SFVMK_RXQ_REFILL_DELAY_MS       10
+/* Max try count for pkt alloc */
+#define SFVMK_PKT_ALLOC_MAX_TRY_COUNT   2
 
 /*! \brief    Configure RSS by setting hash key, indirection table
 **            and scale mode.
@@ -724,13 +726,24 @@ void sfvmk_rxqFill(sfvmk_rxq_t *pRxq, sfvmk_pktCompCtx_t *pCompCtx)
 
   for (posted = 0; posted < maxBuf; posted++) {
 
-    status = vmk_PktAllocForDMAEngine(mblkAllocSize, pAdapter->dmaEngine, &pNewpkt);
-    if (VMK_UNLIKELY(status != VMK_OK)) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_INFO,
-                          "vmk_PktAllocForDMAEngine failed status %s",
-                          vmk_StatusToString(status));
+    vmk_uint8 pktAllocTryCnt = SFVMK_PKT_ALLOC_MAX_TRY_COUNT;
+
+    do {
+      status = vmk_PktAllocForDMAEngine(mblkAllocSize, pAdapter->dmaEngine, &pNewpkt);
+      if (VMK_UNLIKELY(status != VMK_OK)) {
+        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_RX, SFVMK_LOG_LEVEL_INFO,
+                            "vmk_PktAllocForDMAEngine failed status %s",
+                            vmk_StatusToString(status));
+
+        pktAllocTryCnt--;
+      }
+      else
+        break;
+    } while (pktAllocTryCnt != 0);
+
+    /* If vmk_PktAllocForDMAEngine failed in all the attempts then exit the for loop */
+    if (VMK_UNLIKELY(status != VMK_OK))
       break;
-    }
 
     vmk_PktFrameLenSet(pNewpkt, mblkAllocSize);
 

@@ -79,6 +79,8 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_firmwareType_t f
 static int sfvmk_getMACAddress(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_macAddress_t *pMacAddr);
 static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[]);
 static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo);
+static int sfvmk_fecModeTypeGet(const char *pFecModeName);
+static vmk_uint32 sfvmk_fecModeParse(const char *pFecModeName);
 static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
 static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
 static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType);
@@ -131,7 +133,7 @@ main(int argc, char **argv)
   char objectName[16];
   char fwTypeName[16];
   char fileName[128];
-  char fecModeName[16];
+  char fecModeName[11];
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_INVALID;
   sfvmk_mgmtDevInfo_t mgmtParm;
@@ -257,20 +259,19 @@ main(int argc, char **argv)
           goto end;
         }
 
-        memset(&fecModeName, 0, 16);
-        strcpy(fecModeName, optarg);
-        sfvmk_strLwr(fecModeName);
+        if (strlen(optarg) > 10) {
+          printf("ERROR: FEC mode name is invalid\n");
+          goto end;
+        }
 
-        if (!strcmp(fecModeName, "auto"))
-          fecMode = SFVMK_MGMT_FEC_AUTO_MASK;
-        else if (!strcmp(fecModeName, "off"))
-          fecMode = SFVMK_MGMT_FEC_OFF_MASK;
-        else if (!strcmp(fecModeName, "rs"))
-          fecMode = SFVMK_MGMT_FEC_RS_MASK;
-        else if (!strcmp(fecModeName, "baser"))
-          fecMode = SFVMK_MGMT_FEC_BASER_MASK;
-        else
-          fecMode = SFVMK_MGMT_FEC_NONE_MASK;
+        memset(&fecModeName, 0, 10);
+        strcpy(fecModeName, optarg);
+
+        fecMode = sfvmk_fecModeParse(fecModeName);
+        if (fecMode == SFVMK_MGMT_FEC_NONE_MASK) {
+          printf("ERROR: FEC mode name is invalid\n");
+          goto end;
+        }
 
         break;
       case '?':
@@ -333,7 +334,7 @@ main(int argc, char **argv)
       break;
     case SFVMK_OBJECT_FEC:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
-        if (fecMode == SFVMK_MGMT_FEC_NONE_BIT) {
+        if (fecMode == SFVMK_MGMT_FEC_NONE_MASK) {
           printf("ERROR: Invalid FEC mode settings\n");
           goto destroy_handle;
         }
@@ -859,20 +860,50 @@ static int sfvmk_postFecReq(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_fecMode_t *pFe
   return 0;
 }
 
-static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec)
+static int sfvmk_fecModeTypeGet(const char *pFecModeName)
 {
-  sfvmk_fecMode_t fecMode;
-  int ret;
+  if (!strcasecmp(pFecModeName, "auto"))
+    return SFVMK_MGMT_FEC_AUTO_MASK;
+  if (!strcasecmp(pFecModeName, "off"))
+    return SFVMK_MGMT_FEC_OFF_MASK;
+  if (!strcasecmp(pFecModeName, "rs"))
+    return SFVMK_MGMT_FEC_RS_MASK;
+  if (!strcasecmp(pFecModeName, "baser"))
+    return SFVMK_MGMT_FEC_BASER_MASK;
 
-  memset(&fecMode, 0, sizeof(fecMode));
+  return 0;
+}
 
-  fecMode.type = SFVMK_MGMT_DEV_OPS_SET;
-  fecMode.fec = fec;
-  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
-  if (ret < 0)
-    return;
+static vmk_uint32 sfvmk_fecModeParse(const char *pFecModeName)
+{
+  vmk_uint32 fecMode = 0;
+  char buf[6];
 
-  printf("FEC parameters for %s applied\n", pMgmtParm->deviceName);
+  if (!pFecModeName)
+    return SFVMK_MGMT_FEC_NONE_MASK;
+
+  while (*pFecModeName) {
+    vmk_uint32 fecModeStrSz = 0;
+    int mode;
+
+    fecModeStrSz = strcspn(pFecModeName, ",");
+    if (fecModeStrSz >= 6)
+      return SFVMK_MGMT_FEC_NONE_MASK;
+
+    memcpy(buf, pFecModeName, fecModeStrSz);
+    buf[fecModeStrSz] = '\0';
+    mode = sfvmk_fecModeTypeGet(buf);
+    if (!mode)
+      return SFVMK_MGMT_FEC_NONE_MASK;
+
+    fecMode |= mode;
+    pFecModeName += fecModeStrSz;
+
+    if (*pFecModeName)
+      pFecModeName++;
+  }
+
+  return fecMode;
 }
 
 static void sfvmk_printFecMode(vmk_uint32 fec)
@@ -887,6 +918,22 @@ static void sfvmk_printFecMode(vmk_uint32 fec)
     printf(" RS");
   if (fec & SFVMK_MGMT_FEC_BASER_MASK)
     printf(" BaseR");
+}
+
+static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec)
+{
+  sfvmk_fecMode_t fecMode;
+  int ret;
+
+  memset(&fecMode, 0, sizeof(fecMode));
+
+  fecMode.type = SFVMK_MGMT_DEV_OPS_SET;
+  fecMode.fec = fec;
+  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
+  if (ret < 0)
+    return;
+
+  printf("FEC parameters for %s applied\n", pMgmtParm->deviceName);
 }
 
 static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)

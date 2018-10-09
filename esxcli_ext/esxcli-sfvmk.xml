@@ -165,7 +165,7 @@
             <description>The name of the NIC to configured.</description>
            </parameter>
             <parameter name="mode" type="string" required="true" shortname="m">
-               <description>FEC mode (auto|off|rs|baser).</description>
+               <description>FEC mode (auto|off|rs|baser [ , ...]).</description>
             </parameter>
          </input-spec>
          <output-spec>

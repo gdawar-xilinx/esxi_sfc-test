@@ -355,25 +355,103 @@ typedef struct sfvmk_intrCoalsParam_s {
   vmk_uint32         txFramesHigh;
 } __attribute__((__packed__)) sfvmk_intrCoalsParam_t;
 
-/* NVRAM Command max payload size*/
-#define SFVMK_NVRAM_MAX_PAYLOAD         32*1024
-
-/* Get size of NVRAM partition */
+/*! \brief Get size of NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:   SFVMK_NVRAM_OP_SIZE
+ **
+ **         type: NVRAM partition type
+ **
+ **  [out]
+ **
+ **         size: Return the size of NVRAM partition type
+ **
+ */
 #define	SFVMK_NVRAM_OP_SIZE		0x00000001
 
-/* Read data from NVRAM partition */
+/*! \brief Read data from NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:     SFVMK_NVRAM_OP_READ
+ **
+ **         type:   NVRAM partition type
+ **
+ **         size:   Size of data requested
+ **
+ **         offset: Offset to start reading NVRAM data
+ **
+ **  [out]
+ **
+ **         size: Size of data actually read
+ **
+ **         data: NVRAM data after read from H/W
+ **
+ */
 #define	SFVMK_NVRAM_OP_READ		0x00000002
 
-/* Write data into NVRAM partition */
-#define	SFVMK_NVRAM_OP_WRITE		0x00000003
+/*! \brief Write data into NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:        SFVMK_NVRAM_OP_WRITEALL
+ **
+ **         type:      NVRAM partition type
+ **
+ **         size:      Size of data
+ **
+ **         data:      NVRAM data to write into H/W
+ **
+ **         erasePart: True if erase a partition, false otherwise
+ **
+ **  [out]
+ **
+ **         size: Actual data written into NVRAM
+ **
+ */
+#define	SFVMK_NVRAM_OP_WRITEALL		0x00000003
 
-/* Erase NVRAM partition */
+/*! \brief Erase NVRAM partition
+ **
+ **  [in]
+ **
+ **         op:   SFVMK_NVRAM_OP_ERASE
+ **
+ **         type: NVRAM partition type
+ **
+ */
 #define	SFVMK_NVRAM_OP_ERASE		0x00000004
 
-/* Get NVRAM partition version */
+/*! \brief Get NVRAM partition version
+ **
+ **  [in]
+ **
+ **         op:   SFVMK_NVRAM_OP_GET
+ **
+ **         type: NVRAM partition type
+ **
+ **  [out]
+ **
+ **         version: Version of partition type requested
+ **
+ **         subtype: Subtype version (Optional)
+ **
+ */
 #define	SFVMK_NVRAM_OP_GET_VER		0x00000005
 
-/* Set NVRAM partition version */
+/*! \brief Set NVRAM partition version
+ **
+ **  [in]
+ **
+ **         op:   SFVMK_NVRAM_OP_SET
+ **
+ **         type: NVRAM partition type
+ **
+ **         version: Version of partition type
+ **                  to update
+ **
+ */
 #define	SFVMK_NVRAM_OP_SET_VER		0x00000006
 
 /** NVRAM Partition Types */
@@ -401,16 +479,17 @@ typedef enum sfvmk_nvramType_e {
  **
  ** type[in]        Type of NVRAM
  **
- ** offset[in]      Location of NVRAM where to start
- **                 read/write
+ ** offset[in]      Location of NVRAM where to start read
  **
- ** size[in,out]    Size of buffer, should be <= SFVMK_NVRAM_MAX_PAYLOAD
+ ** size[in,out]    Size of buffer
  **
  ** subtype[out]    NVRAM subtype, part of get NVRAM version
  **
  ** version[in,out] Version info
  **
  ** data[in,out]    NVRAM data for read/write
+ **
+ ** erasePart[in]   Flag to tell if erase a partition or not
  **
  */
 typedef	struct sfvmk_nvramCmd_s {
@@ -420,7 +499,8 @@ typedef	struct sfvmk_nvramCmd_s {
   vmk_uint32        size;
   vmk_uint32        subtype;
   vmk_uint16        version[4];
-  vmk_uint8         data[SFVMK_NVRAM_MAX_PAYLOAD];
+  vmk_uint64        data;
+  vmk_Bool          erasePart;
 } __attribute__((__packed__)) sfvmk_nvramCmd_t;
 
 /*! \brief struct sfvmk_imgUpdate_s to update

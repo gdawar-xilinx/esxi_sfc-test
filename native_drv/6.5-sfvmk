@@ -57,6 +57,7 @@ module_def = {
                          "sfvmk_mgmt.c",
                          "sfvmk_update.c",
                          "sfvmk_mon.c",
+                         "sfvmk_nvram.c",
                          "imported/ef10_ev.c",
                          "imported/ef10_filter.c",
                          "imported/ef10_image.c",

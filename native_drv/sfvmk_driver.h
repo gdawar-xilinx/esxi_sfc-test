@@ -971,6 +971,14 @@ VMK_ReturnStatus
 sfvmk_phyFecGet(sfvmk_adapter_t *pAdapter,  vmk_uint32 *advFec, vmk_uint32 *activeFec);
 
 VMK_ReturnStatus
+sfvmk_nvramRead(sfvmk_adapter_t *pAdapter, efx_nvram_type_t type, vmk_uint8 *pNvramBuf,
+                vmk_uint32 *pBufSize, vmk_uint32 start);
+
+VMK_ReturnStatus
+sfvmk_nvramWriteAll(sfvmk_adapter_t *pAdapter, efx_nvram_type_t type, vmk_uint8 *pNvramBuf,
+                    vmk_uint32 *pBufSize, vmk_Bool eraseNvram);
+
+VMK_ReturnStatus
 sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCount size, vmk_ByteCount *pBytesCopied);
 
 #endif /* __SFVMK_DRIVER_H__ */

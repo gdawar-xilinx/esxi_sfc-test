@@ -38,7 +38,7 @@
          <description>Gets MC logging state</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>
@@ -54,7 +54,7 @@
          <description>Sets MC logging state to enable/ disable</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
             <parameter name="enable" type="bool" required="true" shortname="e">
                <description>Enable/ Disable MC logging (y[es], n[o]).</description>
@@ -73,7 +73,7 @@
          <description>Gets Rx/ Tx hardware queue statistics</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>
@@ -89,7 +89,7 @@
          <description>Gets Vital Product Data</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>
@@ -106,7 +106,7 @@
          <description>Gets installed firmware version</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>
@@ -123,7 +123,7 @@
          <description>Sets new firmware image</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
             <parameter name="file-name" type="string" required="true" shortname="f">
                <description>Firmware image file name.</description>
@@ -146,7 +146,7 @@
          <description>Gets FEC mode settings</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>
@@ -162,7 +162,7 @@
          <description>Sets FEC mode settings</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
             <parameter name="mode" type="string" required="true" shortname="m">
                <description>FEC mode (auto|off|rs|baser [ , ...]).</description>
@@ -181,7 +181,7 @@
          <description>Gets hardware sensor information</description>
          <input-spec>
            <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configured.</description>
+            <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
          <output-spec>

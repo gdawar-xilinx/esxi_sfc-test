@@ -42,6 +42,7 @@ const efx_nvram_type_t nvramTypes[] = {
   [SFVMK_NVRAM_FPGA_BACKUP]  = EFX_NVRAM_FPGA_BACKUP,
   [SFVMK_NVRAM_UEFIROM]      = EFX_NVRAM_UEFIROM,
   [SFVMK_NVRAM_DYNAMIC_CFG]  = EFX_NVRAM_DYNAMIC_CFG,
+  [SFVMK_NVRAM_MUM]          = EFX_NVRAM_MUM_FIRMWARE,
 };
 
 /*! \brief  Get adapter pointer based on hash.
@@ -598,7 +599,7 @@ sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies     *pCookies,
   sfvmk_adapter_t      *pAdapter = NULL;
   efx_nic_t            *pNic = NULL;
   vmk_UplinkDriverInfo *pDrvInfo = NULL;
-  efx_nvram_type_t     nvramType;
+  efx_nvram_type_t     nvramType = EFX_NVRAM_INVALID;
   vmk_ByteCount        bytesCopied;
   vmk_uint32           subtype;
   vmk_uint16           nvramVer[4];
@@ -644,8 +645,13 @@ sfvmk_mgmtVerInfoCallback(vmk_MgmtCookies     *pCookies,
 
     case SFVMK_GET_ROM_VERSION:
     case SFVMK_GET_UEFI_VERSION:
-      nvramType = (pVerInfo->type == SFVMK_GET_UEFI_VERSION) ?
-                   EFX_NVRAM_UEFIROM : EFX_NVRAM_BOOTROM;
+    case SFVMK_GET_SUC_VERSION:
+      if (pVerInfo->type == SFVMK_GET_UEFI_VERSION)
+        nvramType = EFX_NVRAM_UEFIROM;
+      else if (pVerInfo->type == SFVMK_GET_ROM_VERSION)
+        nvramType = EFX_NVRAM_BOOTROM;
+      else if (pVerInfo->type == SFVMK_GET_SUC_VERSION)
+        nvramType = EFX_NVRAM_MUM_FIRMWARE;
 
       pNic = pAdapter->pNic;
 

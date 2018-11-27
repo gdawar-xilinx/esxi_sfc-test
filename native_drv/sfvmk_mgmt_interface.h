@@ -270,6 +270,7 @@ typedef struct sfvmk_linkSpeed_s {
 #define SFVMK_GET_FW_VERSION   0x00000002
 #define SFVMK_GET_ROM_VERSION  0x00000004
 #define SFVMK_GET_UEFI_VERSION 0x00000008
+#define SFVMK_GET_SUC_VERSION  0x00000010
 
 /*! \brief struct sfvmk_versionInfo_s Retrieve various
  **        Driver/FW version info
@@ -468,6 +469,7 @@ typedef enum sfvmk_nvramType_e {
   SFVMK_NVRAM_FPGA_BACKUP,
   SFVMK_NVRAM_UEFIROM,
   SFVMK_NVRAM_DYNAMIC_CFG,
+  SFVMK_NVRAM_MUM,
   SFVMK_NVRAM_INVALID,
   SFVMK_NVRAM_NTYPE
 } sfvmk_nvramType_t;

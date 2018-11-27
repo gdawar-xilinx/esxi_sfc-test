@@ -39,13 +39,16 @@ static vmk_MgmtUserHandle mgmtHandle;
 #define OBJECT_NAME_LEN  16
 
 typedef enum sfvmk_firmwareType_e {
-  SFVMK_FIRMWARE_INVALID =  0,
+  SFVMK_FIRMWARE_ANY     =  0,
   SFVMK_FIRMWARE_MC      = (1 << 0),
   SFVMK_FIRMWARE_BOOTROM = (1 << 1),
   SFVMK_FIRMWARE_UEFI    = (1 << 2),
+  SFVMK_FIRMWARE_SUC     = (1 << 3),
   SFVMK_FIRMWARE_ALL     = (SFVMK_FIRMWARE_MC |      \
                             SFVMK_FIRMWARE_BOOTROM | \
-                            SFVMK_FIRMWARE_UEFI)
+                            SFVMK_FIRMWARE_UEFI |
+                            SFVMK_FIRMWARE_SUC),
+  SFVMK_FIRMWARE_INVALID = 0xffff
 } sfvmk_firmwareType_t;
 
 typedef enum sfvmk_objectType_e {
@@ -135,7 +138,7 @@ main(int argc, char **argv)
   char fileName[128];
   char fecModeName[11];
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
-  sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_INVALID;
+  sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_ANY;
   sfvmk_mgmtDevInfo_t mgmtParm;
 
   printf("<?xml version=\"1.0\"?><output xmlns:esxcli=\"sfvmk\">\n");
@@ -249,6 +252,8 @@ main(int argc, char **argv)
           fwType = SFVMK_FIRMWARE_BOOTROM;
         else if (!strcmp(fwTypeName, "uefirom"))
           fwType = SFVMK_FIRMWARE_UEFI;
+        else if (!strcmp(fwTypeName, "suc"))
+          fwType = SFVMK_FIRMWARE_SUC;
         else
           fwType = SFVMK_FIRMWARE_INVALID;
 
@@ -321,11 +326,6 @@ main(int argc, char **argv)
       break;
     case SFVMK_OBJECT_FIRMWARE:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
-        if (fwType == SFVMK_FIRMWARE_INVALID) {
-          printf("ERROR: Invalid firmware type\n");
-          goto destroy_handle;
-        }
-
         sfvmk_fwUpdate(&mgmtParm, fileName, fwType, fwTypeName);
       } else {
         sfvmk_fwVersion(&mgmtParm, SFVMK_FIRMWARE_ALL);
@@ -523,10 +523,8 @@ static int sfvmk_getFWVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_versionInfo_
     return -EAGAIN;
   }
 
-  if (pMgmtParm->status != VMK_OK) {
-    printf("ERROR: Firmware version get failed, error 0x%x\n", pMgmtParm->status);
+  if (pMgmtParm->status != VMK_OK)
     return -EINVAL;
-  }
 
   return 0;
 }
@@ -539,8 +537,7 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   char outBuffer[256];
   int ret = 0;
 
-  if ((fwType == SFVMK_FIRMWARE_INVALID) ||
-      (fwType > SFVMK_FIRMWARE_ALL)) {
+  if (fwType > SFVMK_FIRMWARE_ALL) {
     printf("ERROR: Invalid firmware type\n");
     return -EINVAL;
   }
@@ -567,7 +564,7 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
     verInfo.type = SFVMK_GET_FW_VERSION;
     ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
     if (ret < 0)
-      return ret;
+      goto end;
 
     printf("Controller version: %s\n", verInfo.version.string);
   }
@@ -577,7 +574,7 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
     verInfo.type = SFVMK_GET_ROM_VERSION;
     ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
     if (ret < 0)
-      return ret;
+      goto end;
 
     printf("BOOTROM version:    %s\n", verInfo.version.string);
   }
@@ -587,12 +584,28 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
     verInfo.type = SFVMK_GET_UEFI_VERSION;
     ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
     if (ret < 0)
-      return ret;
+      goto end;
 
     printf("UEFI version:       %s\n", verInfo.version.string);
   }
 
-  return 0;
+  if (fwType & SFVMK_FIRMWARE_SUC) {
+    memset(&verInfo, 0, sizeof(verInfo));
+    verInfo.type = SFVMK_GET_SUC_VERSION;
+    ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
+    if (ret < 0)
+      printf("SUC version:        N/A\n");
+    else
+      printf("SUC version:        %s\n", verInfo.version.string);
+  }
+
+  ret = 0;
+
+end:
+  if (ret < 0)
+    printf("ERROR: Firmware version get failed, error 0x%x\n", pMgmtParm->status);
+
+  return ret;
 }
 
 static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
@@ -610,6 +623,14 @@ static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
 
     case SFVMK_FIRMWARE_UEFI:
       type = SFVMK_NVRAM_UEFIROM;
+      break;
+
+    case SFVMK_FIRMWARE_SUC:
+      type = SFVMK_NVRAM_MUM;
+      break;
+
+    case SFVMK_FIRMWARE_ANY:
+      type = SFVMK_NVRAM_INVALID;
       break;
 
     default:
@@ -675,7 +696,11 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
   if (portCount <= 0)
     return;
 
-  printf("Updating %s firmware for", pFwTypeName);
+  if (fwType != SFVMK_FIRMWARE_ANY)
+    printf("Updating %s firmware for", pFwTypeName);
+  else
+    printf("Updating firmware for");
+
   for (i = 0; i < portCount; i++)
     printf(" %s", siblingPorts[i].string);
   printf("...\n");

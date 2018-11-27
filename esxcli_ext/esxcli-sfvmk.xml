@@ -128,8 +128,8 @@
             <parameter name="file-name" type="string" required="true" shortname="f">
                <description>Firmware image file name.</description>
             </parameter>
-            <parameter name="type" type="string" required="true" shortname="t">
-               <description>Firmware image type (controller/ bootrom/ uefirom).</description>
+            <parameter name="type" type="string" required="false" shortname="t">
+               <description>Firmware image type (controller/ bootrom/ uefirom/ suc). If specified, matches firmware type before update.</description>
             </parameter>
          </input-spec>
          <output-spec>
@@ -138,7 +138,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/sfc/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} --type $val{type}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} $if{type, --type=$val{type}}</execute>
       </command>
 
       <!-- esxcli sfvmk fec get -->

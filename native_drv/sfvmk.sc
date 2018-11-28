@@ -32,7 +32,7 @@ sfvmk_identification = {
 
 # Version bump is inbox driver only.
 if inbox:
-   sfvmk_identification['version_bump'] = 5
+   sfvmk_identification['version_bump'] = 6
 
 #
 # Build the Driver Module

@@ -9,11 +9,14 @@ DEV = {
             "devices" : [
                {
                   "device id"         : "0a03",
+                  "sub vendor id"     : "1924",
                   "description"       : "SFC9220 10/40G Ethernet Controller",
                },
                {
                   "device id"         : "0b03",
-                  "description"       : "SFC9250 10/25/40/50/100G Ethernet Controller",
+                  "sub vendor id"     : "1924",
+                  "sub device id"     : "8022",
+                  "description"       : "XtremeScale X2522 10G Network Adapter",
                },
 
             ],

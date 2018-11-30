@@ -32,6 +32,8 @@
 /* Default number of RSSQ supported */
 #define SFVMK_RSSQ_COUNT_DEFAULT 0
 
+#define SFVMK_DYN_VPD_AREA_TAG   0x10
+
 /* Initialize module params with default values */
 sfvmk_modParams_t modParams = {
   .debugMask = SFVMK_DEBUG_DEFAULT,
@@ -920,6 +922,8 @@ sfvmk_attachDevice(vmk_Device dev)
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_adapter_t *pAdapter = NULL;
   const efx_nic_cfg_t *pNicCfg = NULL;
+  vmk_uint8 vpdPayload[SFVMK_VPD_MAX_PAYLOAD] = {0};
+  vmk_uint8 vpdLen = 0;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -1021,6 +1025,18 @@ sfvmk_attachDevice(vmk_Device dev)
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_vpd_init failed status: %s",
                         vmk_StatusToString(status));
     goto failed_vpd_init;
+  }
+
+  /* Get VPD info to find out the interface which does not have valid VPD.
+     The interface which does not have valid VPD should not be attached.
+     This happens in PF partioning which is not supported by the driver.
+     TODO: Needs to revisit when SRIOV support is added */
+  status = sfvmk_vpdGetInfo(pAdapter, vpdPayload, SFVMK_VPD_MAX_PAYLOAD,
+                            SFVMK_DYN_VPD_AREA_TAG, ('S' | 'N' << 8), &vpdLen);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vpdGetInfo failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_vpd_get_info;
   }
 
   /* Reset NIC. */
@@ -1200,6 +1216,7 @@ failed_get_vi_pool:
 failed_nic_init:
 failed_set_resource_limit:
 failed_nic_reset:
+failed_vpd_get_info:
   efx_vpd_fini(pAdapter->pNic);
 
 failed_vpd_init:

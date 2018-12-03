@@ -607,8 +607,8 @@ def network_configuration(output_file, server, mode, esx_ver):
             for hdr in hdr_list:
                 ip6_table += '<th>%s' % hdr + '</th>'
         ipv_ip_info = execute(ipv_ip_cmd)
+        if not ipv_ip_info: return
         ipv_ip_info = ipv_ip_info.split('\n')
-
         for line in ipv_ip_info:
             if line != "" and not line.startswith("---") \
                     and not line.startswith("Name")\
@@ -647,14 +647,21 @@ def network_configuration(output_file, server, mode, esx_ver):
                                      + '<td>%s' % netmask + '<td>%s' % bcast_ip \
                                      + '<td>%s' % iptype + '<td>%s' % gateway + '<td>%s' % dhcp
                 elif ip_type == "v6":
-                    line = re.search('(\w+)\s+(\w+\:\:\w+\:\w+\:\w+\:\w+)'
-                                     '\s+(\w+)\s+(\w+)\s+(.*)',
-                                     line)
-                    interface = line.group(1)
-                    address = line.group(2)
-                    netmask = line.group(3)
-                    iptype = line.group(4)
-                    status = line.group(5)
+                    try:
+                        line = re.search('(\w+)\s+(\w+\:\:\w+\:\w+\:\w+\:\w+)'
+                                         '\s+(\w+)\s+(\w+)\s+(.*)',
+                                          line)
+                        interface = line.group(1)
+                        address = line.group(2)
+                        netmask = line.group(3)
+                        iptype = line.group(4)
+                        status = line.group(5)
+                    except AttributeError:
+                        interface = "not updated"
+                        address = "not updated"
+                        netmask = "not updated"
+                        iptype = "not updated"
+                        status = "not updated"
                     ip6_table += '</tr><td>%s' % interface + '<td>%s' % address \
                                  + '<td>%s' % netmask + '<td>%s' % iptype \
                                  + '<td>%s' % status

@@ -72,7 +72,7 @@ do
       ddk_vm=${esx_arr[2]}
       echo "Current ESX version: $esx_ver"
       # create destination dir for the packages
-      pkg_dir="/projects/vmware/$build""_""$tag/esxi_$esx_ver"
+      pkg_dir="/projects/vmware/driver/$build""_""$tag/esxi_$esx_ver"
       cnt=$(expr $cnt + 1)
       echo "Transferring native_drv dir to $ddk"
       ddk_tag_dir="$ddk/$tag"
@@ -185,7 +185,7 @@ do
    tag=${tag_arr[0]}
    echo "$tag packages are:"
    echo "-------------------------------"
-   ls -R /projects/vmware/*_$tag
+   ls -R /projects/vmware/driver/*_$tag
    echo
 done
 # Report errors/warnings if any

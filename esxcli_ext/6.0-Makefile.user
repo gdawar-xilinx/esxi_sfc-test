@@ -93,7 +93,7 @@ DEV_APP = 1
 ################
 # Extra compiler and preprocessor flags based on kind of build
 # (release or beta).  These default to being empty.
-# DEV_beta_COMPILEFLAGS = -Dmy_debug_flag
+DEV_beta_COMPILEFLAGS = -DSF_JLIB_DEBUG
 # DEV_release_COMPILEFLAGS = -Dmy_optimized_flag
 
 ################

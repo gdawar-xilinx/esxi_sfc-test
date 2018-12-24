@@ -32,7 +32,9 @@ NDDK_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKVER)
 
 # mgmtInterface.c is in DEV_COMMON_DIR, the build system looks
 # there for sources as well as here.
-UWTOOL_SOURCES = main.c sfvmk_mgmt_interface.c sf_utils.c sf_firmware.c
+UWTOOL_SOURCES = main.c sfvmk_mgmt_interface.c sf_utils.c sf_firmware.c \
+		sf_jlib/sf_jlib_parser.c sf_jlib/json.c
+
 DEV_COMMON_DIR = ../native_drv
 
 PLUGIN_XML = esxcli-sfvmk.xml

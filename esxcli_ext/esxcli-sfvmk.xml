@@ -105,7 +105,7 @@
       <command path="sfvmk.firmware.get">
          <description>Gets installed firmware version</description>
          <input-spec>
-           <parameter name="nic-name" type="string" required="true" shortname="n">
+           <parameter name="nic-name" type="string" required="false" shortname="n">
             <description>The name of the NIC to configure.</description>
            </parameter>
          </input-spec>
@@ -115,7 +115,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/sfc/bin/sfvmkcli --object firmware --get --nic-name $val{nic-name}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object firmware --get $if{nic-name, --nic-name=$val{nic-name}}</execute>
       </command>
 
       <!-- esxcli sfvmk firmware set -->

@@ -39,7 +39,7 @@ typedef struct sfvmk_ifaceNode_s {
 
 typedef struct sfvmk_masterDevNode_s {
   struct sfvmk_masterDevNode_s *pNext;
-  sfvmk_ifaceNode_t *pIfaceHead;
+  sfvmk_ifaceNode_t *pMsIfaceNode;
   vmk_Name mcVer;
   vmk_Name sucVer;
   vmk_Name bootromVer;

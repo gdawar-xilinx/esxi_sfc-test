@@ -136,6 +136,7 @@ main(int argc, char **argv)
   char fileName[128];
   char fecModeName[11];
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
+  sfvmk_objectType_t objType = SFVMK_OBJECT_MAX;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_ANY;
   sfvmk_mgmtDevInfo_t mgmtParm;
   sfvmk_firmwareCtx_t fwCtx;
@@ -290,22 +291,24 @@ main(int argc, char **argv)
     goto end;
   }
 
-  if (!nicNameSet) {
-    printf("ERROR: Missing required parameter -n|--nic-name\n");
-    goto end;
-  }
-
   status = vmk_MgmtUserInit((vmk_MgmtApiSignature *)&sfvmk_mgmtSig, 0, &mgmtHandle);
   if (status != 0) {
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto end;
   }
 
+  objType = sfvmk_findObjectType(objectName);
+
   /* Confirm if NIC name is a Solarflare NIC or not */
-  if (!sfvmk_isSFNic(&mgmtParm))
+  if (!nicNameSet) {
+    if (objType != SFVMK_OBJECT_FIRMWARE) {
+      printf("ERROR: Missing required parameter -n|--nic-name\n");
+      goto destroy_handle;
+    }
+  } else if (!sfvmk_isSFNic(&mgmtParm))
     goto destroy_handle;
 
-  switch (sfvmk_findObjectType(objectName)) {
+  switch (objType) {
     case SFVMK_OBJECT_MCLOG:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
         if (!strcmp(mclogOption, "true"))
@@ -334,9 +337,13 @@ main(int argc, char **argv)
         memset(&fwCtx, 0, sizeof(fwCtx));
         fwCtx.isForce = VMK_FALSE;
         fwCtx.updateAllFirmware = VMK_FALSE;
-        fwCtx.applyAllNic = VMK_FALSE;
         fwCtx.fwType = fwType;
-        strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
+
+        fwCtx.applyAllNic = VMK_TRUE;
+        if (nicNameSet) {
+          strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
+          fwCtx.applyAllNic = VMK_FALSE;
+        }
 
         sfvmk_runFirmwareOps(SFVMK_MGMT_DEV_OPS_GET, &fwCtx);
       }

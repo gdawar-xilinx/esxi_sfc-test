@@ -30,26 +30,26 @@
 #include <getopt.h>
 #include <malloc.h>
 #include <ctype.h>
-#include <errno.h>
+
+#include "sf_utils.h"
 #include "sfvmk_mgmt_interface.h"
 
+/*
+ * General coding convention followed in SFVMK esxcli extension code:
+ *   1. Use VMK_ReturnStatus for returning error or success case.
+ *   2. If same management API invocation happens at multiple places,
+ *      move the API to sf_utils.c as helper function.
+ *   3. Handle command line parsing within main() function.
+ *   4. Print all command line parsing error within main() function.
+ *   5. main() should print an error only if there are input parameter error
+ *      and the individual action handler can't be invoked. Error and success
+ *      messages for an action should be printed by action handler only.
+ */
+
 extern const vmk_MgmtApiSignature sfvmk_mgmtSig;
-static vmk_MgmtUserHandle mgmtHandle;
+vmk_MgmtUserHandle mgmtHandle;
 
 #define OBJECT_NAME_LEN  16
-
-typedef enum sfvmk_firmwareType_e {
-  SFVMK_FIRMWARE_ANY     =  0,
-  SFVMK_FIRMWARE_MC      = (1 << 0),
-  SFVMK_FIRMWARE_BOOTROM = (1 << 1),
-  SFVMK_FIRMWARE_UEFI    = (1 << 2),
-  SFVMK_FIRMWARE_SUC     = (1 << 3),
-  SFVMK_FIRMWARE_ALL     = (SFVMK_FIRMWARE_MC |      \
-                            SFVMK_FIRMWARE_BOOTROM | \
-                            SFVMK_FIRMWARE_UEFI |
-                            SFVMK_FIRMWARE_SUC),
-  SFVMK_FIRMWARE_INVALID = 0xffff
-} sfvmk_firmwareType_t;
 
 typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_MCLOG = 0,
@@ -73,20 +73,18 @@ static const char * supportedObjects[] = {
 /*
  * Functions to handle request for each object
  */
-static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, char cmdOption);
-static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm);
-static void sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *mgmtParm);
-static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *mgmtParm,
+static VMK_ReturnStatus sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm, char cmdOption);
+static VMK_ReturnStatus sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm);
+static VMK_ReturnStatus sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm);
+static VMK_ReturnStatus sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
                            char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName);
-static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_firmwareType_t fwType);
-static int sfvmk_getMACAddress(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_macAddress_t *pMacAddr);
+static VMK_ReturnStatus sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t fwType);
 static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[]);
-static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo);
-static int sfvmk_fecModeTypeGet(const char *pFecModeName);
+static vmk_uint32 sfvmk_fecModeTypeGet(const char *pFecModeName);
 static vmk_uint32 sfvmk_fecModeParse(const char *pFecModeName);
-static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
-static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
-static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType);
+static VMK_ReturnStatus sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
+static VMK_ReturnStatus sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
+static VMK_ReturnStatus sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType);
 
 static inline void sfvmk_strLwr(char string[])
 {
@@ -110,14 +108,14 @@ static int sfvmk_findObjectType(const char *obj)
 
 static vmk_Bool sfvmk_isSFNic(sfvmk_mgmtDevInfo_t *pMgmtParm)
 {
+  vmk_Name pciBDF;
   int status = 0;
-  sfvmk_pciInfo_t pciInfo;
 
-  status = sfvmk_getPCIInfo(pMgmtParm, &pciInfo);
-  if (status == 0)
+  status = sfvmk_getPCIAddress(pMgmtParm->deviceName, &pciBDF);
+  if (status == VMK_OK)
     return VMK_TRUE;
 
-  if (status == -ENOENT)
+  if (status == VMK_NOT_FOUND)
     printf("ERROR: Unable to find Solarflare NIC %s\n", pMgmtParm->deviceName);
 
   return VMK_FALSE;
@@ -128,7 +126,6 @@ main(int argc, char **argv)
 {
   int c;
   int opType = SFVMK_MGMT_DEV_OPS_INVALID;
-  int status = 0 ;
   int stringLength = 0;
   vmk_Bool optionEnable = VMK_FALSE;
   vmk_Bool nicNameSet = VMK_FALSE;
@@ -140,6 +137,7 @@ main(int argc, char **argv)
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_ANY;
   sfvmk_mgmtDevInfo_t mgmtParm;
+  VMK_ReturnStatus status;
 
   printf("<?xml version=\"1.0\"?><output xmlns:esxcli=\"sfvmk\">\n");
   printf("<string>");
@@ -318,12 +316,15 @@ main(int argc, char **argv)
 
       sfvmk_mcLog(opType, &mgmtParm, optionEnable);
       break;
+
     case SFVMK_OBJECT_STATS:
       sfvmk_hwQueueStats(opType, &mgmtParm);
       break;
+
     case SFVMK_OBJECT_VPD:
       sfvmk_vpdGet(opType, &mgmtParm);
       break;
+
     case SFVMK_OBJECT_FIRMWARE:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
         sfvmk_fwUpdate(&mgmtParm, fileName, fwType, fwTypeName);
@@ -343,11 +344,12 @@ main(int argc, char **argv)
       } else {
         sfvmk_fecModeGet(&mgmtParm);
       }
-
       break;
+
     case SFVMK_OBJECT_SENSOR:
       sfvmk_hwSensorGet(&mgmtParm, opType);
       break;
+
     default:
       printf("ERROR: Unknown object - %s\n", objectName);
   }
@@ -361,7 +363,8 @@ end:
   return 0;
 }
 
-static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, vmk_Bool cmdOption)
+static VMK_ReturnStatus
+sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Bool cmdOption)
 {
   sfvmk_mcdiLogging_t mcLog;
   int status;
@@ -371,28 +374,32 @@ static void sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *mgmtParm, vmk_Bool cmdO
   mcLog.state =  cmdOption;
 
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_MC_LOGGING_REQUEST, mgmtParm, &mcLog);
-  if (status != VMK_OK){
+                                      SFVMK_CB_MC_LOGGING_REQUEST, pMgmtParm, &mcLog);
+  if (status != VMK_OK) {
     printf("ERROR: unable to connect to driver\n");
-    return;
+    return status;
   }
 
-  if (mgmtParm->status != VMK_OK) {
+  if (pMgmtParm->status != VMK_OK) {
     printf("ERROR: MC logging state %s failed, error 0x%x\n",
-           (opType == SFVMK_MGMT_DEV_OPS_GET) ? "get" : "set", status);
-    return;
+           (opType == SFVMK_MGMT_DEV_OPS_GET) ? "get" : "set", pMgmtParm->status);
+    return pMgmtParm->status;
   }
 
   printf("%s", mcLog.state ? "Enabled" : "Disabled");
+
+  return VMK_OK;
 }
 
-static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
+static VMK_ReturnStatus
+sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm)
 {
   sfvmk_hwQueueStats_t stats;
   char *pBuffer;
   int status;
 
   if (opType != SFVMK_MGMT_DEV_OPS_GET) {
+    status = VMK_BAD_PARAM;
     printf("ERROR: Set operation not supported\n");
     goto end;
   }
@@ -400,24 +407,28 @@ static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
   stats.subCmd = SFVMK_MGMT_STATS_GET_SIZE;
   stats.size = 0;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_HW_QUEUE_STATS_GET, mgmtParm, &stats);
-  if (status != VMK_OK){
+                                      SFVMK_CB_HW_QUEUE_STATS_GET, pMgmtParm, &stats);
+  if (status != VMK_OK) {
+    status = VMK_NO_CONNECT;
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto end;
   }
 
-  if (mgmtParm->status != VMK_OK) {
-    printf("ERROR: Hardware queue statistics get failed, error 0x%x\n", mgmtParm->status);
+  if (pMgmtParm->status != VMK_OK) {
+    status = pMgmtParm->status;
+    printf("ERROR: Hardware queue statistics get size failed, error 0x%x\n", status);
     goto end;
   }
 
   if (!stats.size) {
+    status = VMK_BAD_PARAM;
     printf("ERROR: Invalid statistics buffer size\n");
     goto end;
   }
 
   pBuffer = malloc(stats.size);
   if (!pBuffer) {
+    status = VMK_NO_MEMORY;
     printf("ERROR: Unable to allocate memmory for queue statistics buffer\n");
     goto end;
   }
@@ -426,133 +437,106 @@ static void sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
   stats.statsBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
   stats.subCmd = SFVMK_MGMT_STATS_GET;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_HW_QUEUE_STATS_GET, mgmtParm, &stats);
-  if (status != VMK_OK){
+                                      SFVMK_CB_HW_QUEUE_STATS_GET, pMgmtParm, &stats);
+  if (status != VMK_OK) {
+    status = VMK_NO_CONNECT;
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto free_buffer;
   }
 
-  if (mgmtParm->status != VMK_OK) {
-    printf("ERROR: Hardware queue statistics get failed, error 0x%x\n", mgmtParm->status);
+  if (pMgmtParm->status != VMK_OK) {
+    status = pMgmtParm->status;
+    printf("ERROR: Hardware queue statistics get failed, error 0x%x\n", status);
     goto free_buffer;
   }
 
   printf("%s\n", pBuffer);
+  status = VMK_OK;
 
 free_buffer:
   free(pBuffer);
 
 end:
-  return;
+  return status;
 }
 
-static int sfvmk_vpdGetByTag(sfvmk_mgmtDevInfo_t *mgmtParm, sfvmk_vpdInfo_t *vpdInfo,
-                             vmk_uint8 tag, vmk_uint16 keyword)
-{
-  int status;
 
-  memset(vpdInfo, 0, sizeof(*vpdInfo));
-  vpdInfo->vpdOp = SFVMK_MGMT_DEV_OPS_GET;
-  vpdInfo->vpdTag = tag;
-  vpdInfo->vpdKeyword = keyword;
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_VPD_REQUEST, mgmtParm, vpdInfo);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
-
-  if (mgmtParm->status != VMK_OK) {
-    if (mgmtParm->status == VMK_NOT_FOUND) {
-      printf("[missing]\n");
-      return 0;
-    }
-
-    printf("ERROR: VPD info get failed, error 0x%x\n", mgmtParm->status);
-    return -EINVAL;
-  }
-
-  printf("%s\n", vpdInfo->vpdPayload);
-  return 0;
-}
-
-static void sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *mgmtParm)
+static VMK_ReturnStatus
+sfvmk_printVpd(const char *pIfaceName, vmk_uint8 tag, vmk_uint16 keyword)
 {
   sfvmk_vpdInfo_t vpdInfo;
-  int ret;
+  VMK_ReturnStatus status;
+
+  status = sfvmk_getVpdByTag(pIfaceName, &vpdInfo, tag, keyword);
+  if (status == VMK_NOT_FOUND) {
+    printf("[missing]\n");
+    status = VMK_OK;
+  } else if (status == VMK_OK)
+    printf("%s\n", vpdInfo.vpdPayload);
+
+  return status;
+}
+
+static VMK_ReturnStatus
+sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm)
+{
+  VMK_ReturnStatus status;
 
   if (opType != SFVMK_MGMT_DEV_OPS_GET) {
     printf("ERROR: Set operation not supported\n");
-    return;
+    return VMK_BAD_PARAM;
   }
 
   printf("Product Name: ");
-  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x02, 0x0);
-  if (ret < 0)
-    return;
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x02, 0x0)) != VMK_OK)
+    goto end;
 
   printf("[PN] Part number: ");
-  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('P' | 'N' << 8));
-  if (ret < 0)
-    return;
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('P' | 'N' << 8))) != VMK_OK)
+    goto end;
 
   printf("[SN] Serial number: ");
-  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('S' | 'N' << 8));
-  if (ret < 0)
-    return;
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('S' | 'N' << 8))) != VMK_OK)
+    goto end;
 
   printf("[EC] Engineering changes: ");
-  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('E' | 'C' << 8));
-  if (ret < 0)
-    return;
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('E' | 'C' << 8))) != VMK_OK)
+    goto end;
 
   printf("[VD] Version: ");
-  ret = sfvmk_vpdGetByTag(mgmtParm, &vpdInfo, 0x10, ('V' | 'D' << 8));
-  if (ret < 0)
-    return;
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('V' | 'D' << 8))) != VMK_OK)
+    goto end;
+
+end:
+  if (status != VMK_OK)
+    printf("ERROR: VPD get failed with error 0x%x\n", status);
+
+  return VMK_OK;
 }
 
-static int sfvmk_getFWVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_versionInfo_t *pVerInfo)
-{
-  int status;
-
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_VERINFO_GET, pMgmtParm, pVerInfo);
-  if (status != VMK_OK){
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
-
-  if (pMgmtParm->status != VMK_OK)
-    return -EINVAL;
-
-  return 0;
-}
-
-static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t fwType)
+static VMK_ReturnStatus
+sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t fwType)
 {
   sfvmk_versionInfo_t verInfo;
-  sfvmk_macAddress_t mac;
+  vmk_uint8  macAddress[6];
   sfvmk_vpdInfo_t vpdInfo;
   char outBuffer[256];
-  int ret = 0;
+  VMK_ReturnStatus ret = VMK_FAILURE;
 
-  if (fwType > SFVMK_FIRMWARE_ALL) {
-    printf("ERROR: Invalid firmware type\n");
-    return -EINVAL;
-  }
+  if (fwType > SFVMK_FIRMWARE_ALL)
+    return VMK_BAD_PARAM;
 
-  ret = sfvmk_getMACAddress(pMgmtParm, &mac);
-  if (ret < 0)
+  ret = sfvmk_getMACAddress(pMgmtParm->deviceName, macAddress);
+  if (ret != VMK_OK)
     return ret;
 
   printf("%s - MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
          pMgmtParm->deviceName,
-         mac.macAddress[0], mac.macAddress[1], mac.macAddress[2],
-         mac.macAddress[3], mac.macAddress[4], mac.macAddress[5]);
+         macAddress[0], macAddress[1], macAddress[2],
+         macAddress[3], macAddress[4], macAddress[5]);
 
-  ret = sfvmk_vpdGetByTag(pMgmtParm, &vpdInfo, 0x02, 0x0);
-  if (ret < 0)
+  ret = sfvmk_getVpdByTag(pMgmtParm->deviceName, &vpdInfo, 0x02, 0x0);
+  if (ret != VMK_OK)
     return ret;
 
   printf("NIC model: %s\n", vpdInfo.vpdPayload);
@@ -562,8 +546,8 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   if (fwType & SFVMK_FIRMWARE_MC) {
     memset(&verInfo, 0, sizeof(verInfo));
     verInfo.type = SFVMK_GET_FW_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
-    if (ret < 0)
+    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
+    if (ret != VMK_OK)
       goto end;
 
     printf("Controller version: %s\n", verInfo.version.string);
@@ -572,8 +556,8 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   if (fwType & SFVMK_FIRMWARE_BOOTROM) {
     memset(&verInfo, 0, sizeof(verInfo));
     verInfo.type = SFVMK_GET_ROM_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
-    if (ret < 0)
+    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
+    if (ret != VMK_OK)
       goto end;
 
     printf("BOOTROM version:    %s\n", verInfo.version.string);
@@ -582,8 +566,8 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   if (fwType & SFVMK_FIRMWARE_UEFI) {
     memset(&verInfo, 0, sizeof(verInfo));
     verInfo.type = SFVMK_GET_UEFI_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
-    if (ret < 0)
+    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
+    if (ret != VMK_OK)
       goto end;
 
     printf("UEFI version:       %s\n", verInfo.version.string);
@@ -592,19 +576,16 @@ static int sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t 
   if (fwType & SFVMK_FIRMWARE_SUC) {
     memset(&verInfo, 0, sizeof(verInfo));
     verInfo.type = SFVMK_GET_SUC_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm, &verInfo);
-    if (ret < 0)
-      printf("SUC version:        N/A\n");
-    else
-      printf("SUC version:        %s\n", verInfo.version.string);
+    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
+    if (ret != VMK_OK)
+      goto end;
+
+    printf("SUC version:        %s\n", verInfo.version.string);
   }
 
-  ret = 0;
+  ret = VMK_OK;
 
 end:
-  if (ret < 0)
-    printf("ERROR: Firmware version get failed, error 0x%x\n", pMgmtParm->status);
-
   return ret;
 }
 
@@ -640,8 +621,9 @@ static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
   return type;
 }
 
-static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
-                           char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName)
+static VMK_ReturnStatus
+sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
+               char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName)
 {
   sfvmk_imgUpdateV2_t imgUpdateV2;
   FILE *pFile = NULL;
@@ -654,19 +636,19 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
 
   pFile = fopen(pFileName, "r");
   if (pFile == NULL) {
-    printf("ERROR: Unable to open file '%s'\n", pFileName);
+    status = VMK_INVALID_NAME;
     goto end;
   }
 
   status = fseek(pFile, 0, SEEK_END);
   if (status != 0) {
-    printf("ERROR: Unable to open file '%s'\n", pFileName);
+    status = VMK_READ_ERROR;
     goto end;
   }
 
   fileSize = ftell(pFile);
   if (fileSize <= 0) {
-    printf("ERROR: Empty file '%s'\n", pFileName);
+    status = VMK_READ_ERROR;
     goto end;
   }
 
@@ -674,27 +656,27 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
 
   pBuf = (char*) malloc(fileSize);
   if (pBuf == NULL) {
-    printf("ERROR: Unable to allocate memmory for file buffer\n");
+    status = VMK_NO_MEMORY;
     goto close_file;
   }
 
   memset(pBuf, 0, fileSize);
   if (fread(pBuf, 1, fileSize, pFile) != fileSize) {
-    printf("ERROR: Unable to read firmware image\n");
+    status = VMK_READ_ERROR;
     goto free_buffer;
   }
 
   status = sfvmk_fwVersion(pMgmtParm, fwType);
-  if (status < 0) {
-    printf("ERROR: Unable to get installed firmware version\n");
+  if (status != VMK_OK)
     goto free_buffer;
-  }
 
   printf("Updating firmware...\n");
 
   portCount = sfvmk_getSiblingPorts(pMgmtParm, siblingPorts);
-  if (portCount <= 0)
-    return;
+  if (portCount <= 0) {
+    status = VMK_BAD_PARAM_COUNT;
+    goto free_buffer;
+  }
 
   if (fwType != SFVMK_FIRMWARE_ANY)
     printf("Updating %s firmware for", pFwTypeName);
@@ -710,21 +692,9 @@ static void sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
   imgUpdateV2.size = fileSize;
   imgUpdateV2.type = sfvmk_getNvramType(fwType);
 
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_IMG_UPDATE_V2, pMgmtParm, &imgUpdateV2);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
+  status = sfvmk_setNicFirmware(pMgmtParm->deviceName, &imgUpdateV2);
+  if (status != VMK_OK)
     goto free_buffer;
-  }
-
-  if (pMgmtParm->status != VMK_OK) {
-    if (pMgmtParm->status == VMK_NO_PERMISSION) {
-      printf("ERROR: Firmware --type %s mismatch with firmware image\n", pFwTypeName);
-    } else {
-      printf("ERROR: Firmware update failed, error 0x%x\n", pMgmtParm->status);
-    }
-    goto free_buffer;
-  }
 
   printf("Firmware was successfully updated!\n");
 
@@ -735,115 +705,38 @@ close_file:
   fclose(pFile);
 
 end:
-  return;
+  return status;
 }
 
-static int sfvmk_getMACAddress(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_macAddress_t *pMacAddr)
+static int
+sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[])
 {
-  int status;
-
-  if (!pMacAddr) {
-    printf("ERROR: Invalid input param\n");
-    return -EINVAL;
-  }
-
-  memset(pMacAddr, 0, sizeof(*pMacAddr));
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_MAC_ADDRESS_GET, pMgmtParm,
-                                      pMacAddr);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
-
-  if (pMgmtParm->status != VMK_OK) {
-    printf("ERROR: MAC address get failed, error 0x%x\n", pMgmtParm->status);
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
-static int sfvmk_getPCIInfo(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_pciInfo_t *pPciInfo)
-{
-  int status;
-
-  if (!pPciInfo) {
-    printf("ERROR: Invalid input param\n");
-    return -EINVAL;
-  }
-
-  memset(pPciInfo, 0, sizeof(*pPciInfo));
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_PCI_INFO_GET, pMgmtParm,
-                                      pPciInfo);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
-
-  if (pMgmtParm->status != VMK_OK) {
-    if (pMgmtParm->status == VMK_NOT_FOUND)
-      return -ENOENT;
-
-    printf("ERROR: PCI information get failed, error 0x%x\n", pMgmtParm->status);
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
-static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[])
-{
-  sfvmk_mgmtDevInfo_t mgmtParm;
   sfvmk_ifaceList_t ifaceList;
-  sfvmk_pciInfo_t pciInfo;
+  vmk_Name pciBDF;
   vmk_Name originPortInfo;
   int portCount = 0;
   int pciBDFStrLen = 0;
   int status;
   int i;
 
-  memset(&ifaceList, 0, sizeof(ifaceList));
-  memset(&mgmtParm, 0, sizeof(mgmtParm));
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_IFACE_LIST_GET, &mgmtParm,
-                                      &ifaceList);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
+  status = sfvmk_getNicList(&ifaceList);
+  if (status != VMK_OK)
+    return -1;
 
-  if (mgmtParm.status != VMK_OK) {
-    printf("ERROR: Interface list get failed, error 0x%x\n", mgmtParm.status);
-    return -EINVAL;
-  }
+  status = sfvmk_getPCIAddress(pMgmtParm->deviceName, &pciBDF);
+  if (status != VMK_OK)
+    return -1;
 
-  if (ifaceList.ifaceCount >= SFVMK_MAX_INTERFACE) {
-    printf("ERROR: Invalid interface count %d\n", ifaceList.ifaceCount);
-    return -EINVAL;
-  }
-
-  status = sfvmk_getPCIInfo(pMgmtParm, &pciInfo);
-  if (status < 0) {
-    printf("ERROR: Get PCI information failed for origin port %s\n", pMgmtParm->deviceName);
-    return -EAGAIN;
-  }
-
-  strcpy(originPortInfo.string, pciInfo.pciBDF.string);
-  pciBDFStrLen = strcspn(pciInfo.pciBDF.string, ".");
+  strcpy(originPortInfo.string, pciBDF.string);
+  pciBDFStrLen = strcspn(pciBDF.string, ".");
 
   for (i = 0; i < ifaceList.ifaceCount; i++) {
-    memset(&mgmtParm, 0, sizeof(mgmtParm));
-    strcpy((char *)mgmtParm.deviceName, ifaceList.ifaceArray[i].string);
-    status = sfvmk_getPCIInfo(&mgmtParm, &pciInfo);
-    if (status < 0) {
-      printf("ERROR: Get PCI information failed for sibling port %s\n", mgmtParm.deviceName);
-      return -EAGAIN;
-    }
+    status = sfvmk_getPCIAddress(ifaceList.ifaceArray[i].string, &pciBDF);
+    if (status != VMK_OK)
+      return -1;
 
     if (strncmp(originPortInfo.string,
-                pciInfo.pciBDF.string, (pciBDFStrLen - 1)) == 0) {
+                pciBDF.string, (pciBDFStrLen - 1)) == 0) {
        strcpy(siblingPorts[portCount].string, ifaceList.ifaceArray[i].string);
        portCount++;
     }
@@ -852,40 +745,7 @@ static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblin
   return portCount;
 }
 
-static int sfvmk_postFecReq(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_fecMode_t *pFecMode)
-{
-  int status;
-
-  if (!pFecMode) {
-    printf("ERROR: Invalid input param\n");
-    return -EINVAL;
-  }
-
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_FEC_MODE_REQUEST, pMgmtParm,
-                                      pFecMode);
-  if (status != VMK_OK) {
-    printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
-    return -EAGAIN;
-  }
-
-  if (pMgmtParm->status != VMK_OK) {
-    if (pMgmtParm->status == VMK_NOT_SUPPORTED) {
-      printf("ERROR: FEC mode information %s failed, feature not supported\n",
-             (pFecMode->type == SFVMK_MGMT_DEV_OPS_SET) ? (char *)"set" : (char *)"get");
-      return -ENOTSUP;
-    }
-
-    printf("ERROR: FEC mode information %s failed, error 0x%x\n",
-           (pFecMode->type == SFVMK_MGMT_DEV_OPS_SET) ? (char *)"set" : (char *)"get",
-           pMgmtParm->status);
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
-static int sfvmk_fecModeTypeGet(const char *pFecModeName)
+static vmk_uint32 sfvmk_fecModeTypeGet(const char *pFecModeName)
 {
   if (!strcasecmp(pFecModeName, "auto"))
     return SFVMK_MGMT_FEC_AUTO_MASK;
@@ -945,33 +805,40 @@ static void sfvmk_printFecMode(vmk_uint32 fec)
     printf(" BaseR");
 }
 
-static void sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec)
+static VMK_ReturnStatus
+sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec)
 {
   sfvmk_fecMode_t fecMode;
-  int ret;
+  VMK_ReturnStatus status;
 
   memset(&fecMode, 0, sizeof(fecMode));
 
   fecMode.type = SFVMK_MGMT_DEV_OPS_SET;
   fecMode.fec = fec;
-  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
-  if (ret < 0)
-    return;
+  status = sfvmk_postFecReq(pMgmtParm->deviceName, &fecMode);
+  if (status != VMK_OK) {
+    printf("ERROR: FEC mode set failed with error 0x%x\n", status);
+    return status;
+  }
 
   printf("FEC parameters for %s applied\n", pMgmtParm->deviceName);
+  return VMK_OK;
 }
 
-static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)
+static VMK_ReturnStatus
+sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)
 {
   sfvmk_fecMode_t fecMode;
-  int ret;
+  VMK_ReturnStatus status;
 
   memset(&fecMode, 0, sizeof(fecMode));
 
   fecMode.type = SFVMK_MGMT_DEV_OPS_GET;
-  ret = sfvmk_postFecReq(pMgmtParm, &fecMode);
-  if (ret < 0)
-    return;
+  status = sfvmk_postFecReq(pMgmtParm->deviceName, &fecMode);
+  if (status != VMK_OK) {
+    printf("ERROR: FEC mode get failed with error 0x%x\n", status);
+    return status;
+  }
 
   printf("FEC parameters for %s:\n", pMgmtParm->deviceName);
   printf("Configured FEC encodings:");
@@ -980,15 +847,19 @@ static void sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm)
   printf("Active FEC encoding:");
   sfvmk_printFecMode(fecMode.activeFec);
   printf("\n");
+
+  return VMK_OK;
 }
 
-static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *mgmtParm, int opType)
+static VMK_ReturnStatus
+sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType)
 {
   sfvmk_hwSensor_t sensor;
   char *pBuffer;
-  int status;
+  VMK_ReturnStatus status;
 
   if (opType != SFVMK_MGMT_DEV_OPS_GET) {
+    status = VMK_BAD_PARAM;
     printf("ERROR: Set operation not supported\n");
     goto end;
   }
@@ -996,24 +867,28 @@ static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *mgmtParm, int opType)
   sensor.subCmd = SFVMK_MGMT_SENSOR_GET_SIZE;
   sensor.size = 0;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_SENSOR_INFO_GET, mgmtParm, &sensor);
-  if (status != VMK_OK){
+                                      SFVMK_CB_SENSOR_INFO_GET, pMgmtParm, &sensor);
+  if (status != VMK_OK) {
+    status = VMK_NO_CONNECT;
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto end;
   }
 
-  if (mgmtParm->status != VMK_OK) {
-    printf("ERROR: Hardware sensor info size get failed, error 0x%x\n", mgmtParm->status);
+  if (pMgmtParm->status != VMK_OK) {
+    status = pMgmtParm->status;
+    printf("ERROR: Hardware sensor info size get failed, error 0x%x\n", status);
     goto end;
   }
 
   if (!sensor.size) {
+    status = VMK_BAD_PARAM;
     printf("ERROR: Invalid sensor info buffer size\n");
     goto end;
   }
 
   pBuffer = malloc(sensor.size);
   if (!pBuffer) {
+    status = VMK_NO_MEMORY;
     printf("ERROR: Unable to allocate memmory for sensor info buffer\n");
     goto end;
   }
@@ -1022,23 +897,26 @@ static void sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *mgmtParm, int opType)
   sensor.sensorBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
   sensor.subCmd = SFVMK_MGMT_SENSOR_GET;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_SENSOR_INFO_GET, mgmtParm, &sensor);
-  if (status != VMK_OK){
+                                      SFVMK_CB_SENSOR_INFO_GET, pMgmtParm, &sensor);
+  if (status != VMK_OK) {
+    status = VMK_NO_CONNECT;
     printf("ERROR: Unable to connect to the backend, error 0x%x\n", status);
     goto free_buffer;
   }
 
-  if (mgmtParm->status != VMK_OK) {
-    printf("ERROR: Hardware sensor info get failed, error 0x%x\n", mgmtParm->status);
+  if (pMgmtParm->status != VMK_OK) {
+    status = pMgmtParm->status;
+    printf("ERROR: Hardware sensor info get failed, error 0x%x\n", status);
     goto free_buffer;
   }
 
   printf("%s", pBuffer);
+  status = VMK_OK;
 
 free_buffer:
   free(pBuffer);
 
 end:
-  return;
+  return status;
 }
 

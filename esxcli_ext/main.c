@@ -82,6 +82,8 @@ static vmk_uint32 sfvmk_fecModeParse(const char *pFecModeName);
 static VMK_ReturnStatus sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
 static VMK_ReturnStatus sfvmk_fecModeGet(sfvmk_mgmtDevInfo_t *pMgmtParm);
 static VMK_ReturnStatus sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType);
+static VMK_ReturnStatus sfvmk_verifyFWOption(vmk_Bool updateDefault, vmk_Bool fwFileSet,
+                                             vmk_Bool nicNameSet, vmk_Bool overwrite);
 
 static inline void sfvmk_strLwr(char string[])
 {
@@ -124,14 +126,18 @@ main(int argc, char **argv)
   int c;
   int opType = SFVMK_MGMT_DEV_OPS_INVALID;
   int stringLength = 0;
-  vmk_Bool optionEnable = VMK_FALSE;
-  vmk_Bool nicNameSet = VMK_FALSE;
   char mclogOption[10];
   char objectName[16];
   char fwTypeName[16];
   char fileName[128];
   char fecModeName[11];
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
+  vmk_Bool optionEnable = VMK_FALSE;
+  vmk_Bool nicNameSet = VMK_FALSE;
+  vmk_Bool updateDefault = VMK_FALSE;
+  vmk_Bool overwrite = VMK_FALSE;
+  vmk_Bool fwFileSet = VMK_FALSE;
+  vmk_Bool fwTypeSet = VMK_FALSE;
   sfvmk_objectType_t objType = SFVMK_OBJECT_MAX;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_ANY;
   sfvmk_mgmtDevInfo_t mgmtParm;
@@ -156,6 +162,8 @@ main(int argc, char **argv)
       {"file-name",  required_argument, 0, 'f'},
       {"type",       required_argument, 0, 't'},
       {"mode",       required_argument, 0, 'm'},
+      {"default",    no_argument,       0, 'd'},
+      {"overwrite",  no_argument,       0, 'w'},
       {0, 0, 0, 0}
     };
 
@@ -231,8 +239,10 @@ main(int argc, char **argv)
           goto end;
         }
 
+        fwFileSet = VMK_TRUE;
         strcpy(fileName, optarg);
         break;
+
       case 't':
         if (!optarg) {
           printf("ERROR: Firmware type is not provided\n");
@@ -256,7 +266,9 @@ main(int argc, char **argv)
           goto end;
         }
 
+        fwTypeSet = VMK_TRUE;
         break;
+
       case 'm':
         if (!optarg) {
           printf("ERROR: FEC mode is not provided\n");
@@ -278,6 +290,15 @@ main(int argc, char **argv)
         }
 
         break;
+
+      case 'd':
+        updateDefault = VMK_TRUE;
+        break;
+
+      case 'w':
+        overwrite = VMK_TRUE;
+        break;
+
       case '?':
       default:
         break;
@@ -330,11 +351,23 @@ main(int argc, char **argv)
 
     case SFVMK_OBJECT_FIRMWARE:
       memset(&fwCtx, 0, sizeof(fwCtx));
-      fwCtx.isForce = VMK_FALSE;
-      fwCtx.updateAllFirmware = VMK_FALSE;
+      if (opType == SFVMK_MGMT_DEV_OPS_SET) {
+        status = sfvmk_verifyFWOption(updateDefault, fwFileSet,
+                                      nicNameSet, overwrite);
+        if (status != VMK_OK)
+          goto destroy_handle;
+      }
+
+      fwCtx.updateDefault = updateDefault;
+      fwCtx.isForce = overwrite;
+
+      fwCtx.fwFileSet = fwFileSet;
+      if (fwFileSet)
+        strcpy(fwCtx.fwFileName, fileName);
+
       fwCtx.fwType = fwType;
-      strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
-      strcpy(fwCtx.fwFileName, fileName);
+      if ((!fwTypeSet) && (updateDefault))
+        fwCtx.fwType = SFVMK_FIRMWARE_ALL;
 
       fwCtx.applyAllNic = VMK_TRUE;
       if (nicNameSet) {
@@ -701,3 +734,34 @@ end:
   return status;
 }
 
+static VMK_ReturnStatus
+sfvmk_verifyFWOption(vmk_Bool updateDefault, vmk_Bool fwFileSet,
+                     vmk_Bool nicNameSet, vmk_Bool overwrite)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  if (!updateDefault && !fwFileSet) {
+    printf("ERROR: Missing required parameter '-f|--file-name' or '-d|--default'\n");
+    goto end;
+  }
+
+  if (fwFileSet && updateDefault) {
+    printf("ERROR: Cannot use both '-f|--file-name' and '-d|--default' options\n");
+    goto end;
+  }
+
+  if (fwFileSet && !nicNameSet) {
+    printf("ERROR: Missing required parameter '-n|--nic-name' with '-f|--file-name' option\n");
+    goto end;
+  }
+
+  if (fwFileSet && overwrite) {
+    printf("ERROR: Cannot use '-w|--overwrite' with '-f|--file-name' option\n");
+    goto end;
+  }
+
+  status = VMK_OK;
+
+end:
+  return status;
+}

@@ -26,6 +26,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <vmkapi.h>
 #include <getopt.h>
@@ -34,6 +35,9 @@
 #include <errno.h>
 
 #include "sf_firmware.h"
+#include "sf_jlib/sf_jlib.h"
+
+#define MIN_LEN(a, b) (a < b ? a : b)
 
 const char * supportedFWTypes[] = {
   "controller",
@@ -50,14 +54,14 @@ inline int sfvmk_fwtypeToIndex(sfvmk_firmwareType_t fwType)
 {
   int i = 0;
 
-  while (i <= SFVMK_MAX_FWTYPE_SUPPORTED) {
+  while (i < SFVMK_MAX_FWTYPE_SUPPORTED) {
     if (fwType & (1 << i))
       return i;
 
     i++;
   }
 
-  return (SFVMK_MAX_FWTYPE_SUPPORTED + 1);
+  return SFVMK_MAX_FWTYPE_SUPPORTED;
 }
 
 static sfvmk_nvramType_t
@@ -91,6 +95,134 @@ sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
   }
 
   return type;
+}
+
+static sf_image_type_t
+sfvmk_getJLIBImgType(sfvmk_firmwareType_t fwType)
+{
+  sf_image_type_t imageType = max_images;
+
+  switch (fwType) {
+    case SFVMK_FIRMWARE_MC:
+      imageType = controller;
+      break;
+    case SFVMK_FIRMWARE_BOOTROM:
+      imageType = bootrom;
+      break;
+    case SFVMK_FIRMWARE_UEFI:
+      imageType = uefirom;
+      break;
+    case SFVMK_FIRMWARE_SUC:
+      imageType = sucfw;
+      break;
+    default:
+      imageType = max_images;
+  }
+
+  return imageType;
+}
+
+static int
+sfvmk_getImgSubtype(sfvmk_masterDevNode_t *pMsNode, sfvmk_firmwareType_t fwType)
+{
+  int subtype;
+
+  switch (fwType) {
+    case SFVMK_FIRMWARE_MC:
+      subtype = pMsNode->mcSubtype;
+      break;
+    case SFVMK_FIRMWARE_BOOTROM:
+      subtype = pMsNode->bootromSubtype;
+      break;
+    case SFVMK_FIRMWARE_UEFI:
+      subtype = pMsNode->uefiromSubtype;
+      break;
+    case SFVMK_FIRMWARE_SUC:
+      subtype = pMsNode->sucSubtype;
+      break;
+    default:
+      subtype = 0xFFFF;
+  }
+
+  return subtype;
+}
+
+static vmk_Bool
+sfvmk_matchFWVersion(sfvmk_masterDevNode_t *pMsNode, const char *pImgVersion, sfvmk_firmwareType_t fwType)
+{
+  int len;
+  vmk_Bool foundMatch = VMK_FALSE;
+
+  /* Version string given in *.json file and returned from MC firmware may be of
+   * different length. For example the version returned by MC firmware includes (rx0 tx0)
+   * at the end. Here we are getting MIN length and then comparing. */
+  switch (fwType) {
+    case SFVMK_FIRMWARE_MC:
+      len = MIN_LEN(strlen(pImgVersion), strlen(pMsNode->mcVer.string));
+      if (strncmp(pMsNode->mcVer.string, pImgVersion, len) == 0)
+        foundMatch = VMK_TRUE;
+
+      break;
+    case SFVMK_FIRMWARE_BOOTROM:
+      len = MIN_LEN(strlen(pImgVersion), strlen(pMsNode->bootromVer.string));
+      if (strncmp(pMsNode->bootromVer.string, pImgVersion, len) == 0)
+        foundMatch = VMK_TRUE;
+
+      break;
+    case SFVMK_FIRMWARE_UEFI:
+      len = MIN_LEN(strlen(pImgVersion), strlen(pMsNode->uefiromVer.string));
+      if (strncmp(pMsNode->uefiromVer.string, pImgVersion, len) == 0)
+        foundMatch = VMK_TRUE;
+
+      break;
+    case SFVMK_FIRMWARE_SUC:
+      len = MIN_LEN(strlen(pImgVersion), strlen(pMsNode->sucVer.string));
+      if (strncmp(pMsNode->sucVer.string, pImgVersion, len) == 0)
+        foundMatch = VMK_TRUE;
+
+      break;
+    default:
+      assert(VMK_FALSE);
+  }
+
+  return foundMatch;
+}
+
+static VMK_ReturnStatus
+sfvmk_getAllFWSubtype(sfvmk_masterDevNode_t *pMsNode)
+{
+  vmk_Name *pIfaceName;
+  sfvmk_nvramType_t type;
+  VMK_ReturnStatus status;
+
+  pIfaceName = &pMsNode->pMsIfaceNode->ifaceName;
+
+  type = sfvmk_getNvramType(SFVMK_FIRMWARE_MC);
+  status = sfvmk_getFWPartSubtype(pIfaceName->string, type, &pMsNode->mcSubtype);
+  if (status != VMK_OK)
+    goto end;
+
+  type = sfvmk_getNvramType(SFVMK_FIRMWARE_BOOTROM);
+  status = sfvmk_getFWPartSubtype(pIfaceName->string, type, &pMsNode->bootromSubtype);
+  if (status != VMK_OK)
+    goto end;
+
+  type = sfvmk_getNvramType(SFVMK_FIRMWARE_UEFI);
+  status = sfvmk_getFWPartSubtype(pIfaceName->string, type, &pMsNode->uefiromSubtype);
+  if (status != VMK_OK)
+    goto end;
+
+  if (pMsNode->sucSupported) {
+    type = sfvmk_getNvramType(SFVMK_FIRMWARE_SUC);
+    status = sfvmk_getFWPartSubtype(pIfaceName->string, type, &pMsNode->sucSubtype);
+    if (status != VMK_OK)
+      goto end;
+  }
+
+  status = VMK_OK;
+
+end:
+  return status;
 }
 
 static VMK_ReturnStatus
@@ -130,8 +262,15 @@ sfvmk_getAllFWVer(sfvmk_masterDevNode_t *pMsNode)
   memset(&verInfo, 0, sizeof(verInfo));
   verInfo.type = SFVMK_GET_SUC_VERSION;
   status = sfvmk_getFWVersion(pIfaceName->string, &verInfo);
-  if (status != VMK_OK)
+  if ((status != VMK_OK) && (status != VMK_NOT_SUPPORTED))
     goto end;
+
+  /* This is workaround for Bug 84271 - (Add mechanism in driver to
+   * identify if a board has SUC type firmware or not) */
+  if (status == VMK_NOT_SUPPORTED)
+    pMsNode->sucSupported = VMK_FALSE;
+  else
+    pMsNode->sucSupported = VMK_TRUE;
 
   strcpy(pMsNode->sucVer.string, verInfo.version.string);
 
@@ -214,22 +353,30 @@ sfvmk_printFwInfo(sfvmk_firmwareCtx_t *pfwCtx)
 }
 
 static VMK_ReturnStatus
-sfvmk_updateMaster(sfvmk_masterDevNode_t *pMsNode,
-                   sfvmk_firmwareType_t fwType, char *pBuf, int fileSize)
+sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
+                     sfvmk_firmwareType_t fwType,
+                     char *pFileName, char *pFwVerMatchStr, char errMsg[])
 {
   sfvmk_ifaceNode_t *pIfaceNode;
   sfvmk_imgUpdateV2_t imgUpdateV2;
   const char *pMsPortName;
+  char *pBuf;
+  int fileSize;
   VMK_ReturnStatus status = VMK_FAILURE;
 
-  assert(pBuf);
   assert(pMsNode);
   assert(pMsNode->pMsIfaceNode);
+  assert(pFileName);
 
   pIfaceNode = pMsNode->pMsIfaceNode;
   pMsPortName = pIfaceNode->ifaceName.string;
 
   if (fwType == SFVMK_FIRMWARE_INVALID || fwType == SFVMK_FIRMWARE_ALL)
+    return status;
+
+  /* No need for sprintf here. errMsg is filled within sfvmk_readFileContent() */
+  status = sfvmk_readFileContent(pFileName, &pBuf, &fileSize, errMsg);
+  if (status != VMK_OK)
     return status;
 
   sfvmk_printIfaceList(pMsNode, fwType, VMK_TRUE);
@@ -246,21 +393,87 @@ sfvmk_updateMaster(sfvmk_masterDevNode_t *pMsNode,
   }
   printf("...\n");
 
+  if (pFwVerMatchStr) {
+    if (sfvmk_matchFWVersion(pMsNode, pFwVerMatchStr, fwType) == VMK_TRUE) {
+      free(pBuf);
+      return VMK_EXISTS;
+    }
+  }
+
   memset(&imgUpdateV2, 0, sizeof(imgUpdateV2));
   imgUpdateV2.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
   imgUpdateV2.size = fileSize;
   imgUpdateV2.type = sfvmk_getNvramType(fwType);
 
   status = sfvmk_setNicFirmware(pMsPortName, &imgUpdateV2);
+  if (status != VMK_OK)
+    sprintf(errMsg, "Firmware update failed, error 0x%x", status);
+
+  free(pBuf);
   return status;
+}
+
+static VMK_ReturnStatus
+sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
+                        sfvmk_firmwareType_t fwType,
+                        vmk_Bool overwrite, char errMsg[])
+{
+  sf_image_type_t imageType;
+  vmk_uint32 fwTypeIter = 0;
+  char fwFilePath[SFVMK_MAX_DIR_PATH_LENGTH];
+  char fwFileName[SFVMK_MAX_FILENAME_LENGTH];
+  char fwImgVer[SF_JLIB_MAX_VER_STRING_LENGTH];
+  int subtype;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  int i;
+
+  assert(pMsNode);
+
+  for (i = SFVMK_MAX_FWTYPE_SUPPORTED; i >= 0; i--) {
+    fwTypeIter = (1 << i);
+
+    if (!(fwType & fwTypeIter))
+      continue;
+
+    if ((SFVMK_FIRMWARE_SUC & fwTypeIter) && !pMsNode->sucSupported)
+      continue;
+
+    memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
+    memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);
+    strcpy(fwFilePath, SFVMK_DEFAULT_FIRMWARE_LOC);
+    imageType = sfvmk_getJLIBImgType(fwTypeIter);
+    subtype = sfvmk_getImgSubtype(pMsNode, fwTypeIter);
+    status = sf_jlib_find_image(imageType, subtype, fwImgVer, fwFileName);
+    if (status < 0) {
+      sprintf(errMsg, "Couldn't find match in %s for image type %d and subtype %d",
+              SFVMK_FIRMWARE_METADATA_FILE, imageType, subtype);
+      return VMK_FAILURE;
+    }
+
+    strcat(fwFilePath, fwFileName);
+
+    /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */
+    status = sfvmk_updateFromFile(pMsNode, fwTypeIter, fwFilePath,
+                                  (overwrite ? NULL : fwImgVer), errMsg);
+    if (status != VMK_OK && status != VMK_EXISTS)
+      return status;
+
+    if (status != VMK_EXISTS)
+      printf("Firmware was successfully updated!\n");
+    else
+      printf("Skipped %s firmware update as version is same.\n",
+             supportedFWTypes[sfvmk_fwtypeToIndex(fwTypeIter)]);
+  }
+
+  return VMK_OK;
 }
 
 static VMK_ReturnStatus
 sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
 {
   sfvmk_masterDevNode_t *pMsNode;
-  char *pBuf = NULL;
-  int fileSize = 0;
+  char fwFamilyPath[64] = SFVMK_DEFAULT_FIRMWARE_LOC;
+  char jsonFile[32] = SFVMK_FIRMWARE_METADATA_FILE;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   assert(pfwCtx);
@@ -268,17 +481,37 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
 
   pMsNode = pfwCtx->pMasters;
 
-  status = sfvmk_readFileContent(pfwCtx->fwFileName, &pBuf, &fileSize, pfwCtx->errorMsg);
-  if (status != VMK_OK)
+  if (pfwCtx->fwFileSet) {
+    /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */
+    status = sfvmk_updateFromFile(pMsNode, pfwCtx->fwType,
+                                  pfwCtx->fwFileName, NULL, pfwCtx->errorMsg);
+    if (status == VMK_OK)
+      printf("Firmware was successfully updated!\n");
+
     return status;
+  }
 
-  status = sfvmk_updateMaster(pMsNode, pfwCtx->fwType, pBuf, fileSize);
-  if (status == VMK_OK)
-    printf("Firmware was successfully updated!\n");
-  else
-    sprintf(pfwCtx->errorMsg, "Firmware update failed, error 0x%x", status);
+  if (!pfwCtx->updateDefault)
+    return VMK_FAILURE;
 
-  free(pBuf);
+  strcat(fwFamilyPath, jsonFile);
+  status = sf_jlib_init(fwFamilyPath);
+  if (status < 0) {
+     sprintf(pfwCtx->errorMsg, "JLIB init fail, error %d", status);
+     return VMK_FAILURE;
+  }
+
+  while (pMsNode) {
+    status = sfvmk_updateFromDefault(pMsNode, pfwCtx->fwType, pfwCtx->isForce, pfwCtx->errorMsg);
+    if (status != VMK_OK) {
+      sf_jlib_exit();
+      return status;
+    }
+
+    pMsNode = pMsNode->pNext;
+  }
+
+  sf_jlib_exit();
   return status;
 }
 
@@ -441,6 +674,12 @@ sfvmk_createNicList(sfvmk_firmwareCtx_t *pfwCtx)
     status = sfvmk_getAllFWVer(pMsNode);
     if (status != VMK_OK) {
       sprintf(pfwCtx->errorMsg, "Firmware get failed with error 0x%x", status);
+      goto free_masters;
+    }
+
+    status = sfvmk_getAllFWSubtype(pMsNode);
+    if (status != VMK_OK) {
+      sprintf(pfwCtx->errorMsg, "Board subtype get failed with error 0x%x", status);
       goto free_masters;
     }
 

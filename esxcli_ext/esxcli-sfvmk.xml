@@ -120,17 +120,23 @@
 
       <!-- esxcli sfvmk firmware set -->
       <command path="sfvmk.firmware.set">
-         <description>Sets new firmware image</description>
+         <description>Sets new firmware image. Either -d|--default or -f|--file option must be specified. This operation may take little longer with -d|--default option.</description>
          <input-spec>
-           <parameter name="nic-name" type="string" required="true" shortname="n">
-            <description>The name of the NIC to configure.</description>
+           <parameter name="nic-name" type="string" required="false" shortname="n">
+            <description>The name of the NIC to configure. NIC name is mandatory with -f|--file-name option.</description>
            </parameter>
-            <parameter name="file-name" type="string" required="true" shortname="f">
-               <description>Firmware image file name.</description>
+            <parameter name="file-name" type="string" required="false" shortname="f">
+               <description>Firmware image file name. File name is mandatory with -n|--nic-name option.</description>
             </parameter>
             <parameter name="type" type="string" required="false" shortname="t">
-               <description>Firmware image type (controller/ bootrom/ uefirom/ suc). If specified, matches firmware type before update.</description>
+               <description>Firmware image type (controller/ bootrom/ uefirom/ suc). For -d|--default, it specifies the firmware image type to be updated. For -f|--file-name, firmware type is matached before update.</description>
             </parameter>
+           <parameter name="default" type="flag" required="false" shortname="d">
+            <description>Update all firmware on all Solarflare NIC from a default location of Solarflare firmware family. Can also be used with -n|--nic-name option to update all firmware on a particular NIC</description>
+           </parameter>
+           <parameter name="overwrite" type="flag" required="false" shortname="w">
+            <description>Overwrites firmware image even if firmwae image version being updated is same as the firmware image on the NIC. This is applicable only with -d|--default option.</description>
+           </parameter>
          </input-spec>
          <output-spec>
             <string/>
@@ -138,7 +144,7 @@
          <format-parameters>
             <formatter>simple</formatter>
          </format-parameters>
-         <execute>/opt/sfc/bin/sfvmkcli --object firmware --set --nic-name $val{nic-name} --file-name $val{file-name} $if{type, --type=$val{type}}</execute>
+         <execute>/opt/sfc/bin/sfvmkcli --object firmware --set $if{nic-name, --nic-name=$val{nic-name}} $if{file-name, --file-name=$val{file-name}} $if{type, --type=$val{type}} $if{default, --default} $if{overwrite, --overwrite}</execute>
       </command>
 
       <!-- esxcli sfvmk fec get -->

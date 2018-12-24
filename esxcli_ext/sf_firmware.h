@@ -41,9 +41,14 @@ typedef struct sfvmk_masterDevNode_s {
   struct sfvmk_masterDevNode_s *pNext;
   sfvmk_ifaceNode_t *pMsIfaceNode;
   vmk_Name mcVer;
+  vmk_uint32 mcSubtype;
+  vmk_Bool sucSupported;
   vmk_Name sucVer;
+  vmk_uint32 sucSubtype;
   vmk_Name bootromVer;
+  vmk_uint32 bootromSubtype;
   vmk_Name uefiromVer;
+  vmk_uint32 uefiromSubtype;
   vmk_uint8 nicModel[256];
 } sfvmk_masterDevNode_t;
 
@@ -57,7 +62,8 @@ typedef struct sfvmk_firmwareCtx_s {
   vmk_uint8 nicCount;
   vmk_Bool isForce;
   vmk_Bool applyAllNic;
-  vmk_Bool updateAllFirmware;
+  vmk_Bool updateDefault;
+  vmk_Bool fwFileSet;
 } sfvmk_firmwareCtx_t;
 
 VMK_ReturnStatus sfvmk_runFirmwareOps(int opType, sfvmk_firmwareCtx_t *pfwCtx);

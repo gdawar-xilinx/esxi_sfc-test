@@ -29,12 +29,13 @@
 
 #include "sfvmk_mgmt_interface.h"
 
-#define SFVMK_MAX_DIR_PATH_LEN 128
+#define SFVMK_MAX_DIR_PATH_LENGTH 128
 #define SFVMK_MAX_FILENAME_LENGTH 64
 
-#define SFVMK_MAX_FWTYPE_SUPPORTED 3
-
 #define SFVMK_MAX_FW_RDWR_ERR_LENGTH 128
+
+#define SFVMK_DEFAULT_FIRMWARE_LOC "/opt/sfc/"
+#define SFVMK_FIRMWARE_METADATA_FILE "FirmwareMetadata.json"
 
 typedef enum sfvmk_firmwareType_e {
   SFVMK_FIRMWARE_ANY     =  0,
@@ -42,6 +43,7 @@ typedef enum sfvmk_firmwareType_e {
   SFVMK_FIRMWARE_BOOTROM = (1 << 1),
   SFVMK_FIRMWARE_UEFI    = (1 << 2),
   SFVMK_FIRMWARE_SUC     = (1 << 3),
+#define SFVMK_MAX_FWTYPE_SUPPORTED     4
   SFVMK_FIRMWARE_ALL     = (SFVMK_FIRMWARE_MC |      \
                             SFVMK_FIRMWARE_BOOTROM | \
                             SFVMK_FIRMWARE_UEFI | \
@@ -63,6 +65,8 @@ VMK_ReturnStatus sfvmk_getNicList(sfvmk_ifaceList_t *pNicList);
 VMK_ReturnStatus sfvmk_setNicFirmware(const char *pIfaceName, sfvmk_imgUpdateV2_t *pImgUpdateV2);
 
 VMK_ReturnStatus sfvmk_postFecReq(const char *pIfaceName, sfvmk_fecMode_t *pFecMode);
+
+VMK_ReturnStatus sfvmk_getFWPartSubtype(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pSubtype);
 
 VMK_ReturnStatus sfvmk_readFileContent(char *pFileName, char **ppBuf, int *pFileSize, char errMsg[]);
 #endif

@@ -32,6 +32,7 @@
 #include <ctype.h>
 
 #include "sf_utils.h"
+#include "sf_firmware.h"
 #include "sfvmk_mgmt_interface.h"
 
 /*
@@ -137,6 +138,7 @@ main(int argc, char **argv)
   vmk_uint32 fecMode = SFVMK_MGMT_FEC_NONE_MASK;
   sfvmk_firmwareType_t fwType = SFVMK_FIRMWARE_ANY;
   sfvmk_mgmtDevInfo_t mgmtParm;
+  sfvmk_firmwareCtx_t fwCtx;
   VMK_ReturnStatus status;
 
   printf("<?xml version=\"1.0\"?><output xmlns:esxcli=\"sfvmk\">\n");
@@ -329,7 +331,14 @@ main(int argc, char **argv)
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
         sfvmk_fwUpdate(&mgmtParm, fileName, fwType, fwTypeName);
       } else {
-        sfvmk_fwVersion(&mgmtParm, SFVMK_FIRMWARE_ALL);
+        memset(&fwCtx, 0, sizeof(fwCtx));
+        fwCtx.isForce = VMK_FALSE;
+        fwCtx.updateAllFirmware = VMK_FALSE;
+        fwCtx.applyAllNic = VMK_FALSE;
+        fwCtx.fwType = fwType;
+        strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
+
+        sfvmk_runFirmwareOps(SFVMK_MGMT_DEV_OPS_GET, &fwCtx);
       }
 
       break;

@@ -24,43 +24,42 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _SF_UTILS_H
-#define _SF_UTILS_H
+#ifndef _SF_FIRMWARE_H
+#define _SF_FIRMWARE_H
 
-#include "sfvmk_mgmt_interface.h"
+#include "sf_utils.h"
 
-#define SFVMK_MAX_DIR_PATH_LEN 128
-#define SFVMK_MAX_FILENAME_LENGTH 64
+typedef struct sfvmk_ifaceNode_s {
+  struct sfvmk_ifaceNode_s *pNext;
+  struct sfvmk_ifaceNode_s *pPrev;
+  vmk_Name pciBDF;
+  vmk_Name ifaceName;
+  vmk_uint8 macAddress[6];
+} sfvmk_ifaceNode_t;
 
-#define SFVMK_MAX_FWTYPE_SUPPORTED 3
+typedef struct sfvmk_masterDevNode_s {
+  struct sfvmk_masterDevNode_s *pNext;
+  sfvmk_ifaceNode_t *pIfaceHead;
+  vmk_Name mcVer;
+  vmk_Name sucVer;
+  vmk_Name bootromVer;
+  vmk_Name uefiromVer;
+  vmk_uint8 nicModel[256];
+} sfvmk_masterDevNode_t;
 
-#define SFVMK_MAX_FW_RDWR_ERR_LENGTH 128
+typedef struct sfvmk_firmwareCtx_s {
+  struct sfvmk_masterDevNode_s *pMasters;
+  int pciBDF;
+  char fwFileName[SFVMK_MAX_FILENAME_LENGTH];
+  char errorMsg[SFVMK_MAX_FW_RDWR_ERR_LENGTH];
+  sfvmk_firmwareType_t fwType;
+  vmk_Name ifaceName;
+  vmk_uint8 nicCount;
+  vmk_Bool isForce;
+  vmk_Bool applyAllNic;
+  vmk_Bool updateAllFirmware;
+} sfvmk_firmwareCtx_t;
 
-typedef enum sfvmk_firmwareType_e {
-  SFVMK_FIRMWARE_ANY     =  0,
-  SFVMK_FIRMWARE_MC      = (1 << 0),
-  SFVMK_FIRMWARE_BOOTROM = (1 << 1),
-  SFVMK_FIRMWARE_UEFI    = (1 << 2),
-  SFVMK_FIRMWARE_SUC     = (1 << 3),
-  SFVMK_FIRMWARE_ALL     = (SFVMK_FIRMWARE_MC |      \
-                            SFVMK_FIRMWARE_BOOTROM | \
-                            SFVMK_FIRMWARE_UEFI | \
-                            SFVMK_FIRMWARE_SUC),
-  SFVMK_FIRMWARE_INVALID = 0xffff
-} sfvmk_firmwareType_t;
+VMK_ReturnStatus sfvmk_runFirmwareOps(int opType, sfvmk_firmwareCtx_t *pfwCtx);
 
-VMK_ReturnStatus sfvmk_getVpdByTag(const char *pIfaceName, sfvmk_vpdInfo_t *pVpdInfo,
-                      vmk_uint8 tag, vmk_uint16 keyword);
-
-VMK_ReturnStatus sfvmk_getPCIAddress(const char *pIfaceName, vmk_Name *pPCIAddr);
-
-VMK_ReturnStatus sfvmk_getFWVersion(const char *pIfaceName, sfvmk_versionInfo_t *pVerInfo);
-
-VMK_ReturnStatus sfvmk_getMACAddress(const char *pIfaceName, vmk_uint8 *pMacAddr);
-
-VMK_ReturnStatus sfvmk_getNicList(sfvmk_ifaceList_t *pNicList);
-
-VMK_ReturnStatus sfvmk_setNicFirmware(const char *pIfaceName, sfvmk_imgUpdateV2_t *pImgUpdateV2);
-
-VMK_ReturnStatus sfvmk_postFecReq(const char *pIfaceName, sfvmk_fecMode_t *pFecMode);
 #endif

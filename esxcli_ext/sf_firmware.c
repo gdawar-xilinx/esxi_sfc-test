@@ -35,7 +35,63 @@
 
 #include "sf_firmware.h"
 
+const char * supportedFWTypes[] = {
+  "controller",
+  "bootrom",
+  "uefirom",
+  "suc",
+};
+
+static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType);
+
 /******************************************************************************/
+
+inline int sfvmk_fwtypeToIndex(sfvmk_firmwareType_t fwType)
+{
+  int i = 0;
+
+  while (i <= SFVMK_MAX_FWTYPE_SUPPORTED) {
+    if (fwType & (1 << i))
+      return i;
+
+    i++;
+  }
+
+  return (SFVMK_MAX_FWTYPE_SUPPORTED + 1);
+}
+
+static sfvmk_nvramType_t
+sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
+{
+  sfvmk_nvramType_t type;
+
+  switch(fwType) {
+    case SFVMK_FIRMWARE_MC:
+      type = SFVMK_NVRAM_MC;
+      break;
+
+    case SFVMK_FIRMWARE_BOOTROM:
+      type = SFVMK_NVRAM_BOOTROM;
+      break;
+
+    case SFVMK_FIRMWARE_UEFI:
+      type = SFVMK_NVRAM_UEFIROM;
+      break;
+
+    case SFVMK_FIRMWARE_SUC:
+      type = SFVMK_NVRAM_MUM;
+      break;
+
+    case SFVMK_FIRMWARE_ANY:
+      type = SFVMK_NVRAM_INVALID;
+      break;
+
+    default:
+      type = SFVMK_NVRAM_NTYPE;
+  }
+
+  return type;
+}
 
 static VMK_ReturnStatus
 sfvmk_getAllFWVer(sfvmk_masterDevNode_t *pMsNode)
@@ -155,6 +211,75 @@ sfvmk_printFwInfo(sfvmk_firmwareCtx_t *pfwCtx)
   }
 
   return VMK_OK;
+}
+
+static VMK_ReturnStatus
+sfvmk_updateMaster(sfvmk_masterDevNode_t *pMsNode,
+                   sfvmk_firmwareType_t fwType, char *pBuf, int fileSize)
+{
+  sfvmk_ifaceNode_t *pIfaceNode;
+  sfvmk_imgUpdateV2_t imgUpdateV2;
+  const char *pMsPortName;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  assert(pBuf);
+  assert(pMsNode);
+  assert(pMsNode->pMsIfaceNode);
+
+  pIfaceNode = pMsNode->pMsIfaceNode;
+  pMsPortName = pIfaceNode->ifaceName.string;
+
+  if (fwType == SFVMK_FIRMWARE_INVALID || fwType == SFVMK_FIRMWARE_ALL)
+    return status;
+
+  sfvmk_printIfaceList(pMsNode, fwType, VMK_TRUE);
+
+  printf("Updating firmware...\n");
+  if (fwType != SFVMK_FIRMWARE_ANY)
+    printf("Updating %s firmware for", supportedFWTypes[sfvmk_fwtypeToIndex(fwType)]);
+  else
+    printf("Updating firmware for");
+
+  while(pIfaceNode) {
+    printf(" %s", pIfaceNode->ifaceName.string);
+    pIfaceNode = pIfaceNode->pNext;
+  }
+  printf("...\n");
+
+  memset(&imgUpdateV2, 0, sizeof(imgUpdateV2));
+  imgUpdateV2.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
+  imgUpdateV2.size = fileSize;
+  imgUpdateV2.type = sfvmk_getNvramType(fwType);
+
+  status = sfvmk_setNicFirmware(pMsPortName, &imgUpdateV2);
+  return status;
+}
+
+static VMK_ReturnStatus
+sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
+{
+  sfvmk_masterDevNode_t *pMsNode;
+  char *pBuf = NULL;
+  int fileSize = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  assert(pfwCtx);
+  assert(pfwCtx->pMasters);
+
+  pMsNode = pfwCtx->pMasters;
+
+  status = sfvmk_readFileContent(pfwCtx->fwFileName, &pBuf, &fileSize, pfwCtx->errorMsg);
+  if (status != VMK_OK)
+    return status;
+
+  status = sfvmk_updateMaster(pMsNode, pfwCtx->fwType, pBuf, fileSize);
+  if (status == VMK_OK)
+    printf("Firmware was successfully updated!\n");
+  else
+    sprintf(pfwCtx->errorMsg, "Firmware update failed, error 0x%x", status);
+
+  free(pBuf);
+  return status;
 }
 
 void sfvmk_freeSlaves(sfvmk_ifaceNode_t *pIfaceNodeHead)
@@ -378,6 +503,9 @@ sfvmk_runFirmwareOps(int opType, sfvmk_firmwareCtx_t *pfwCtx)
       break;
 
     case SFVMK_MGMT_DEV_OPS_SET:
+      status = sfvmk_updateFirmware(pfwCtx);
+      break;
+
     default:
       status = VMK_BAD_PARAM;
   }

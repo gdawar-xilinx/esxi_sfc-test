@@ -63,4 +63,6 @@ VMK_ReturnStatus sfvmk_getNicList(sfvmk_ifaceList_t *pNicList);
 VMK_ReturnStatus sfvmk_setNicFirmware(const char *pIfaceName, sfvmk_imgUpdateV2_t *pImgUpdateV2);
 
 VMK_ReturnStatus sfvmk_postFecReq(const char *pIfaceName, sfvmk_fecMode_t *pFecMode);
+
+VMK_ReturnStatus sfvmk_readFileContent(char *pFileName, char **ppBuf, int *pFileSize, char errMsg[]);
 #endif

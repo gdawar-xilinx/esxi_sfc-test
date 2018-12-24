@@ -77,10 +77,6 @@ static const char * supportedObjects[] = {
 static VMK_ReturnStatus sfvmk_mcLog(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm, char cmdOption);
 static VMK_ReturnStatus sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm);
 static VMK_ReturnStatus sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm);
-static VMK_ReturnStatus sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
-                           char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName);
-static VMK_ReturnStatus sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t fwType);
-static int sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[]);
 static vmk_uint32 sfvmk_fecModeTypeGet(const char *pFecModeName);
 static vmk_uint32 sfvmk_fecModeParse(const char *pFecModeName);
 static VMK_ReturnStatus sfvmk_fecModeSet(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_uint32 fec);
@@ -255,8 +251,10 @@ main(int argc, char **argv)
           fwType = SFVMK_FIRMWARE_UEFI;
         else if (!strcmp(fwTypeName, "suc"))
           fwType = SFVMK_FIRMWARE_SUC;
-        else
-          fwType = SFVMK_FIRMWARE_INVALID;
+        else {
+          printf("ERROR: Invalid firmware type '%s'\n", fwTypeName);
+          goto end;
+        }
 
         break;
       case 'm':
@@ -331,24 +329,22 @@ main(int argc, char **argv)
       break;
 
     case SFVMK_OBJECT_FIRMWARE:
-      if (opType == SFVMK_MGMT_DEV_OPS_SET) {
-        sfvmk_fwUpdate(&mgmtParm, fileName, fwType, fwTypeName);
-      } else {
-        memset(&fwCtx, 0, sizeof(fwCtx));
-        fwCtx.isForce = VMK_FALSE;
-        fwCtx.updateAllFirmware = VMK_FALSE;
-        fwCtx.fwType = fwType;
+      memset(&fwCtx, 0, sizeof(fwCtx));
+      fwCtx.isForce = VMK_FALSE;
+      fwCtx.updateAllFirmware = VMK_FALSE;
+      fwCtx.fwType = fwType;
+      strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
+      strcpy(fwCtx.fwFileName, fileName);
 
-        fwCtx.applyAllNic = VMK_TRUE;
-        if (nicNameSet) {
-          strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
-          fwCtx.applyAllNic = VMK_FALSE;
-        }
-
-        sfvmk_runFirmwareOps(SFVMK_MGMT_DEV_OPS_GET, &fwCtx);
+      fwCtx.applyAllNic = VMK_TRUE;
+      if (nicNameSet) {
+        strcpy(fwCtx.ifaceName.string, mgmtParm.deviceName);
+        fwCtx.applyAllNic = VMK_FALSE;
       }
 
+      sfvmk_runFirmwareOps(opType, &fwCtx);
       break;
+
     case SFVMK_OBJECT_FEC:
       if (opType == SFVMK_MGMT_DEV_OPS_SET) {
         if (fecMode == SFVMK_MGMT_FEC_NONE_MASK) {
@@ -528,237 +524,6 @@ end:
     printf("ERROR: VPD get failed with error 0x%x\n", status);
 
   return VMK_OK;
-}
-
-static VMK_ReturnStatus
-sfvmk_fwVersion(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_firmwareType_t fwType)
-{
-  sfvmk_versionInfo_t verInfo;
-  vmk_uint8  macAddress[6];
-  sfvmk_vpdInfo_t vpdInfo;
-  char outBuffer[256];
-  VMK_ReturnStatus ret = VMK_FAILURE;
-
-  if (fwType > SFVMK_FIRMWARE_ALL)
-    return VMK_BAD_PARAM;
-
-  ret = sfvmk_getMACAddress(pMgmtParm->deviceName, macAddress);
-  if (ret != VMK_OK)
-    return ret;
-
-  printf("%s - MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
-         pMgmtParm->deviceName,
-         macAddress[0], macAddress[1], macAddress[2],
-         macAddress[3], macAddress[4], macAddress[5]);
-
-  ret = sfvmk_getVpdByTag(pMgmtParm->deviceName, &vpdInfo, 0x02, 0x0);
-  if (ret != VMK_OK)
-    return ret;
-
-  printf("NIC model: %s\n", vpdInfo.vpdPayload);
-
-  memset(outBuffer, 0, sizeof(outBuffer));
-
-  if (fwType & SFVMK_FIRMWARE_MC) {
-    memset(&verInfo, 0, sizeof(verInfo));
-    verInfo.type = SFVMK_GET_FW_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
-    if (ret != VMK_OK)
-      goto end;
-
-    printf("Controller version: %s\n", verInfo.version.string);
-  }
-
-  if (fwType & SFVMK_FIRMWARE_BOOTROM) {
-    memset(&verInfo, 0, sizeof(verInfo));
-    verInfo.type = SFVMK_GET_ROM_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
-    if (ret != VMK_OK)
-      goto end;
-
-    printf("BOOTROM version:    %s\n", verInfo.version.string);
-  }
-
-  if (fwType & SFVMK_FIRMWARE_UEFI) {
-    memset(&verInfo, 0, sizeof(verInfo));
-    verInfo.type = SFVMK_GET_UEFI_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
-    if (ret != VMK_OK)
-      goto end;
-
-    printf("UEFI version:       %s\n", verInfo.version.string);
-  }
-
-  if (fwType & SFVMK_FIRMWARE_SUC) {
-    memset(&verInfo, 0, sizeof(verInfo));
-    verInfo.type = SFVMK_GET_SUC_VERSION;
-    ret = sfvmk_getFWVersion(pMgmtParm->deviceName, &verInfo);
-    if (ret != VMK_OK)
-      goto end;
-
-    printf("SUC version:        %s\n", verInfo.version.string);
-  }
-
-  ret = VMK_OK;
-
-end:
-  return ret;
-}
-
-static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
-{
-  sfvmk_nvramType_t type;
-
-  switch(fwType) {
-    case SFVMK_FIRMWARE_MC:
-      type = SFVMK_NVRAM_MC;
-      break;
-
-    case SFVMK_FIRMWARE_BOOTROM:
-      type = SFVMK_NVRAM_BOOTROM;
-      break;
-
-    case SFVMK_FIRMWARE_UEFI:
-      type = SFVMK_NVRAM_UEFIROM;
-      break;
-
-    case SFVMK_FIRMWARE_SUC:
-      type = SFVMK_NVRAM_MUM;
-      break;
-
-    case SFVMK_FIRMWARE_ANY:
-      type = SFVMK_NVRAM_INVALID;
-      break;
-
-    default:
-      type = SFVMK_NVRAM_NTYPE;
-  }
-
-  return type;
-}
-
-static VMK_ReturnStatus
-sfvmk_fwUpdate(sfvmk_mgmtDevInfo_t *pMgmtParm,
-               char *pFileName, sfvmk_firmwareType_t fwType, char *pFwTypeName)
-{
-  sfvmk_imgUpdateV2_t imgUpdateV2;
-  FILE *pFile = NULL;
-  vmk_Name siblingPorts[SFVMK_MAX_INTERFACE];
-  char *pBuf = NULL;
-  int fileSize = 0;
-  int portCount = 0;
-  int status = 0;
-  int i;
-
-  pFile = fopen(pFileName, "r");
-  if (pFile == NULL) {
-    status = VMK_INVALID_NAME;
-    goto end;
-  }
-
-  status = fseek(pFile, 0, SEEK_END);
-  if (status != 0) {
-    status = VMK_READ_ERROR;
-    goto end;
-  }
-
-  fileSize = ftell(pFile);
-  if (fileSize <= 0) {
-    status = VMK_READ_ERROR;
-    goto end;
-  }
-
-  rewind(pFile);
-
-  pBuf = (char*) malloc(fileSize);
-  if (pBuf == NULL) {
-    status = VMK_NO_MEMORY;
-    goto close_file;
-  }
-
-  memset(pBuf, 0, fileSize);
-  if (fread(pBuf, 1, fileSize, pFile) != fileSize) {
-    status = VMK_READ_ERROR;
-    goto free_buffer;
-  }
-
-  status = sfvmk_fwVersion(pMgmtParm, fwType);
-  if (status != VMK_OK)
-    goto free_buffer;
-
-  printf("Updating firmware...\n");
-
-  portCount = sfvmk_getSiblingPorts(pMgmtParm, siblingPorts);
-  if (portCount <= 0) {
-    status = VMK_BAD_PARAM_COUNT;
-    goto free_buffer;
-  }
-
-  if (fwType != SFVMK_FIRMWARE_ANY)
-    printf("Updating %s firmware for", pFwTypeName);
-  else
-    printf("Updating firmware for");
-
-  for (i = 0; i < portCount; i++)
-    printf(" %s", siblingPorts[i].string);
-  printf("...\n");
-
-  memset(&imgUpdateV2, 0, sizeof(imgUpdateV2));
-  imgUpdateV2.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
-  imgUpdateV2.size = fileSize;
-  imgUpdateV2.type = sfvmk_getNvramType(fwType);
-
-  status = sfvmk_setNicFirmware(pMgmtParm->deviceName, &imgUpdateV2);
-  if (status != VMK_OK)
-    goto free_buffer;
-
-  printf("Firmware was successfully updated!\n");
-
-free_buffer:
-  free(pBuf);
-
-close_file:
-  fclose(pFile);
-
-end:
-  return status;
-}
-
-static int
-sfvmk_getSiblingPorts(sfvmk_mgmtDevInfo_t *pMgmtParm, vmk_Name siblingPorts[])
-{
-  sfvmk_ifaceList_t ifaceList;
-  vmk_Name pciBDF;
-  vmk_Name originPortInfo;
-  int portCount = 0;
-  int pciBDFStrLen = 0;
-  int status;
-  int i;
-
-  status = sfvmk_getNicList(&ifaceList);
-  if (status != VMK_OK)
-    return -1;
-
-  status = sfvmk_getPCIAddress(pMgmtParm->deviceName, &pciBDF);
-  if (status != VMK_OK)
-    return -1;
-
-  strcpy(originPortInfo.string, pciBDF.string);
-  pciBDFStrLen = strcspn(pciBDF.string, ".");
-
-  for (i = 0; i < ifaceList.ifaceCount; i++) {
-    status = sfvmk_getPCIAddress(ifaceList.ifaceArray[i].string, &pciBDF);
-    if (status != VMK_OK)
-      return -1;
-
-    if (strncmp(originPortInfo.string,
-                pciBDF.string, (pciBDFStrLen - 1)) == 0) {
-       strcpy(siblingPorts[portCount].string, ifaceList.ifaceArray[i].string);
-       portCount++;
-    }
-  }
-
-  return portCount;
 }
 
 static vmk_uint32 sfvmk_fecModeTypeGet(const char *pFecModeName)

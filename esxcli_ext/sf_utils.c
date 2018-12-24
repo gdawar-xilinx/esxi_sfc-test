@@ -26,6 +26,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vmkapi.h>
 #include <ctype.h>
@@ -183,6 +184,74 @@ sfvmk_getNicList(sfvmk_ifaceList_t *pNicList)
     return VMK_BAD_PARAM_COUNT;
 
   return VMK_OK;
+}
+
+/*
+ * Read firmware file content, returns the buffer filled with file
+ * contents and the size of the buffer.
+ */
+VMK_ReturnStatus
+sfvmk_readFileContent(char *pFileName, char **ppBuf, int *pFileSize, char errMsg[])
+{
+  FILE *pFile = NULL;
+  char *pBuf = NULL;
+  int fileSize = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  assert(pFileName);
+
+  pFile = fopen(pFileName, "r");
+  if (pFile == NULL) {
+    status = VMK_INVALID_NAME;
+    sprintf(errMsg, "Unable to open file '%s' with error 0x%x", pFileName, status);
+    goto end;
+  }
+
+  status = fseek(pFile, 0, SEEK_END);
+  if (status != 0) {
+    status = VMK_READ_ERROR;
+    sprintf(errMsg, "Unable to open file '%s' with error 0x%x", pFileName, status);
+    goto end;
+  }
+
+  fileSize = ftell(pFile);
+  if (fileSize <= 0) {
+    status = VMK_READ_ERROR;
+    sprintf(errMsg, "Empty file '%s' with error 0x%x", pFileName, status);
+    goto end;
+  }
+
+  rewind(pFile);
+
+  pBuf = (char*) malloc(fileSize);
+  if (pBuf == NULL) {
+    status = VMK_NO_MEMORY;
+    sprintf(errMsg, "Failed to allocate memmory for '%s'"
+                    " file buffer with error 0x%x", pFileName, status);
+    goto close_file;
+  }
+
+  memset(pBuf, 0, fileSize);
+  if (fread(pBuf, 1, fileSize, pFile) != fileSize) {
+    status = VMK_READ_ERROR;
+    sprintf(errMsg, "Unable to read file '%s' with error 0x%x", pFileName, status);
+    goto free_buffer;
+  }
+
+  *pFileSize = fileSize;
+  *ppBuf = pBuf;
+  status = VMK_OK;
+  goto close_file;
+
+free_buffer:
+  free(pBuf);
+  pBuf = NULL;
+
+close_file:
+  fclose(pFile);
+
+end:
+  return status;
 }
 
 /*

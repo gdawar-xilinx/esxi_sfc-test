@@ -224,6 +224,7 @@ static void process_value(json_value* value, int *rc, sf_fwinfo_list_t **fw_obje
     case json_boolean:
     case json_none:
     case json_double:
+    case json_null:
       /* Unrecognised type */
       SF_JLIB_ERROR("Unrecognized type\n");
       *rc = 3;

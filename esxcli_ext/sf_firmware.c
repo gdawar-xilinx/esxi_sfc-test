@@ -406,8 +406,15 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
   imgUpdateV2.type = sfvmk_getNvramType(fwType);
 
   status = sfvmk_setNicFirmware(pMsPortName, &imgUpdateV2);
-  if (status != VMK_OK)
-    sprintf(errMsg, "Firmware update failed, error 0x%x", status);
+  if (status != VMK_OK) {
+    if (status == VMK_NO_PERMISSION)
+      sprintf(errMsg, "Firmware --type %s mismatch with firmware image, error 0x%x",
+              supportedFWTypes[sfvmk_fwtypeToIndex(fwType)], status);
+    else if (status == VMK_INVALID_METADATA)
+      sprintf(errMsg, "Image board type mismatch, error 0x%x", status);
+    else
+      sprintf(errMsg, "Firmware update failed, error 0x%x", status);
+  }
 
   free(pBuf);
   return status;
@@ -435,8 +442,11 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     if (!(fwType & fwTypeIter))
       continue;
 
-    if ((SFVMK_FIRMWARE_SUC & fwTypeIter) && !pMsNode->sucSupported)
+    if ((SFVMK_FIRMWARE_SUC & fwTypeIter) && !pMsNode->sucSupported) {
+      printf("%s - SUC firmware not supported on this board\n",
+             pMsNode->pMsIfaceNode->ifaceName.string);
       continue;
+    }
 
     memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
     memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);
@@ -482,6 +492,12 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
   pMsNode = pfwCtx->pMasters;
 
   if (pfwCtx->fwFileSet) {
+    if ((SFVMK_FIRMWARE_SUC & pfwCtx->fwType) && !pMsNode->sucSupported) {
+      printf("%s - SUC firmware not supported on this board\n",
+             pMsNode->pMsIfaceNode->ifaceName.string);
+      return VMK_OK;
+    }
+
     /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */
     status = sfvmk_updateFromFile(pMsNode, pfwCtx->fwType,
                                   pfwCtx->fwFileName, NULL, pfwCtx->errorMsg);

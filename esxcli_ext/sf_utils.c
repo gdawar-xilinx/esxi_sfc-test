@@ -180,7 +180,7 @@ sfvmk_getNicList(sfvmk_ifaceList_t *pNicList)
   if (pNicList->ifaceCount == 0)
     return VMK_BAD_PARAM_COUNT;
 
-  if (pNicList->ifaceCount >= SFVMK_MAX_INTERFACE)
+  if (pNicList->ifaceCount > SFVMK_MAX_INTERFACE)
     return VMK_BAD_PARAM_COUNT;
 
   return VMK_OK;

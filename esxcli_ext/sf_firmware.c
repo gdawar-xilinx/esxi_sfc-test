@@ -432,7 +432,7 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
   char fwImgVer[SF_JLIB_MAX_VER_STRING_LENGTH];
   int subtype;
   VMK_ReturnStatus status = VMK_FAILURE;
-  int i;
+  int i, ret;
 
   assert(pMsNode);
 
@@ -453,8 +453,8 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     strcpy(fwFilePath, SFVMK_DEFAULT_FIRMWARE_LOC);
     imageType = sfvmk_getJLIBImgType(fwTypeIter);
     subtype = sfvmk_getImgSubtype(pMsNode, fwTypeIter);
-    status = sf_jlib_find_image(imageType, subtype, fwImgVer, fwFileName);
-    if (status < 0) {
+    ret = sf_jlib_find_image(imageType, subtype, fwImgVer, fwFileName);
+    if (ret < 0) {
       sprintf(errMsg, "Couldn't find match in %s for image type %d and subtype %d",
               SFVMK_FIRMWARE_METADATA_FILE, imageType, subtype);
       return VMK_FAILURE;
@@ -484,6 +484,7 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
   sfvmk_masterDevNode_t *pMsNode;
   char fwFamilyPath[64] = SFVMK_DEFAULT_FIRMWARE_LOC;
   char jsonFile[32] = SFVMK_FIRMWARE_METADATA_FILE;
+  int ret;
   VMK_ReturnStatus status = VMK_FAILURE;
 
   assert(pfwCtx);
@@ -511,10 +512,18 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
     return VMK_FAILURE;
 
   strcat(fwFamilyPath, jsonFile);
-  status = sf_jlib_init(fwFamilyPath);
-  if (status < 0) {
-     sprintf(pfwCtx->errorMsg, "JLIB init fail, error %d", status);
-     return VMK_FAILURE;
+  ret = sf_jlib_init(fwFamilyPath);
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      sprintf(pfwCtx->errorMsg, "SF JLIB could not find %s file", fwFamilyPath);
+    else if (ret == -EIO)
+      sprintf(pfwCtx->errorMsg, "SF JLIB failed to read %s file", fwFamilyPath);
+    else if (ret == -EPERM)
+      sprintf(pfwCtx->errorMsg, "SF JLIB failed to parse %s file", fwFamilyPath);
+    else
+      sprintf(pfwCtx->errorMsg, "SF JLIB init failed, error %d", ret);
+
+    return VMK_FAILURE;
   }
 
   while (pMsNode) {

@@ -682,11 +682,12 @@ done:
 **
 ** \param[in]  pAdapter    Pointer to sfvmk_adapter_t
 ** \param[in]  qIndex      EventQ index
+** \param[in]  flags       Event Queue properties
 **
 ** \return: 0 [success] error code [failure]
 */
 static VMK_ReturnStatus
-sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
+sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex, vmk_uint32 flags)
 {
   sfvmk_evq_t *pEvq = NULL;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -759,7 +760,7 @@ sfvmk_evqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 
   /* Create common code event queue. */
   status = efx_ev_qcreate(pAdapter->pNic, qIndex, &pEvq->mem, pEvq->numDesc, 0,
-                          pAdapter->intrModeration, EFX_EVQ_FLAGS_NOTIFY_INTERRUPT,
+                          pAdapter->intrModeration, flags,
                           &pEvq->pCommonEvq);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_ev_qcreate failed status: %s",
@@ -900,6 +901,10 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
 {
   vmk_uint32 qIndex;
   VMK_ReturnStatus status = VMK_BAD_PARAM;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  /* For Vmware usecases higher througput is prioritized over low latency */
+  vmk_uint32 flags = EFX_EVQ_FLAGS_NOTIFY_INTERRUPT |
+                     EFX_EVQ_FLAGS_TYPE_THROUGHPUT;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
 
@@ -922,9 +927,18 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto done;
+  }
+
+  if (pNicCfg->enc_no_cont_ev_mode_supported)
+    flags |= EFX_EVQ_FLAGS_NO_CONT_EV;
+
   for (qIndex = 0; qIndex < pAdapter->numEvqsAllocated; qIndex++) {
 
-    status = sfvmk_evqStart(pAdapter, qIndex);
+    status = sfvmk_evqStart(pAdapter, qIndex, flags);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evqStart(%u) failed status: %s",
                           qIndex, vmk_StatusToString(status));

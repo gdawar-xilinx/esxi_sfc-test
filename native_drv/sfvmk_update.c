@@ -252,7 +252,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     goto fail3;
   }
 
-  if (type == EFX_NVRAM_MC_FIRMWARE) {
+  if ((type == EFX_NVRAM_MC_FIRMWARE) || (type == EFX_NVRAM_MUM_FIRMWARE)) {
     status = efx_mcdi_reboot(pNic);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "MC Reboot Failed with err %s",

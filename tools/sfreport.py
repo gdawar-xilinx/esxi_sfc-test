@@ -298,6 +298,22 @@ def vmkernel_logs(output_file):
     output_file.write('%s</p>'%lines)
     return 0
 
+def cim_logs(output_file):
+    """function to fetch cim specific logs"""
+    output_file.write('<h1 id="CIM Logs"style="font-size:26px;">\
+                      CIM Logs: <br></H1>')
+    logs = execute('cat /var/log/syslog.log |grep sfcb-solarflare')
+    lines = ('<p>')
+    if logs == 1 or logs is None:
+        lines += 'No logs specific to CIM were found'
+        output_file.write('%s</p>'%lines)
+        return 1
+    cim_log = logs.split('\n')
+    for line in cim_log:
+        lines += '<small>%s</small><br>'%line
+    output_file.write('%s</p>'%lines)
+    return 0
+
 def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
                          cli_vib):
     """function to fetch the parameter list of sfvmk driver"""
@@ -1369,6 +1385,8 @@ if __name__ == "__main__":
                            Known Kernel Modules </a><br>')
             OUT_FILE.write('<a href="#NUMA Information">-> NUMA Information</a><br>')
             OUT_FILE.write('<a href="#VMkernel Logs">-> VMkernel Logs</a><br>')
+            if CIM_VIB_LIST:
+               OUT_FILE.write('<a href="#CIM Logs">-> CIM Logs</a><br>')
             OUT_FILE.write('<a href="#PCI Configuration">-> PCI Configuration\
                             </a><br>')
 
@@ -1402,6 +1420,8 @@ if __name__ == "__main__":
             sf_kernel_modules(OUT_FILE)
             numa_information(OUT_FILE)
             vmkernel_logs(OUT_FILE)
+            if CIM_VIB_LIST:
+               cim_logs(OUT_FILE)
             pci_configuration_space(OUT_FILE)
         print('Generated output file: '+HTML_FILE)
     else:

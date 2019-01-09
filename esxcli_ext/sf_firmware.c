@@ -64,6 +64,19 @@ inline int sfvmk_fwtypeToIndex(sfvmk_firmwareType_t fwType)
   return SFVMK_MAX_FWTYPE_SUPPORTED;
 }
 
+static void
+sfvmk_waitDriverReset(sfvmk_firmwareType_t fwType)
+{
+  int duration = 30;
+
+  if (fwType != SFVMK_FIRMWARE_MC &&
+      fwType != SFVMK_FIRMWARE_SUC)
+    return;
+
+  sleep(duration);
+  return;
+}
+
 static sfvmk_nvramType_t
 sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
 {
@@ -468,9 +481,11 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     if (status != VMK_OK && status != VMK_EXISTS)
       return status;
 
-    if (status != VMK_EXISTS)
+
+    if (status != VMK_EXISTS) {
+      sfvmk_waitDriverReset(fwTypeIter);
       printf("Firmware was successfully updated!\n");
-    else
+    } else
       printf("Skipped %s firmware update as version is same.\n",
              supportedFWTypes[sfvmk_fwtypeToIndex(fwTypeIter)]);
   }

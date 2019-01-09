@@ -267,6 +267,21 @@ def vpd_information(output_file, server, mode, adapter_list):
     vpd_table += '</table>'
     output_file.write(vpd_table)
 
+def get_sensor_info(output_file, server, mode, adapter_list):
+    """function to fetch Sensor information"""
+    output_file.write('<h1 id="Sensor Information"style="font-size:26px;">\
+                                  Sensor Information: <br></H1>')
+    for nic in adapter_list:
+        cmd = "esxcli " + server + " sfvmk sensor get -n " + nic
+        result = execute(cmd, mode)
+        if result == 1:
+            output_file.write('Error: Sensor Information not available')
+            return
+        output_file.write('<h>%s:' % nic +'</h>')
+        output_file.write('<p><PRE>%s</PRE></p>' % result)
+    return 0
+
+
 def vmkernel_logs(output_file):
     """function to fetch sfvmk specific vmkernel logs [dmesg]"""
     output_file.write('<h1 id="VMkernel Logs"style="font-size:26px;">\
@@ -1316,7 +1331,10 @@ if __name__ == "__main__":
         OUT_FILE.write('<a href="#System Summary">-> System Summary</a><br>')
         OUT_FILE.write('<a href="#Software Versions">-> Software Versions</a><br>')
         if CLI_VIB:
-            OUT_FILE.write('<a href="#VPD Information">-> VPD Information</a><br>')
+            OUT_FILE.write('<a href="#VPD Information">-> VPD Information</a><br'
+                           '>')
+            OUT_FILE.write('<a href="#Sensor Information">-> Sensor Information</a><br'
+                           '>')
         OUT_FILE.write('<a href="#Driver Bindings">-> Driver Bindings</a><br>')
         OUT_FILE.write('<a href="#SFVMK Parameters">-> Sfvmk Parameters</a><br>\
                        ')
@@ -1359,6 +1377,7 @@ if __name__ == "__main__":
                     SF_VER, CLI_VIB)
         if CLI_VIB:
             vpd_information(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            get_sensor_info(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
         driver_binding(OUT_FILE, SERVER_NAME, CURRENT_MODE)
         sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                              CLI_VIB)

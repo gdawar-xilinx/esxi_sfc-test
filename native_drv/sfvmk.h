@@ -49,13 +49,21 @@ typedef struct sfvmk_modInfo_s {
 
 extern sfvmk_modInfo_t sfvmk_modInfo;
 
+typedef enum sfvmk_evqType_e {
+  SFVMK_EVQ_TYPE_AUTO,
+  SFVMK_EVQ_TYPE_THROUGHPUT,
+  SFVMK_EVQ_TYPE_LOW_LATENCY,
+  SFVMK_EVQ_TYPE_MAX
+} sfvmk_evqType_t;
+
 /* Structure for module params */
 typedef struct sfvmk_modParams_s {
-  vmk_uint32 debugMask;
-  vmk_uint32 netQCount;
-  vmk_uint32 rssQCount;
-  vmk_uint32 vxlanOffload;
-  vmk_uint32 geneveOffload;
+  vmk_uint32       debugMask;
+  vmk_uint32       netQCount;
+  vmk_uint32       rssQCount;
+  vmk_uint32       vxlanOffload;
+  vmk_uint32       geneveOffload;
+  sfvmk_evqType_t  evqType;
 } sfvmk_modParams_t;
 
 extern struct sfvmk_modParams_s modParams;

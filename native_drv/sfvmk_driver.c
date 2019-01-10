@@ -42,7 +42,8 @@ sfvmk_modParams_t modParams = {
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   .geneveOffload = VMK_TRUE,
 #endif
-  .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT
+  .rssQCount = SFVMK_RSSQ_COUNT_DEFAULT,
+  .evqType = SFVMK_EVQ_TYPE_THROUGHPUT
 };
 
 /* List of module parameters */
@@ -61,6 +62,9 @@ VMK_MODPARAM_NAMED(geneveOffload, modParams.geneveOffload, bool,
                    "Enable / disable geneve offload "
                    "[0:Disable, 1:Enable (default)]");
 #endif
+VMK_MODPARAM_NAMED(evqType, modParams.evqType, uint,
+                   "EVQ type [0:Auto, 1:Throughput (default), 2:Low latency]"
+                   "(invalid value sets EVQ type to default value (Throughput))");
 
 #define SFVMK_MIN_EVQ_COUNT 1
 

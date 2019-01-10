@@ -890,6 +890,27 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_EVQ, "qIndex[%u]", qIndex);
 }
 
+/*! \brief  function to convert sfvmk EVQ type to efx EVQ type.
+**
+** \param[in]  evqType  SFVMK EVQ type data
+**
+** \return: efx EVQ type
+*/
+static uint32_t
+sfvmk_getEvqType(sfvmk_evqType_t evqType)
+{
+  switch (evqType) {
+  case SFVMK_EVQ_TYPE_AUTO:
+    return EFX_EVQ_FLAGS_TYPE_AUTO;
+  case SFVMK_EVQ_TYPE_THROUGHPUT:
+    return EFX_EVQ_FLAGS_TYPE_THROUGHPUT;
+  case SFVMK_EVQ_TYPE_LOW_LATENCY:
+    return EFX_EVQ_FLAGS_TYPE_LOW_LATENCY;
+  default:
+    return EFX_EVQ_FLAGS_TYPE_AUTO;
+  }
+}
+
 /*! \brief   Create all common code EVQs.
 **
 ** \param[in]  pAdapter  Pointer to sfvmk_adapter_t
@@ -902,9 +923,7 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
   vmk_uint32 qIndex;
   VMK_ReturnStatus status = VMK_BAD_PARAM;
   const efx_nic_cfg_t *pNicCfg = NULL;
-  /* For Vmware usecases higher througput is prioritized over low latency */
-  vmk_uint32 flags = EFX_EVQ_FLAGS_NOTIFY_INTERRUPT |
-                     EFX_EVQ_FLAGS_TYPE_THROUGHPUT;
+  vmk_uint32 flags = EFX_EVQ_FLAGS_NOTIFY_INTERRUPT;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_EVQ);
 
@@ -933,8 +952,12 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  if (pNicCfg->enc_no_cont_ev_mode_supported)
+  flags |= sfvmk_getEvqType(modParams.evqType);
+
+  if ((pNicCfg->enc_no_cont_ev_mode_supported) &&
+      (!(flags & EFX_EVQ_FLAGS_TYPE_LOW_LATENCY))) {
     flags |= EFX_EVQ_FLAGS_NO_CONT_EV;
+  }
 
   for (qIndex = 0; qIndex < pAdapter->numEvqsAllocated; qIndex++) {
 

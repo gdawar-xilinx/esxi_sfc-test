@@ -35,7 +35,7 @@
 #define SFVMK_MAX_FW_RDWR_ERR_LENGTH 128
 
 #define SFVMK_DEFAULT_FIRMWARE_LOC "/opt/sfc/"
-#define SFVMK_FIRMWARE_METADATA_FILE "FirmwareMetadata.json"
+#define SFVMK_FIRMWARE_METADATA_FILE "firmware/FirmwareMetadata.json"
 
 typedef enum sfvmk_firmwareType_e {
   SFVMK_FIRMWARE_ANY     =  0,

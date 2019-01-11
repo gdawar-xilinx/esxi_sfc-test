@@ -64,17 +64,61 @@ inline int sfvmk_fwtypeToIndex(sfvmk_firmwareType_t fwType)
   return SFVMK_MAX_FWTYPE_SUPPORTED;
 }
 
-static void
-sfvmk_waitDriverReset(sfvmk_firmwareType_t fwType)
+static vmk_Bool
+sfvmk_doWaitAfterUpdate(sfvmk_firmwareType_t fwType)
 {
-  int duration = 30;
+  if (fwType == SFVMK_FIRMWARE_MC ||
+      fwType == SFVMK_FIRMWARE_SUC ||
+      fwType == SFVMK_FIRMWARE_ANY)
+    return VMK_TRUE;
 
-  if (fwType != SFVMK_FIRMWARE_MC &&
-      fwType != SFVMK_FIRMWARE_SUC)
-    return;
+  return VMK_FALSE;
+}
 
-  sleep(duration);
-  return;
+static VMK_ReturnStatus
+sfvmk_getFwVerForType(sfvmk_masterDevNode_t *pMsNode, sfvmk_firmwareType_t fwType)
+{
+  sfvmk_versionInfo_t verInfo;
+  vmk_Name *pIfaceName;
+  vmk_Name *pCurVer;
+  VMK_ReturnStatus status;
+
+  pIfaceName = &pMsNode->pMsIfaceNode->ifaceName;
+
+  memset(&verInfo, 0, sizeof(verInfo));
+
+  switch (fwType) {
+    case SFVMK_FIRMWARE_MC:
+      verInfo.type = SFVMK_GET_FW_VERSION;
+      pCurVer = &pMsNode->mcVer;
+      break;
+
+    case SFVMK_FIRMWARE_BOOTROM:
+      verInfo.type = SFVMK_GET_ROM_VERSION;
+      pCurVer = &pMsNode->bootromVer;
+      break;
+
+    case SFVMK_FIRMWARE_UEFI:
+      verInfo.type = SFVMK_GET_UEFI_VERSION;
+      pCurVer = &pMsNode->uefiromVer;
+      break;
+
+    case SFVMK_FIRMWARE_SUC:
+      verInfo.type = SFVMK_GET_SUC_VERSION;
+      pCurVer = &pMsNode->sucVer;
+      break;
+
+    default:
+      assert(VMK_FALSE);
+  }
+
+  status = sfvmk_getFWVersion(pIfaceName->string, &verInfo);
+  if (status != VMK_OK)
+    return status;
+
+  strcpy(pCurVer->string, verInfo.version.string);
+
+  return VMK_OK;
 }
 
 static sfvmk_nvramType_t
@@ -303,19 +347,17 @@ static VMK_ReturnStatus
 sfvmk_printFirmwareVer(sfvmk_masterDevNode_t *pMsNode, sfvmk_firmwareType_t fwType)
 {
 
-  printf("NIC model: %s\n", pMsNode->nicModel);
-
   if (fwType & SFVMK_FIRMWARE_MC)
-    printf("Controller version: %s\n", pMsNode->mcVer.string);
+    printf("  Controller version: %s\n", pMsNode->mcVer.string);
 
   if (fwType & SFVMK_FIRMWARE_BOOTROM)
-    printf("BOOTROM version:    %s\n", pMsNode->bootromVer.string);
+    printf("  BOOTROM version:    %s\n", pMsNode->bootromVer.string);
 
   if (fwType & SFVMK_FIRMWARE_UEFI)
-    printf("UEFI version:       %s\n", pMsNode->uefiromVer.string);
+    printf("  UEFI version:       %s\n", pMsNode->uefiromVer.string);
 
   if (fwType & SFVMK_FIRMWARE_SUC)
-    printf("SUC version:        %s\n", pMsNode->sucVer.string);
+    printf("  SUC version:        %s\n", pMsNode->sucVer.string);
 
   return VMK_OK;
 }
@@ -336,6 +378,8 @@ sfvmk_printIfaceList(sfvmk_masterDevNode_t *pMsNode,
            pIfaceNode->macAddress[0], pIfaceNode->macAddress[1],
            pIfaceNode->macAddress[2], pIfaceNode->macAddress[3],
            pIfaceNode->macAddress[4], pIfaceNode->macAddress[5]);
+
+    printf("NIC model: %s\n", pMsNode->nicModel);
 
     sfvmk_printFirmwareVer(pMsNode, fwType);
     if (printMasterOnly)
@@ -387,29 +431,28 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
   if (fwType == SFVMK_FIRMWARE_INVALID || fwType == SFVMK_FIRMWARE_ALL)
     return status;
 
+  sfvmk_printIfaceList(pMsNode, 0, VMK_TRUE);
+  printf("Previous firmware version:\n");
+  sfvmk_printFirmwareVer(pMsNode, (fwType == SFVMK_FIRMWARE_ANY) ?
+                                   SFVMK_FIRMWARE_ALL : fwType);
+
   /* No need for sprintf here. errMsg is filled within sfvmk_readFileContent() */
   status = sfvmk_readFileContent(pFileName, &pBuf, &fileSize, errMsg);
   if (status != VMK_OK)
     return status;
 
-  sfvmk_printIfaceList(pMsNode, fwType, VMK_TRUE);
-
-  printf("Updating firmware...\n");
-  if (fwType != SFVMK_FIRMWARE_ANY)
-    printf("Updating %s firmware for", supportedFWTypes[sfvmk_fwtypeToIndex(fwType)]);
-  else
-    printf("Updating firmware for");
-
-  while(pIfaceNode) {
-    printf(" %s", pIfaceNode->ifaceName.string);
-    pIfaceNode = pIfaceNode->pNext;
-  }
-  printf("...\n");
-
   if (pFwVerMatchStr) {
     if (sfvmk_matchFWVersion(pMsNode, pFwVerMatchStr, fwType) == VMK_TRUE) {
+      printf("Skipped %s firmware update as version is same for",
+             supportedFWTypes[sfvmk_fwtypeToIndex(fwType)]);
+      while(pIfaceNode) {
+        printf(" %s", pIfaceNode->ifaceName.string);
+        pIfaceNode = pIfaceNode->pNext;
+      }
+      printf("...\n");
+
       free(pBuf);
-      return VMK_EXISTS;
+      return VMK_OK;
     }
   }
 
@@ -427,6 +470,31 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
       sprintf(errMsg, "Image board type mismatch, error 0x%x", status);
     else
       sprintf(errMsg, "Firmware update failed, error 0x%x", status);
+  } else {
+    if (sfvmk_doWaitAfterUpdate(fwType) == VMK_TRUE)
+      sleep(30);
+
+    if (fwType == SFVMK_FIRMWARE_ANY)
+      status = sfvmk_getAllFWVer(pMsNode);
+    else
+      status = sfvmk_getFwVerForType(pMsNode, fwType);
+
+    if (status != VMK_OK) {
+      sprintf(errMsg, "Unable to get current firmware, error 0x%x", status);
+      free(pBuf);
+      return status;
+    }
+
+    printf("Updated firmware successfully for");
+    while(pIfaceNode) {
+      printf(" %s", pIfaceNode->ifaceName.string);
+      pIfaceNode = pIfaceNode->pNext;
+    }
+    printf("...\n");
+
+    printf("Current firmware version:\n");
+    sfvmk_printFirmwareVer(pMsNode, (fwType == SFVMK_FIRMWARE_ANY) ?
+                                     SFVMK_FIRMWARE_ALL : fwType);
   }
 
   free(pBuf);
@@ -456,13 +524,15 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
       continue;
 
     if ((SFVMK_FIRMWARE_SUC & fwTypeIter) && !pMsNode->sucSupported) {
-      printf("%s - SUC firmware not supported on this board\n",
-             pMsNode->pMsIfaceNode->ifaceName.string);
+      printf("%s - %s\nSUC firmware not supported on this board\n",
+             pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel);
       continue;
     }
 
     memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
     memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);
+    memset(fwImgVer, 0, SF_JLIB_MAX_VER_STRING_LENGTH);
+
     strcpy(fwFilePath, SFVMK_DEFAULT_FIRMWARE_LOC);
     imageType = sfvmk_getJLIBImgType(fwTypeIter);
     subtype = sfvmk_getImgSubtype(pMsNode, fwTypeIter);
@@ -478,16 +548,8 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */
     status = sfvmk_updateFromFile(pMsNode, fwTypeIter, fwFilePath,
                                   (overwrite ? NULL : fwImgVer), errMsg);
-    if (status != VMK_OK && status != VMK_EXISTS)
+    if (status != VMK_OK)
       return status;
-
-
-    if (status != VMK_EXISTS) {
-      sfvmk_waitDriverReset(fwTypeIter);
-      printf("Firmware was successfully updated!\n");
-    } else
-      printf("Skipped %s firmware update as version is same.\n",
-             supportedFWTypes[sfvmk_fwtypeToIndex(fwTypeIter)]);
   }
 
   return VMK_OK;
@@ -509,17 +571,14 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
 
   if (pfwCtx->fwFileSet) {
     if ((SFVMK_FIRMWARE_SUC & pfwCtx->fwType) && !pMsNode->sucSupported) {
-      printf("%s - SUC firmware not supported on this board\n",
-             pMsNode->pMsIfaceNode->ifaceName.string);
+      printf("%s - %s\nSUC firmware not supported on this board\n",
+             pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel);
       return VMK_OK;
     }
 
     /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */
     status = sfvmk_updateFromFile(pMsNode, pfwCtx->fwType,
                                   pfwCtx->fwFileName, NULL, pfwCtx->errorMsg);
-    if (status == VMK_OK)
-      printf("Firmware was successfully updated!\n");
-
     return status;
   }
 

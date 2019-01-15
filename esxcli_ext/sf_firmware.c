@@ -80,7 +80,7 @@ sfvmk_getFwVerForType(sfvmk_masterDevNode_t *pMsNode, sfvmk_firmwareType_t fwTyp
 {
   sfvmk_versionInfo_t verInfo;
   vmk_Name *pIfaceName;
-  vmk_Name *pCurVer;
+  vmk_Name *pCurVer = NULL;
   VMK_ReturnStatus status;
 
   pIfaceName = &pMsNode->pMsIfaceNode->ifaceName;

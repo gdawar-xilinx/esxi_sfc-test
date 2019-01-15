@@ -589,7 +589,8 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
   ret = sf_jlib_init(fwFamilyPath);
   if (ret < 0) {
     if (ret == -ENOENT)
-      sprintf(pfwCtx->errorMsg, "SF JLIB could not find %s file", fwFamilyPath);
+      sprintf(pfwCtx->errorMsg, "SF JLIB could not find %s file,"
+                                " please check if firmware vib is installed", fwFamilyPath);
     else if (ret == -EIO)
       sprintf(pfwCtx->errorMsg, "SF JLIB failed to read %s file", fwFamilyPath);
     else if (ret == -EPERM)

@@ -955,8 +955,7 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
   flags |= sfvmk_getEvqType(modParams.evqType);
 
   if ((pNicCfg->enc_no_cont_ev_mode_supported) &&
-      ((flags & EFX_EVQ_FLAGS_TYPE_THROUGHPUT) ==
-       EFX_EVQ_FLAGS_TYPE_THROUGHPUT)) {
+      ((flags & EFX_EVQ_FLAGS_TYPE_MASK) == EFX_EVQ_FLAGS_TYPE_THROUGHPUT)) {
     flags |= EFX_EVQ_FLAGS_NO_CONT_EV;
   }
 

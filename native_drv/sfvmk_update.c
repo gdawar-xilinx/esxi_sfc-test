@@ -33,39 +33,39 @@ static VMK_ReturnStatus sfvmk_getImageType(sfvmk_imageReflash_t type, efx_nvram_
   switch (type) {
     case REFLASH_TARGET_PHY:
       *pNvramType = EFX_NVRAM_PHY;
-    break;
+      break;
 
     case REFLASH_TARGET_BOOTROM:
       *pNvramType = EFX_NVRAM_BOOTROM;
-     break;
+      break;
 
     case REFLASH_TARGET_MCFW:
       *pNvramType = EFX_NVRAM_MC_FIRMWARE;
-    break;
+      break;
 
     case REFLASH_TARGET_MCFW_BACKUP:
       *pNvramType = EFX_NVRAM_MC_GOLDEN;
-    break;
+      break;
 
     case REFLASH_TARGET_DISABLED_CALLISTO:
       *pNvramType = EFX_NVRAM_NULLPHY;
-    break;
+      break;
 
     case REFLASH_TARGET_FPGA:
       *pNvramType = EFX_NVRAM_FPGA;
-    break;
+      break;
 
     case REFLASH_TARGET_FPGA_BACKUP:
       *pNvramType = EFX_NVRAM_FPGA_BACKUP;
-    break;
+      break;
 
     case REFLASH_TARGET_UEFIROM:
       *pNvramType = EFX_NVRAM_UEFIROM;
-    break;
+      break;
 
     case REFLASH_TARGET_MUMFW:
       *pNvramType = EFX_NVRAM_MUM_FIRMWARE;
-    break;
+      break;
 
     default:
       SFVMK_ERROR("Unsupported Firmware : %d", type);
@@ -106,7 +106,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     goto end;
   }
 
-  if ((status =vmk_CopyFromUser((vmk_VA)pImgBuffer, (vmk_VA)pImgUpdateV2->pFileBuffer,
+  if ((status = vmk_CopyFromUser((vmk_VA)pImgBuffer, (vmk_VA)pImgUpdateV2->pFileBuffer,
                                  pImgUpdateV2->size)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Copy from user failed with error: %s", vmk_StatusToString(status));
     goto fail1;

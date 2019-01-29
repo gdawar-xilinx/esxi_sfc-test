@@ -345,8 +345,8 @@ def get_bootrom_file(name, rev, outdir_handle, json_handle,
                     bootromfile = os.path.join(outdir_handle.boot_dir, datfilename)
                     encodefilepath = os.path.join(outdir_handle.base_output_dir,
                                                   ImageOutputDir.encode_file_name)
-                    ret_val = os.system("python "+ encodefilepath + " " +
-                              destfilepath + " " + bootromfile)
+                    ret_val = os.system("python "+ encodefilepath + " " + "--combo-hdr" +
+                              " " + destfilepath + " " + bootromfile)
                     if ret_val != 0:
                         fail("Unable to crate bootrom file. Exiting.")
                         continue

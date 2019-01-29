@@ -19,7 +19,10 @@ ESX[2]="6.7;/opt/vmware/nativeddk-6.7.0-8169922/src;10.40.128.67"
 TAGS[0]="v2.0.0.0006;rel;yes"
 # Debug tag
 TAGS[1]="v2.0.0.0007;debug;no"
-
+#firmware family tag
+FW_FAMILY="v7.5.0.1015-internal;no"
+#firmware vib build VM
+FW_VM="10.40.128.87"
 #export all esx versions in form of array
 export ESX
 #export all tags in form of array

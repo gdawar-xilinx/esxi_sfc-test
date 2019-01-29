@@ -174,6 +174,78 @@ do
       ssh -l root ${ddk_vm} "${cmd}"
    done
 done
+#firmware vib build section
+#requires fw_family name as user input
+fw_info=$FW_FAMILY
+fw_vm=$FW_VM
+fw_arr=(${fw_info//;/ })
+fw_family=${fw_arr[0]}
+fw_status=${fw_arr[1]}
+fw_pkg_dir="/projects/vmware/fw_vib/$fw_family/"
+if [ $fw_status == "yes" ] ;then
+   xml_file="firmware_vib/descriptor.xml"
+   echo
+   echo "Building fw_vib using firmware_family: $fw_family"
+   echo
+   sed -i 's/\(<version>\)\(.*\)$/\1'${fw_family}'<\/version\>/' $xml_file
+   cmd="rm -rf /root/firmware_vib"
+   ssh -l root ${fw_vm} "${cmd}"
+   scp -r firmware_vib root@$fw_vm:/root/
+   if [ $? -ne 0 ] ;then
+      echo "ERROR: SCP failed"
+      echo "Aborting!.."
+      exit
+   fi
+   cmd="rm -rf /root/stagedir/"
+   ssh -l root ${fw_vm} "${cmd}"
+   cmd="mkdir /root/stagedir/"
+   ssh -l root ${fw_vm} "${cmd}"
+   cmd="cp /root/firmware_vib/descriptor.xml /root/stagedir/"
+   ssh -l root ${fw_vm} "${cmd}"
+   cmd="cd /root/firmware_vib; make clean; make"
+   ssh -l root ${fw_vm} "${cmd}"
+   echo
+   echo "Fetching firmware images.."
+   echo "Please wait, it could take a few minutes.."
+   echo
+   cmd="cd /root/firmware_vib; python fetch_firmware_image.py /root/firmware_vib/ $fw_family $user chisel.uk.solarflarecom.com -c true"
+   ssh -l root ${fw_vm} "${cmd}"
+   echo "Fetching firmware images completed"
+   # create the firmware package directory if it doesn't exist
+   # get user input to continue
+   if [ -d "$fw_pkg_dir" ]; then
+      echo
+      echo "WARNING!: $fw_pkg_dir exists for tag:$tag"
+      echo "Please make sure you know what you are doing?"
+      read -p 'Do you want to remove & create a new one? (y/ yes/ n / no): ' user_input
+      if [[ $user_input == *y*  ]] || [[ $user_input == *Y*  ]]; then
+         echo "Continuing by deleting and creating new $fw_pkg_dir"
+         rm -rf $fw_pkg_dir
+         errors+=("Warning! $fw_pkg_dir exists[action:$USER removed & recreated tagged dir for tag:$fw_family]")
+      else
+         echo "Continuing w/o copying"
+         errors+=("Warning! $fw_pkg_dir exists[action:$USER skipped publishing release for tag:$fw_family]")
+      fi
+   fi
+   if [[ $user_input == 'n'  ]] || [[ $user_input == 'N'  ]]; then
+      echo "Not creating directory for firmware vib"
+   else
+      mkdir -p $fw_pkg_dir
+      chmod 775 -R $fw_pkg_dir
+      # copy back the firmware vib the destination package directory:
+      echo "Copying fw_images.vib"
+      scp root@$fw_vm:"/root/firmware_vib/fw_images.vib" $fw_pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
+  fi
+  cmd="rm -rf /root/firmware_vib"
+  ssh -l root ${fw_vm} "${cmd}"
+fi
+
+
 echo
 echo "*************************************"
 echo "Release Packaging Completion  Report "
@@ -188,6 +260,10 @@ do
    ls -R /projects/vmware/driver/*_$tag
    echo
 done
+if [ $fw_status == "yes" ] ;then
+   ls -R $fw_pkg_dir
+   echo
+fi
 # Report errors/warnings if any
 echo "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 if [ -z "$errors" ] ;then

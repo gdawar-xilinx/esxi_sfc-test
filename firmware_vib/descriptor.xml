@@ -14,7 +14,7 @@
    <!-- Vendor has the same formatting restrictions as the name field -->
    <!-- This value should be the vendor code as configured by the partner -->
    <!-- in the Makefile/driver scons file and not the free form vendor name-->
-   <vendor>Solarflare</vendor>
+   <vendor>SFC</vendor>
 
    <!-- A one-line summary of the VIB package contents. 80 chars max. -->
    <summary>This VIB contains firmware images</summary>

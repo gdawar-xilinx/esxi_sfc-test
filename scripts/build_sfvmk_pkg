@@ -235,7 +235,7 @@ if [ $fw_status == "yes" ] ;then
       chmod 775 -R $fw_pkg_dir
       # copy back the firmware vib the destination package directory:
       echo "Copying fw_images.vib"
-      scp root@$fw_vm:"/root/firmware_vib/fw_images.vib" $fw_pkg_dir
+      scp root@$fw_vm:"/root/firmware_vib/sfc-fw-images*.vib" $fw_pkg_dir
       if [ $? -ne 0 ] ;then
          echo "ERROR: SCP failed"
          echo "Aborting!.."

@@ -371,7 +371,7 @@ def get_bootrom_file(name, rev, outdir_handle, json_handle,
     except OSError:
         fail("Fail to generate Bootrom dat Image. Exiting")
 
-def create_vib_of_all_images(vib_base_dir, outdir_handle):
+def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
     """ Creating a vib having all the firmware images"""
     try:
        opt_dir = vib_base_dir + "/opt"
@@ -387,7 +387,8 @@ def create_vib_of_all_images(vib_base_dir, outdir_handle):
        ret_val = os.system("cp -r " + base_dir + " " + opt_dir + "/sfc/")
        if ret_val != 0:
            fail("Unable to copy firmware directory to create vib")
-       ret_val = os.system("vibauthor -C -t /root/stagedir -v fw_images.vib -f --force")
+       ret_val = os.system("vibauthor -C -t /root/stagedir -v sfc-fw-images-" +
+                            version_num + " -f --force")
        if ret_val != 0:
            fail("Unable to create vib: Exiting.")
     except OSError:
@@ -433,7 +434,10 @@ def main():
         curr_dir = os.getcwd()
         password = 'None'
         if not input_ivy_dir.startswith('v'):
+            version_num = input_ivy_dir
             input_ivy_dir = 'v' + input_ivy_dir
+        else:
+            version_num = input_ivy_dir[1:]
         if ((options.vib_author is None) or
             (options.vib_author.lower() == "true")):
             json_handle = JsonParsing('FirmwareMetadata.json', 1)
@@ -505,7 +509,7 @@ def main():
                 ret_val = os.system('mkdir -p ' + ImageOutputDir.vib_base_dir)
                 if ret_val != 0:
                     fail("Not able to create:",ImageOutputDir.vib_base_dir)
-            create_vib_of_all_images(ImageOutputDir.vib_base_dir, outdir_handle)
+            create_vib_of_all_images(ImageOutputDir.vib_base_dir, outdir_handle, version_num)
     except KeyError:
         fail("Image variant not determined. Exiting.")
     except OSError:

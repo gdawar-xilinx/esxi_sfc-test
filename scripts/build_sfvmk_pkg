@@ -180,14 +180,15 @@ fw_info=$FW_FAMILY
 fw_vm=$FW_VM
 fw_arr=(${fw_info//;/ })
 fw_family=${fw_arr[0]}
-fw_status=${fw_arr[1]}
+fw_xml=${fw_arr[1]}
+fw_status=${fw_arr[2]}
 fw_pkg_dir="/projects/vmware/fw_vib/$fw_family/"
 if [ $fw_status == "yes" ] ;then
    xml_file="firmware_vib/descriptor.xml"
    echo
    echo "Building fw_vib using firmware_family: $fw_family"
    echo
-   sed -i 's/\(<version>\)\(.*\)$/\1'${fw_family}'<\/version\>/' $xml_file
+   sed -i 's/\(<version>\)\(.*\)$/\1'${fw_xml}'<\/version\>/' $xml_file
    cmd="rm -rf /root/firmware_vib"
    ssh -l root ${fw_vm} "${cmd}"
    scp -r firmware_vib root@$fw_vm:/root/

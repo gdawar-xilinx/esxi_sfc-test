@@ -20,7 +20,7 @@ TAGS[0]="v2.0.0.0006;rel;yes"
 # Debug tag
 TAGS[1]="v2.0.0.0007;debug;no"
 #firmware family tag
-FW_FAMILY="v7.5.0.1015-internal;no"
+FW_FAMILY="v7.5.0.1019;v7.5-0.1019;no"
 #firmware vib build VM
 FW_VM="10.40.128.87"
 #export all esx versions in form of array

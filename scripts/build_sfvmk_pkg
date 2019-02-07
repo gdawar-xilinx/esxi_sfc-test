@@ -58,7 +58,7 @@ do
    for i in "${ESX[@]}"
    do
       rep=$(echo $i | tr -cd ';' | wc -c)
-      if [ $rep != 2 ] ;then
+      if [ $rep != 3 ] ;then
          echo
          echo "ERROR: wrong user input"
          echo "Enter string as below:"
@@ -70,6 +70,7 @@ do
       esx_ver=${esx_arr[0]}
       ddk=${esx_arr[1]}
       ddk_vm=${esx_arr[2]}
+      sfvmkcli=${esx_arr[3]}
       echo "Current ESX version: $esx_ver"
       # create destination dir for the packages
       pkg_dir="/projects/vmware/driver/$build""_""$tag/esxi_$esx_ver"
@@ -83,18 +84,23 @@ do
       ssh -l root ${ddk_vm} "${cmd}"
       scp -r native_drv root@$ddk_vm:$ddk_tag_dir
       scp -r doxygen root@$ddk_vm:$ddk_tag_dir
-      scp -r esxcli_ext root@$ddk_vm:$ddk_tag_dir
+      if [ $sfvmkcli == "cli" ] ;then
+         scp -r esxcli_ext root@$ddk_vm:$ddk_tag_dir
+      fi
       echo "Initiating build"
       cmd="cd $ddk_tag_dir/native_drv; make clean; make"
       ssh -l root ${ddk_vm} "${cmd}"
-      cmd="cd $ddk_tag_dir/esxcli_ext; make clean; make"
-      ssh -l root ${ddk_vm} "${cmd}"
+      if [ $sfvmkcli == "cli" ] ;then
+         cmd="cd $ddk_tag_dir/esxcli_ext; make clean; make"
+         ssh -l root ${ddk_vm} "${cmd}"
+      fi
       #Publishing part
       echo "------------------------------------------------------------------"
       echo "ESXi: ESX-$esx_ver"
       echo "Build type: $build"
       echo "Tag: $tag"
       echo "DDK_VM: $ddk_vm"
+      echo "SFVMK_CLI: $sfvmkcli"
       echo "DDK: $ddk"
       echo "Publish directory: $pkg_dir"
       echo "USER: $user"
@@ -143,19 +149,21 @@ do
          echo "Aborting!.."
          exit
       fi
-      echo "Copying esxcli_ext.vib"
-      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/vib/SFC*.vib" $pkg_dir
-      if [ $? -ne 0 ] ;then
-         echo "ERROR: SCP failed"
-         echo "Aborting!.."
-         exit
-      fi
-      echo "Copying esxcli_ext_bundle.zip"
-      scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/SFC*.zip" $pkg_dir
-      if [ $? -ne 0 ] ;then
-         echo "ERROR: SCP failed"
-         echo "Aborting!.."
-         exit
+      if [ $sfvmkcli == "cli" ] ;then
+         echo "Copying esxcli_ext.vib"
+         scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/vib/SFC*.vib" $pkg_dir
+         if [ $? -ne 0 ] ;then
+            echo "ERROR: SCP failed"
+            echo "Aborting!.."
+            exit
+         fi
+         echo "Copying esxcli_ext_bundle.zip"
+         scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/SFC*.zip" $pkg_dir
+         if [ $? -ne 0 ] ;then
+            echo "ERROR: SCP failed"
+            echo "Aborting!.."
+            exit
+         fi
       fi
       echo "Copying sfreport utility"
       cp "tools/sfreport.py" $pkg_dir

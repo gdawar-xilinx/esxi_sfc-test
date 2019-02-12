@@ -59,6 +59,7 @@ typedef enum sfvmk_objectType_e {
   SFVMK_OBJECT_FIRMWARE,
   SFVMK_OBJECT_FEC,
   SFVMK_OBJECT_SENSOR,
+  SFVMK_OBJECT_VIB,
   SFVMK_OBJECT_MAX
 } sfvmk_objectType_t;
 
@@ -68,7 +69,8 @@ static const char * supportedObjects[] = {
   "vpd",
   "firmware",
   "fec",
-  "sensor"
+  "sensor",
+  "vib"
 };
 
 /*
@@ -320,7 +322,8 @@ main(int argc, char **argv)
 
   /* Confirm if NIC name is a Solarflare NIC or not */
   if (!nicNameSet) {
-    if (objType != SFVMK_OBJECT_FIRMWARE) {
+    if ((objType != SFVMK_OBJECT_FIRMWARE) &&
+        (objType != SFVMK_OBJECT_VIB)) {
       printf("ERROR: Missing required parameter -n|--nic-name\n");
       goto destroy_handle;
     }
@@ -393,6 +396,10 @@ main(int argc, char **argv)
 
     case SFVMK_OBJECT_SENSOR:
       sfvmk_hwSensorGet(&mgmtParm, opType);
+      break;
+
+    case SFVMK_OBJECT_VIB:
+      printf("%s\n", SFVMK_VIB_PLUGIN_NAME);
       break;
 
     default:

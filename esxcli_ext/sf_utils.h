@@ -29,6 +29,8 @@
 
 #include "sfvmk_mgmt_interface.h"
 
+#define SFVMK_VIB_PLUGIN_NAME "SFC-ESX-sfvmkcli"
+
 #define SFVMK_MAX_DIR_PATH_LENGTH 128
 #define SFVMK_MAX_FILENAME_LENGTH 64
 

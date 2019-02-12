@@ -30,6 +30,10 @@
       <namespace path="sfvmk.sensor">
          <description>esxcli extension to get hardware sensor information</description>
       </namespace>
+      <!-- esxcli sfvmk vib -->
+      <namespace path="sfvmk.vib">
+         <description>esxcli extension to display the name of the VIB that provided this esxcli plugin</description>
+      </namespace>
    </namespaces>
 
    <commands>
@@ -197,6 +201,19 @@
             <formatter>simple</formatter>
          </format-parameters>
          <execute>/opt/sfc/bin/sfvmkcli --object sensor --get --nic-name $val{nic-name}</execute>
+      </command>
+      <!-- esxcli sfvmk vib get -->
+      <command path="sfvmk.vib.get">
+         <description>Gets VIB information that provided this esxcli plugin</description>
+         <input-spec>
+         </input-spec>
+         <output-spec>
+            <string/>
+         </output-spec>
+         <format-parameters>
+            <formatter>simple</formatter>
+         </format-parameters>
+         <execute>/opt/sfc/bin/sfvmkcli --object vib --get</execute>
       </command>
    </commands>
 </plugin>

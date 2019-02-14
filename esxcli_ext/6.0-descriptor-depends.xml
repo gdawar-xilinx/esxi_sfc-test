@@ -2,4 +2,6 @@
 <constraint name="libvmkuser-6.0.0-1"/>
 <constraint name="uwvmkcall-6.0.0-1"/>
 <constraint name="vmkapi_2_3_0_0"/>
+<constraint name="esx-version" relation="&gt;=" version="6.0.0"/>
+<constraint name="esx-version" relation="&lt;&lt;" version="7.0"/>
 

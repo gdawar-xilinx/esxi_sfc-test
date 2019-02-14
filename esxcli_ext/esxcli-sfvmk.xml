@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<plugin xmlns="http://www.solarflare.com">
+<plugin xmlns="http://www.vmware.com/Products/ESX/5.0/esxcli/">
   <version>1.0.0</version>
 
    <namespaces>

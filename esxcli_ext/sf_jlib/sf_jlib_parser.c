@@ -307,6 +307,7 @@ void sf_jlib_exit(void)
   clean_list_nodes(controller_list);
   clean_list_nodes(bootrom_list);
   clean_list_nodes(uefirom_list);
+  clean_list_nodes(sucfw_list);
 
   json_value_free(js_value);
 }

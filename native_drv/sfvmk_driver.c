@@ -61,7 +61,12 @@ VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
 VMK_MODPARAM_NAMED(geneveOffload, modParams.geneveOffload, bool,
                    "Enable / disable geneve offload "
                    "[0:Disable, 1:Enable (default)]");
+
+VMK_MODPARAM_ARRAY(max_vfs, int, &modParams.maxVfsCount,
+                   "Number of VFs per PF [Max:63 Min:0 Default:0]. "
+                   "Invalid entry will set max_vfs value to 0 (SR-IOV disable)");
 #endif
+
 VMK_MODPARAM_NAMED(evqType, modParams.evqType, uint,
                    "EVQ type [0:Auto (default), 1:Throughput, 2:Low latency]"
                    "(invalid value sets EVQ type to default value (Auto))");
@@ -931,6 +936,10 @@ sfvmk_attachDevice(vmk_Device dev)
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  sfvmk_sriovIncrementPfCount();
+#endif
+
   /* Allocate memory for adapter */
   pAdapter = vmk_HeapAlloc(sfvmk_modInfo.heapID, sizeof(sfvmk_adapter_t));
   if (pAdapter == NULL) {
@@ -1014,6 +1023,16 @@ sfvmk_attachDevice(vmk_Device dev)
       goto failed_nic_probe;
     }
   }
+
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  /* Initialize SR-IOV */
+  status = sfvmk_sriovInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_sriovInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_sriov_init;
+  }
+#endif
 
   /* Initialize NVRAM. */
   status = efx_nvram_init(pAdapter->pNic);
@@ -1227,6 +1246,10 @@ failed_vpd_init:
   efx_nvram_fini(pAdapter->pNic);
 
 failed_nvram_init:
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  sfvmk_sriovFini(pAdapter);
+failed_sriov_init:
+#endif
   efx_nic_unprobe(pAdapter->pNic);
 
 failed_nic_probe:
@@ -1432,6 +1455,16 @@ sfvmk_detachDevice(vmk_Device dev)
     efx_nic_unprobe(pAdapter->pNic);
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  /* De-init SR-IOV */
+  status = sfvmk_sriovFini(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_sriovFini failed status: %s",
+                        vmk_StatusToString(status));
+  }
+#endif
+
+
   /* Tear down MCDI. */
   sfvmk_mcdiFini(pAdapter);
 
@@ -1446,6 +1479,9 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_unmapBAR(pAdapter);
   sfvmk_destroyDMAEngine(pAdapter);
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  sfvmk_sriovDecrementPfCount();
+#endif
 
 done:
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);

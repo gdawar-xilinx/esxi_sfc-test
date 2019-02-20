@@ -635,6 +635,11 @@ typedef struct sfvmk_adapter_s {
 
   /* Event for startIO completion */
   vmk_WorldEventID           startIO_compl_event;
+
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  /* Number of VFs enabled on this adapter */
+  vmk_uint32                 numVfsEnabled;
+#endif
 } sfvmk_adapter_t;
 
 extern const sfvmk_pktOps_t sfvmk_packetOps[];
@@ -980,5 +985,36 @@ sfvmk_nvramWriteAll(sfvmk_adapter_t *pAdapter, efx_nvram_type_t type, vmk_uint8 
 
 VMK_ReturnStatus
 sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCount size, vmk_ByteCount *pBytesCopied);
+
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+/* SR-IOV handlers */
+
+/* Considering MAX_PFS per card as 4 for four port cards as
+ * sfvmk doesn't support PF partitioning: 4 PFs + 252 VFs */
+#define SFVMK_MAX_FNS_PER_CARD   256
+#define SFVMK_MAX_PFS            SFVMK_MAX_ADAPTER
+#define SFVMK_MAX_PFS_PER_CARD   4
+#define SFVMK_MAX_VFS_DEFAULT    0
+#define SFVMK_MAX_VFS_PER_PF     (SFVMK_MAX_FNS_PER_CARD - SFVMK_MAX_PFS_PER_CARD)/\
+                                 SFVMK_MAX_PFS_PER_CARD
+
+
+/* SR-IOV extended capabilites offsets */
+/* Refer PCIE SR-IOV specification, SF-118940-PS Section 3.3.1 */
+#define SFVMK_SRIOV_EXT_CAP_ID      0x10
+/* Refer PCIE SR-IOV specification, SF-118940-PS Figure 3-1 */
+#define SFVMK_TOTAL_VFS_OFFSET      0xE
+
+extern vmk_int32 max_vfs[SFVMK_MAX_PFS];
+
+void
+sfvmk_sriovIncrementPfCount(void);
+void
+sfvmk_sriovDecrementPfCount(void);
+VMK_ReturnStatus
+sfvmk_sriovInit(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_sriovFini(sfvmk_adapter_t *pAdapter);
+#endif
 
 #endif /* __SFVMK_DRIVER_H__ */

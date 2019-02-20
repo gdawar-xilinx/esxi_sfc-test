@@ -64,6 +64,9 @@ typedef struct sfvmk_modParams_s {
   vmk_uint32       vxlanOffload;
   vmk_uint32       geneveOffload;
   sfvmk_evqType_t  evqType;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  vmk_uint32 maxVfsCount;
+#endif
 } sfvmk_modParams_t;
 
 extern struct sfvmk_modParams_s modParams;
@@ -84,7 +87,8 @@ typedef enum sfvmk_debugMask_e {
   SFVMK_DEBUG_MCDI   = 1 << 11,
   SFVMK_DEBUG_FILTER = 1 << 12,
   SFVMK_DEBUG_COMMON_CODE  = 1 << 13,
-  SFVMK_DEBUG_MON    = 1 << 14
+  SFVMK_DEBUG_MON    = 1 << 14,
+  SFVMK_DEBUG_SRIOV  = 1 << 15
 } sfvmk_debugMask_t;
 
 typedef enum sfvmk_logLevel_e {
@@ -110,6 +114,7 @@ typedef enum sfvmk_logLevel_e {
                              SFVMK_DEBUG_EVQ    |                            \
                              SFVMK_DEBUG_TX     |                            \
                              SFVMK_DEBUG_RX     |                            \
+                             SFVMK_DEBUG_SRIOV  |                            \
                              SFVMK_DEBUG_HW)
 #else
 #define ENABLE_IO_DEBUG_LOG 0

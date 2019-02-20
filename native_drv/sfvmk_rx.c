@@ -913,7 +913,7 @@ sfvmk_rxqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   /* Create the common code receive queue. */
   status = efx_rx_qcreate(pAdapter->pNic,
                           qIndex, 0,
-                          EFX_RXQ_TYPE_DEFAULT,
+                          EFX_RXQ_TYPE_DEFAULT, 0,
                           &pRxq->mem,
                           pRxq->numDesc, 0,
                           EFX_RXQ_FLAG_INNER_CLASSES,

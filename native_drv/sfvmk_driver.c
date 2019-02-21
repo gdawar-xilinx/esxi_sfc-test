@@ -905,6 +905,75 @@ sfvmk_tunnelFini(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+/*! \brief Retrieve the serial number of specified adapter.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK on success, Error code otherwise.
+*/
+static VMK_ReturnStatus
+sfvmk_getSerialNumber(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint8 vpdPayload[SFVMK_VPD_MAX_PAYLOAD] = {0};
+  vmk_uint8 vpdLen = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+  if ((status = sfvmk_vpdGetInfo(pAdapter, vpdPayload,
+                                 SFVMK_VPD_MAX_PAYLOAD, 0x10,
+                                 ('S' | 'N' << 8), &vpdLen)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Get VPD data failed with error %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (vpdLen >= SFVMK_SN_MAX_LEN) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Buffer overflow for serial number: %s",
+                        vpdPayload);
+    status = VMK_EOVERFLOW;
+    goto done;
+  }
+
+  vmk_Strncpy(pAdapter->vpdSN, vpdPayload, SFVMK_SN_MAX_LEN);
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                      "Device %s SN %s len %u", pAdapter->pciDeviceName.string,
+                      pAdapter->vpdSN, vpdLen);
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+  return status;
+}
+
+/*! \brief Check if the two adapters belong to same controller.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t for first port
+** \param[in]  pOther    pointer to sfvmk_adapter_t for other port
+**
+** \return: VMK_TRUE if ports belong to same controller, VMK_FALSE otherwise.
+*/
+vmk_Bool inline
+sfvmk_sameController(sfvmk_adapter_t *pAdapter, sfvmk_adapter_t *pOther)
+{
+  vmk_Bool match = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if(vmk_Strncmp(pAdapter->vpdSN, pOther->vpdSN, SFVMK_SN_MAX_LEN))
+    match = VMK_FALSE;
+  else
+    match = VMK_TRUE;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                      "SN1: %s, SN2: %s, match: %u",
+                      pAdapter->vpdSN, pOther->vpdSN, match);
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+  return match;
+}
+#endif
+
 /************************************************************************
  * Device Driver Operations
  ************************************************************************/
@@ -1193,6 +1262,21 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_helper;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  status = sfvmk_getSerialNumber(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_getSerialNumber failed with error %s",
+                        vmk_StatusToString(status));
+    goto failed_get_serial_number;
+  }
+
+  if (pNicCfg->enc_assigned_port == 0) {
+    pAdapter->pPrimary = pAdapter;
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                        "Primary adapter set");
+  }
+#endif
+
   efx_nic_fini(pAdapter->pNic);
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
 
@@ -1201,6 +1285,9 @@ sfvmk_attachDevice(vmk_Device dev)
 
   goto done;
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+failed_get_serial_number:
+#endif
 failed_create_helper:
 failed_set_drvdata:
   sfvmk_uplinkDataFini(pAdapter);

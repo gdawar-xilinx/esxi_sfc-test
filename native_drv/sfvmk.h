@@ -45,6 +45,10 @@ typedef struct sfvmk_modInfo_s {
    vmk_MgmtHandle     mgmtHandle;
    vmk_HashTable      vmkdevHashTable;
    vmk_Semaphore      lock;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+   vmk_ListLinks      primaryList;
+   vmk_ListLinks      unassociatedList;
+#endif
 } sfvmk_modInfo_t;
 
 extern sfvmk_modInfo_t sfvmk_modInfo;

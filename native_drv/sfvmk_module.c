@@ -352,6 +352,11 @@ init_module(void)
     goto failed_hash_init;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  vmk_ListInit(&sfvmk_modInfo.primaryList);
+  vmk_ListInit(&sfvmk_modInfo.unassociatedList);
+#endif
+
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
   if (status != VMK_OK) {

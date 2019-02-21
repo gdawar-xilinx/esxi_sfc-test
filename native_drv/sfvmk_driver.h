@@ -637,8 +637,18 @@ typedef struct sfvmk_adapter_s {
   vmk_WorldEventID           startIO_compl_event;
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#define SFVMK_SN_MAX_LEN              32
+
   /* Number of VFs enabled */
   vmk_uint32                 numVfsEnabled;
+  /* Pointer to primary adapter (port number 0) */
+  struct sfvmk_adapter_s*    pPrimary;
+  /* Linked list for secondary ports */
+  vmk_ListLinks              secondaryList;
+  /* Linked list entry reference */
+  vmk_ListLinks              adapterLink;
+  /* Serial number of this adapter */
+  vmk_uint8                  vpdSN[SFVMK_SN_MAX_LEN];
 #endif
 } sfvmk_adapter_t;
 
@@ -1007,6 +1017,8 @@ sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCou
 
 extern vmk_int32 max_vfs[SFVMK_MAX_PFS];
 
+vmk_Bool
+sfvmk_sameController(sfvmk_adapter_t *pAdapter, sfvmk_adapter_t *pOther);
 void
 sfvmk_sriovIncrementPfCount(void);
 void

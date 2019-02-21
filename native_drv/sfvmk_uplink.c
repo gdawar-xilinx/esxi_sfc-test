@@ -2067,6 +2067,28 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+  /* Register capability for SR-IOV if FW supports EVB and
+   * VFs have been enabled for this adapter */
+  if (pAdapter->numVfsEnabled && pNicCfg->enc_datapath_cap_evb) {
+    status = vmk_UplinkCapRegister(pAdapter->uplink.handle,
+                                   VMK_UPLINK_CAP_SRIOV, NULL);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "VMK_UPLINK_CAP_SRIOV register failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                        "SR-IOV capability registered successfully");
+  } else {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_INFO,
+                        "SR-IOV capability not registered : "
+                        "EVB %ssupported by FW, VFs enabled [%u]",
+                        pNicCfg->enc_datapath_cap_evb ? "" : "not ",
+                        pAdapter->numVfsEnabled);
+  }
+#endif
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);

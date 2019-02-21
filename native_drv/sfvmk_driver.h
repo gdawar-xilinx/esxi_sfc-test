@@ -637,7 +637,7 @@ typedef struct sfvmk_adapter_s {
   vmk_WorldEventID           startIO_compl_event;
 
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
-  /* Number of VFs enabled on this adapter */
+  /* Number of VFs enabled */
   vmk_uint32                 numVfsEnabled;
 #endif
 } sfvmk_adapter_t;

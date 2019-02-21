@@ -1475,6 +1475,15 @@ sfvmk_scanDevice(vmk_Device device)
   vmk_LogicalFreeBusAddress(sfvmk_modInfo.driverID, pAdapter->uplink.deviceID.busAddress);
   vmk_BusTypeRelease(pAdapter->uplink.deviceID.busType);
 
+#ifdef SFVMK_SUPPORT_SRIOV
+  status = sfvmk_registerVFs(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_registerVFs failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+#endif
+
 done:
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER, "VMK device:%p", device);
 

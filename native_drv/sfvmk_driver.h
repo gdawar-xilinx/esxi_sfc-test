@@ -523,6 +523,14 @@ typedef struct sfvmk_pktOps_s {
   void (*pktRelease)(sfvmk_pktCompCtx_t *pCompCtx, vmk_PktHandle *pPkt);
 } sfvmk_pktOps_t;
 
+#ifdef SFVMK_SUPPORT_SRIOV
+/* VF info structure */
+typedef struct sfvmk_vfInfo_s {
+  vmk_PCIDevice           vfPciDev;
+  vmk_PCIDeviceAddr       vfPciDevAddr;
+} sfvmk_vfInfo_t;
+#endif
+
 /* Adapter structure */
 typedef struct sfvmk_adapter_s {
   /* Device handle passed by VMK */
@@ -649,6 +657,8 @@ typedef struct sfvmk_adapter_s {
   vmk_ListLinks              adapterLink;
   /* Serial number of this adapter */
   vmk_uint8                  vpdSN[SFVMK_SN_MAX_LEN];
+  /* Pointer to array of numVfsEnabled VF's info */
+  sfvmk_vfInfo_t             *pVfInfo;
 #endif
 } sfvmk_adapter_t;
 
@@ -1025,6 +1035,8 @@ void
 sfvmk_sriovDecrementPfCount(void);
 VMK_ReturnStatus
 sfvmk_sriovInit(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_registerVFs(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus
 sfvmk_sriovFini(sfvmk_adapter_t *pAdapter);
 #endif

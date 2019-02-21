@@ -30,6 +30,10 @@
 #include <vmkapi.h>
 #include <lib/vmkapi_types.h>
 
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#define SFVMK_SUPPORT_SRIOV
+#endif
+
 /* Constants/Defines */
 
 typedef struct sfvmk_modInfo_s {
@@ -45,7 +49,7 @@ typedef struct sfvmk_modInfo_s {
    vmk_MgmtHandle     mgmtHandle;
    vmk_HashTable      vmkdevHashTable;
    vmk_Semaphore      lock;
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
    vmk_ListLinks      primaryList;
    vmk_ListLinks      unassociatedList;
 #endif

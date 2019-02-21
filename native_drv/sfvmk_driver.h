@@ -636,7 +636,7 @@ typedef struct sfvmk_adapter_s {
   /* Event for startIO completion */
   vmk_WorldEventID           startIO_compl_event;
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
 #define SFVMK_SN_MAX_LEN              32
 
   /* Number of VFs enabled */
@@ -996,7 +996,7 @@ sfvmk_nvramWriteAll(sfvmk_adapter_t *pAdapter, efx_nvram_type_t type, vmk_uint8 
 VMK_ReturnStatus
 sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCount size, vmk_ByteCount *pBytesCopied);
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
 /* SR-IOV handlers */
 
 /* Considering MAX_PFS per card as 4 for four port cards as

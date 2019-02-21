@@ -61,12 +61,12 @@ VMK_MODPARAM_NAMED(vxlanOffload, modParams.vxlanOffload, bool,
 VMK_MODPARAM_NAMED(geneveOffload, modParams.geneveOffload, bool,
                    "Enable / disable geneve offload "
                    "[0:Disable, 1:Enable (default)]");
-
+#endif
+#ifdef SFVMK_SUPPORT_SRIOV
 VMK_MODPARAM_ARRAY(max_vfs, int, &modParams.maxVfsCount,
                    "Number of VFs per PF [Max:63 Min:0 Default:0]. "
                    "Invalid entry will set max_vfs value to 0 (SR-IOV disable)");
 #endif
-
 VMK_MODPARAM_NAMED(evqType, modParams.evqType, uint,
                    "EVQ type [0:Auto (default), 1:Throughput, 2:Low latency]"
                    "(invalid value sets EVQ type to default value (Auto))");
@@ -905,7 +905,7 @@ sfvmk_tunnelFini(sfvmk_adapter_t *pAdapter)
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
 /*! \brief Retrieve the serial number of specified adapter.
 **
 ** \param[in]  pAdapter  pointer to sfvmk_adapter_t
@@ -1005,7 +1005,7 @@ sfvmk_attachDevice(vmk_Device dev)
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_sriovIncrementPfCount();
 #endif
 
@@ -1093,7 +1093,7 @@ sfvmk_attachDevice(vmk_Device dev)
     }
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   /* Initialize SR-IOV */
   status = sfvmk_sriovInit(pAdapter);
   if (status != VMK_OK) {
@@ -1262,7 +1262,7 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_helper;
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   status = sfvmk_getSerialNumber(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_getSerialNumber failed with error %s",
@@ -1285,7 +1285,7 @@ sfvmk_attachDevice(vmk_Device dev)
 
   goto done;
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
 failed_get_serial_number:
 #endif
 failed_create_helper:
@@ -1333,7 +1333,7 @@ failed_vpd_init:
   efx_nvram_fini(pAdapter->pNic);
 
 failed_nvram_init:
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_sriovFini(pAdapter);
 failed_sriov_init:
 #endif
@@ -1542,7 +1542,7 @@ sfvmk_detachDevice(vmk_Device dev)
     efx_nic_unprobe(pAdapter->pNic);
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   /* De-init SR-IOV */
   status = sfvmk_sriovFini(pAdapter);
   if (status != VMK_OK) {
@@ -1566,7 +1566,7 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_unmapBAR(pAdapter);
   sfvmk_destroyDMAEngine(pAdapter);
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter);
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_sriovDecrementPfCount();
 #endif
 

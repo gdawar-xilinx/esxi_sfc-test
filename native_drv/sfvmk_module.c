@@ -352,7 +352,7 @@ init_module(void)
     goto failed_hash_init;
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   vmk_ListInit(&sfvmk_modInfo.primaryList);
   vmk_ListInit(&sfvmk_modInfo.unassociatedList);
 #endif

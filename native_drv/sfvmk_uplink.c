@@ -449,7 +449,7 @@ sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
   }
 }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
 
 /*! \brief  If this is the first adapter in card, add it to the primary list.
 **          If not, check if there is an adapter in primary list which belongs
@@ -629,7 +629,7 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
     }
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_addAdapterToList(pAdapter);
 #endif
 
@@ -698,7 +698,7 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
   pAdapter->uplink.handle = NULL;
 
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_removeAdapterFromList(pAdapter);
 #endif
   status = VMK_OK;
@@ -2190,7 +2190,7 @@ static VMK_ReturnStatus sfvmk_registerIOCaps(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+#ifdef SFVMK_SUPPORT_SRIOV
   /* Register capability for SR-IOV if FW supports EVB and
    * VFs have been enabled for this adapter */
   if (pAdapter->numVfsEnabled && pNicCfg->enc_datapath_cap_evb) {

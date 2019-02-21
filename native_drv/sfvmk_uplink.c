@@ -2530,6 +2530,17 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->numVfsEnabled) {
+    status = efx_evb_init(pAdapter->pNic);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_evb_init failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+  }
+#endif
+
   /* Set required resource limits */
   status = sfvmk_setDrvLimits(pAdapter);
   if (status != VMK_OK) {
@@ -2720,6 +2731,11 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   }
 
   efx_nic_fini(pAdapter->pNic);
+
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->numVfsEnabled)
+    efx_evb_fini(pAdapter->pNic);
+#endif
 
   status = VMK_OK;
 

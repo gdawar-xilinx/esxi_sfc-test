@@ -1548,7 +1548,6 @@ sfvmk_detachDevice(vmk_Device dev)
     efx_nvram_fini(pAdapter->pNic);
     efx_vpd_fini(pAdapter->pNic);
     efx_nic_reset(pAdapter->pNic);
-    efx_nic_unprobe(pAdapter->pNic);
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
@@ -1560,6 +1559,8 @@ sfvmk_detachDevice(vmk_Device dev)
   }
 #endif
 
+  if (pAdapter->pNic != NULL)
+    efx_nic_unprobe(pAdapter->pNic);
 
   /* Tear down MCDI. */
   sfvmk_mcdiFini(pAdapter);

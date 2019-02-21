@@ -53,3 +53,5 @@ imported/medford2_impl.h
 imported/medford2_nic.c
 imported/efx_regs_mcdi_strs.h
 imported/efx_regs_ef100.h
+imported/ef10_evb.c
+imported/efx_evb.c

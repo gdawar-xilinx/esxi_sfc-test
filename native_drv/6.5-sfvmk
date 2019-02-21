@@ -94,6 +94,8 @@ module_def = {
 			 "imported/medford_nic.c",
 			 "imported/medford2_nic.c",
                          "imported/efx_tunnel.c",
+                         "imported/efx_evb.c",
+                         "imported/ef10_evb.c",
                        ],
    "includes"        : [
                          "./imported",

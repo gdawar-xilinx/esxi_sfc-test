@@ -2531,13 +2531,12 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->numVfsEnabled) {
-    status = efx_evb_init(pAdapter->pNic);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "efx_evb_init failed status: %s",
-                          vmk_StatusToString(status));
-      goto done;
-    }
+  /* Setup EVB switching */
+  status = sfvmk_evbSwitchInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
   }
 #endif
 
@@ -2733,8 +2732,13 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   efx_nic_fini(pAdapter->pNic);
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->numVfsEnabled)
-    efx_evb_fini(pAdapter->pNic);
+  /* clean-up EVB switch */
+  status = sfvmk_evbSwitchFini(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
 #endif
 
   status = VMK_OK;

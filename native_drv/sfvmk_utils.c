@@ -420,3 +420,20 @@ sfvmk_worldSleep(vmk_uint64 sleepTime)
   return VMK_OK;
 }
 
+/*! \brief Helper function to print MAC address in provided buffer.
+**
+** \param[in]   pAddr      MAC address to be printed
+** \param[out]  pBuffer    Buffer of minimum size SFVMK_MAC_BUF_SIZE
+**                         to hold the MAC address string
+**
+** \return: Pointer to the output buffer
+*/
+char *
+sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer)
+{
+  vmk_StringFormat(pBuffer, SFVMK_MAC_BUF_SIZE, NULL,
+                   "%02x:%02x:%02x:%02x:%02x:%02x",
+                   pAddr[0], pAddr[1], pAddr[2], pAddr[3], pAddr[4], pAddr[5]);
+  return pBuffer;
+}
+

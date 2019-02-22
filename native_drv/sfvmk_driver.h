@@ -523,6 +523,9 @@ typedef struct sfvmk_pktOps_s {
   void (*pktRelease)(sfvmk_pktCompCtx_t *pCompCtx, vmk_PktHandle *pPkt);
 } sfvmk_pktOps_t;
 
+#define SFVMK_MAC_BUF_SIZE           18
+#define SFVMK_DECLARE_MAC_BUF(var)   char var[SFVMK_MAC_BUF_SIZE]
+
 #ifdef SFVMK_SUPPORT_SRIOV
 /* VF info structure */
 typedef struct sfvmk_vfInfo_s {
@@ -659,6 +662,10 @@ typedef struct sfvmk_adapter_s {
   vmk_uint8                  vpdSN[SFVMK_SN_MAX_LEN];
   /* Pointer to array of numVfsEnabled VF's info */
   sfvmk_vfInfo_t             *pVfInfo;
+  /* Pointer to vSwitch */
+  efx_vswitch_t              *pVswitch;
+  /* Pointer to config info structure*/
+  efx_vport_config_t         *pVportConfig;
 #endif
 } sfvmk_adapter_t;
 
@@ -1039,6 +1046,13 @@ VMK_ReturnStatus
 sfvmk_registerVFs(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus
 sfvmk_sriovFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_evbSwitchInit(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_evbSwitchFini(sfvmk_adapter_t *pAdapter);
 #endif
+
+char *
+sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer);
 
 #endif /* __SFVMK_DRIVER_H__ */

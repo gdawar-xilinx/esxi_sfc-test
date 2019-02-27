@@ -96,7 +96,8 @@ typedef enum sfvmk_debugMask_e {
   SFVMK_DEBUG_FILTER = 1 << 12,
   SFVMK_DEBUG_COMMON_CODE  = 1 << 13,
   SFVMK_DEBUG_MON    = 1 << 14,
-  SFVMK_DEBUG_SRIOV  = 1 << 15
+  SFVMK_DEBUG_SRIOV  = 1 << 15,
+  SFVMK_DEBUG_PROXY  = 1 << 16
 } sfvmk_debugMask_t;
 
 typedef enum sfvmk_logLevel_e {
@@ -123,6 +124,7 @@ typedef enum sfvmk_logLevel_e {
                              SFVMK_DEBUG_TX     |                            \
                              SFVMK_DEBUG_RX     |                            \
                              SFVMK_DEBUG_SRIOV  |                            \
+                             SFVMK_DEBUG_PROXY  |                            \
                              SFVMK_DEBUG_HW)
 #else
 #define ENABLE_IO_DEBUG_LOG 0

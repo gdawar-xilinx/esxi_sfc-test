@@ -437,3 +437,31 @@ sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer)
   return pBuffer;
 }
 
+/*! \brief wrapper function to allocate dma-able memory
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[out] pMem       pointer to dma-able memory buffer
+** \param[in]  size       size of the memory
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_allocDmaBuffer(sfvmk_adapter_t *pAdapter,
+                          efsys_mem_t *pMem,
+                          size_t size)
+{
+  VMK_ReturnStatus status = VMK_OK;
+
+  pMem->ioElem.length =  size;
+  pMem->esmHandle = pAdapter->dmaEngine;
+  pMem->pEsmBase = sfvmk_allocDMAMappedMem(pAdapter->dmaEngine,
+                                           pMem->ioElem.length,
+                                           &pMem->ioElem.ioAddr);
+  if (pMem->pEsmBase == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_allocDMAMappedMem failed");
+    status = VMK_NO_MEMORY;
+  }
+
+  return status;
+}
+

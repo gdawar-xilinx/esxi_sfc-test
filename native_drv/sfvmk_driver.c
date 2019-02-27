@@ -620,13 +620,16 @@ done:
 
 /*! \brief  Routine to create a VMK Helper queue
 **
-** \param  pAdapter Pointer to sfvmk_adapter_t
+** \param[in]  pAdapter      pointer to sfvmk_adapter_t
+** \param[in]  pHelperName   Helper queue name
+** \param[out] pHelper       Helper queue handle
 **
 ** \return: VMK_OK [success] or VMK_FAILURE [failure]
 **
 */
-static VMK_ReturnStatus
-sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
+VMK_ReturnStatus
+sfvmk_createHelper(sfvmk_adapter_t *pAdapter, char *pHelperName,
+                   vmk_Helper *pHelper)
 {
   vmk_HelperProps props;
   VMK_ReturnStatus status = VMK_FAILURE;
@@ -640,8 +643,9 @@ sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
   }
 
   vmk_Memset(&props, 0, sizeof(vmk_HelperProps));
-  vmk_NameFormat(&props.name, "%s-helper",
-                 vmk_NameToString(&sfvmk_modInfo.driverName));
+  vmk_NameFormat(&props.name, "%s-%s-helper",
+                 vmk_NameToString(&sfvmk_modInfo.driverName),
+                 pHelperName);
   props.heap = sfvmk_modInfo.heapID;
   props.preallocRequests = VMK_FALSE;
   props.blockingSubmit = VMK_FALSE;
@@ -654,7 +658,7 @@ sfvmk_createHelper(sfvmk_adapter_t *pAdapter)
   props.constructor = NULL;
   props.constructorArg = (vmk_AddrCookie)NULL;
 
-  status = vmk_HelperCreate(&props, &pAdapter->helper);
+  status = vmk_HelperCreate(&props, pHelper);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HelperCreate failed status: %s",
                         vmk_StatusToString(status));
@@ -668,15 +672,16 @@ done:
 /* \brief  Routine to Destroy a VMK Helper queue
 **
 ** \param  pAadapter Pointer to sfvmk_adapter_t
+** \param  helper    Helper queue handle
 **
 ** \return: None
 **
 */
-static void
-sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter)
+void
+sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter, vmk_Helper helper)
 {
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
-  vmk_HelperDestroy(pAdapter->helper);
+  vmk_HelperDestroy(helper);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
 
@@ -1255,7 +1260,7 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_set_drvdata;
   }
 
-  status = sfvmk_createHelper(pAdapter);
+  status = sfvmk_createHelper(pAdapter, "drv", &pAdapter->helper);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_createHelper failed status: %s",
                         vmk_StatusToString(status));
@@ -1519,7 +1524,7 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
-  sfvmk_destroyHelper(pAdapter);
+  sfvmk_destroyHelper(pAdapter, pAdapter->helper);
   sfvmk_uplinkDataFini(pAdapter);
   sfvmk_mutexDestroy(pAdapter->lock);
   pAdapter->lock = NULL;

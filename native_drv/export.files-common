@@ -55,3 +55,5 @@ imported/efx_regs_mcdi_strs.h
 imported/efx_regs_ef100.h
 imported/ef10_evb.c
 imported/efx_evb.c
+imported/ef10_proxy.c
+imported/efx_proxy.c

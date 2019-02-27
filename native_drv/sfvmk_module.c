@@ -98,7 +98,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  25
+#define SFVMK_ALLOC_DESC_SIZE  26
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -218,6 +218,15 @@ sfvmk_calcHeapSize(void)
   allocDesc[index].size = (SFVMK_SENSOR_INFO_MAX_WIDTH * EFX_MON_NSTATS);
   allocDesc[index].alignment = 0;
   allocDesc[index++].count = 1;
+
+#ifdef SFVMK_SUPPORT_SRIOV
+  allocDesc[index].size = sizeof(sfvmk_proxyAdminState_t);
+  allocDesc[index].alignment = 0;
+  /* Although this allocation is required per card and not per adapter,
+   * keeping it at per adapter considering upcoming single port 100G card
+   */
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_PROXY_AUTH_NUM_BLOCKS;
+#endif
 
   VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);
 

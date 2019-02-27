@@ -532,6 +532,32 @@ typedef struct sfvmk_vfInfo_s {
   vmk_PCIDevice           vfPciDev;
   vmk_PCIDeviceAddr       vfPciDevAddr;
 } sfvmk_vfInfo_t;
+
+typedef enum sfvmk_proxyAuthState_e {
+  SFVMK_PROXY_AUTH_STATE_STARTING = 0,
+  SFVMK_PROXY_AUTH_STATE_READY,
+} sfvmk_proxyAuthState_t;
+
+typedef struct sfvmk_proxyAdminState_s {
+  /* Proxy auth module state */
+  sfvmk_proxyAuthState_t    authState;
+  /* Maximum size of proxy request */
+  size_t                    requestSize;
+  /* Maximum size of proxy response */
+  size_t                    responseSize;
+  /* Maximum number of functions */
+  vmk_uint32                blockCount;
+  /* Memory for proxy requests */
+  efsys_mem_t               requestBuffer;
+  /* Memory for proxy responses */
+  efsys_mem_t               responseBuffer;
+  /* Memory for book-keeping */
+  efsys_mem_t               statusBuffer;
+  /* Privileges handled by proxy operation */
+  vmk_uint32                handledPrivileges;
+  /* Helper world for processing proxy requests */
+  vmk_Helper                proxyHelper;
+} sfvmk_proxyAdminState_t;
 #endif
 
 /* Adapter structure */
@@ -666,6 +692,10 @@ typedef struct sfvmk_adapter_s {
   efx_vswitch_t              *pVswitch;
   /* Pointer to config info structure*/
   efx_vport_config_t         *pVportConfig;
+  /* Pointer to proxy admin structure */
+  sfvmk_proxyAdminState_t    *pProxyState;
+  /* Number of VFs currently active for proxy auth */
+  vmk_uint32                 proxiedVfs;
 #endif
 } sfvmk_adapter_t;
 
@@ -714,6 +744,13 @@ void *sfvmk_allocDMAMappedMem(vmk_DMAEngine dmaEngine, size_t size,
                               vmk_IOA *ioAddr);
 
 vmk_uint32 sfvmk_pow2GE(vmk_uint32 value);
+
+VMK_ReturnStatus
+sfvmk_createHelper(sfvmk_adapter_t *pAdapter, char *pHelperName,
+                   vmk_Helper *pHelper);
+
+void
+sfvmk_destroyHelper(sfvmk_adapter_t *pAdapter, vmk_Helper helper);
 
 /* Function to handle world sleep */
 VMK_ReturnStatus sfvmk_worldSleep(vmk_uint64 sleepTime);
@@ -1032,6 +1069,9 @@ sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCou
 /* Refer PCIE SR-IOV specification, SF-118940-PS Figure 3-1 */
 #define SFVMK_TOTAL_VFS_OFFSET      0xE
 
+#define SFVMK_ARRAY_SIZE(array)       (sizeof(array) / sizeof(array[0]))
+#define SFVMK_PROXY_AUTH_NUM_BLOCKS   256
+
 extern vmk_int32 max_vfs[SFVMK_MAX_PFS];
 
 vmk_Bool
@@ -1050,9 +1090,18 @@ VMK_ReturnStatus
 sfvmk_evbSwitchInit(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus
 sfvmk_evbSwitchFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter);
+void
+sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter);
 #endif
 
 char *
 sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer);
+
+VMK_ReturnStatus
+sfvmk_allocDmaBuffer(sfvmk_adapter_t *pAdapter,
+                          efsys_mem_t *pMem,
+                          size_t size);
 
 #endif /* __SFVMK_DRIVER_H__ */

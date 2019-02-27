@@ -57,6 +57,7 @@ module_def = {
                          "sfvmk_mgmt.c",
                          "sfvmk_update.c",
                          "sfvmk_sriov.c",
+                         "sfvmk_proxy.c",
                          "sfvmk_mon.c",
                          "sfvmk_nvram.c",
                          "imported/ef10_ev.c",
@@ -96,6 +97,8 @@ module_def = {
                          "imported/efx_tunnel.c",
                          "imported/efx_evb.c",
                          "imported/ef10_evb.c",
+                         "imported/efx_proxy.c",
+                         "imported/ef10_proxy.c",
                        ],
    "includes"        : [
                          "./imported",

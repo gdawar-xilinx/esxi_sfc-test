@@ -2538,6 +2538,14 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
                         vmk_StatusToString(status));
     goto done;
   }
+
+  status = sfvmk_proxyAuthInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "sfvmk_proxyAuthInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto proxy_auth_init_failed;
+  }
 #endif
 
   /* Set required resource limits */
@@ -2545,14 +2553,14 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setDrvLimits failed status: %s",
                         vmk_StatusToString(status));
-    goto done;
+    goto failed_set_drv_limits;
   }
 
   status = efx_nic_init(pAdapter->pNic);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_init failed status: %s",
                         vmk_StatusToString(status));
-    goto done;
+    goto failed_nic_init;
   }
 
   status = sfvmk_intrStart(pAdapter);
@@ -2641,6 +2649,14 @@ failed_ev_start:
 
 failed_intr_start:
   efx_nic_fini(pAdapter->pNic);
+
+failed_nic_init:
+failed_set_drv_limits:
+#ifdef SFVMK_SUPPORT_SRIOV
+  sfvmk_proxyAuthFini(pAdapter);
+proxy_auth_init_failed:
+  sfvmk_evbSwitchFini(pAdapter);
+#endif
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
@@ -2732,6 +2748,8 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   efx_nic_fini(pAdapter->pNic);
 
 #ifdef SFVMK_SUPPORT_SRIOV
+  sfvmk_proxyAuthFini(pAdapter);
+
   /* clean-up EVB switch */
   status = sfvmk_evbSwitchFini(pAdapter);
   if (status != VMK_OK) {

@@ -437,6 +437,19 @@ sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer)
   return pBuffer;
 }
 
+/*! \brief Helper function check if the given MAC address is Broadcast address
+**
+** \param[in]   pAddr      MAC address to be checked
+**
+** \return: VMK_TRUE if input address is Broadcast address
+*/
+inline vmk_Bool
+sfvmk_isBroadcastEtherAddr(const vmk_uint8 *pAddr)
+{
+  return ((pAddr[0] & pAddr[1] & pAddr[2] & pAddr[3] & pAddr[4] & pAddr[5]) ==
+           0xff);
+}
+
 /*! \brief wrapper function to allocate dma-able memory
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t

@@ -640,6 +640,200 @@ done:
   return status;
 }
 
+/*! \brief Helper function to convert rx mode bitmask to privilege mode bitmask
+**
+** \param[in]  rxMode      input rx mode value
+**
+** \return: converted privilege mode bitmask value
+**
+*/
+static vmk_uint32
+sfvmk_rxModeToPrivMask(vmk_VFRXMode rxMode)
+{
+  vmk_uint32 privilegeMask = 0;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_PROXY);
+
+  if (rxMode & VMK_VF_RXMODE_UNICAST)
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_UNICAST;
+  if (rxMode & VMK_VF_RXMODE_MULTICAST)
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_MULTICAST;
+  if (rxMode & VMK_VF_RXMODE_BROADCAST)
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_BROADCAST;
+  if (rxMode & VMK_VF_RXMODE_ALLMULTI)
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST;
+  if (rxMode & VMK_VF_RXMODE_PROMISC)
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS;
+
+  /* ESXi 5.5 and 6.0 does not grant multicast but grant
+   * all-multicast. Consider it as a bug and assume that usage of
+   * exact multicast does not violate security requirements.
+   */
+  if (SFVMK_WORKAROUND_54586 &&
+      (privilegeMask & MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST))
+    privilegeMask |= MC_CMD_PRIVILEGE_MASK_IN_GRP_MULTICAST;
+
+  SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+              "RxMode 0x%x privilegeMask 0x%x", rxMode, privilegeMask);
+
+  VMK_ASSERT((privilegeMask & ~SFVMK_EF10_RX_MODE_PRIVILEGE_MASK) == 0);
+
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_PROXY);
+  return privilegeMask;
+}
+
+/*! \brief Handler function for FILTER_OP MC CMD
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  vf          virtual function index
+** \param[in]  pCmd        pointer to proxy command received from MC
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+static VMK_ReturnStatus
+sfvmk_proxyFilterOp(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
+                    const efx_dword_t *pCmd)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vf;
+  sfvmk_pendingProxyReq_t *pPpr = &pVf->pendingProxyReq;
+  vmk_uint16 vid;
+  vmk_uint32 op;
+  vmk_uint32 portId;
+  vmk_uint32 matchFields;
+  vmk_VFRXMode requestedRxMode;
+  const vmk_uint8 *pMac;
+  sfvmk_outbuf_t outbuf;
+  sfvmk_inbuf_t inbuf;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  outbuf.emr_out_buf = (vmk_uint8 *)pCmd->ed_u8;
+  inbuf.emr_in_buf = (vmk_uint8 *)pCmd->ed_u8;
+
+  op = MCDI_OUT_DWORD(outbuf, FILTER_OP_IN_OP);
+  portId = MCDI_OUT_DWORD(outbuf, FILTER_OP_IN_PORT_ID);
+  matchFields = MCDI_OUT_DWORD(outbuf, FILTER_OP_IN_MATCH_FIELDS);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "VF %d filter_op op=%u fields=0x%x",
+                      vf, op, matchFields);
+
+  if ((op != MC_CMD_FILTER_OP_IN_OP_INSERT) &&
+      (op != MC_CMD_FILTER_OP_IN_OP_SUBSCRIBE)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "VF %u unexpected filter op 0x%x",
+                        vf, op);
+    status = VMK_ACCESS_DENIED;
+    goto done;
+  }
+
+  if (portId != EVB_PORT_ID_ASSIGNED) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "VF %u unexpected port id 0x%x",
+                        vf, portId);
+    status = VMK_ACCESS_DENIED;
+    goto done;
+  }
+
+  if (matchFields & (1 << MC_CMD_FILTER_OP_IN_MATCH_OUTER_VLAN_LBN)) {
+    vid = vmk_BE16ToCPU(MCDI_OUT_DWORD(outbuf, FILTER_OP_IN_OUTER_VLAN));
+
+    if (vid >= SFVMK_MAX_VLANS) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "VF %u unexpected vlanid 0x%x",
+                          vf, vid);
+      status = VMK_BAD_PARAM;
+      goto done;
+    }
+
+    if (!vmk_BitVectorTest(pVf->pAllowedVlans, vid)) {
+      /* Decline immediately if VLAN is already active but not allowed */
+      if (vmk_BitVectorTest(pVf->pActiveVlans, vid)) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "VF %u vlan %u active but not allowed",
+                            vf, vid);
+        status = VMK_ACCESS_DENIED;
+        goto done;
+      }
+
+      pPpr->cfg.vlan.guestVlans[vid >> 3] |= 1 << (vid & 0x7);
+      pPpr->cfg.cfgChanged |= VMK_CFG_GUEST_VLAN_ADD;
+      SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                          "VF %u request VLAN add %u", vf, vid);
+    }
+    vmk_BitVectorSet(pVf->pActiveVlans, vid);
+    pPpr->reqdPrivileges |= MC_CMD_PRIVILEGE_MASK_IN_GRP_UNRESTRICTED_VLAN;
+  }
+
+  switch (matchFields &
+          ((1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN) |
+           (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_LBN) |
+           (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_UCAST_DST_LBN))) {
+    case 0:
+      /* Filter will be auto-qualified with vPort MAC address
+       * (if the function does not have INSECURE_FILTERS privilege)
+       */
+      requestedRxMode = VMK_VF_RXMODE_UNICAST;
+      break;
+    case (1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN):
+      pMac = MCDI_IN2(inbuf, vmk_uint8, FILTER_OP_IN_DST_MAC);
+
+      /* Check broadcast first since it matches multicast as well */
+      if (sfvmk_isBroadcastEtherAddr(pMac))
+        requestedRxMode = VMK_VF_RXMODE_BROADCAST;
+      else if (EFX_MAC_ADDR_IS_MULTICAST(pMac))
+        requestedRxMode = VMK_VF_RXMODE_MULTICAST;
+      else
+        requestedRxMode = VMK_VF_RXMODE_UNICAST;
+      break;
+
+    case (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_LBN):
+      requestedRxMode = VMK_VF_RXMODE_ALLMULTI;
+      break;
+
+    case (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_UCAST_DST_LBN):
+      requestedRxMode = VMK_VF_RXMODE_PROMISC;
+      break;
+
+    default:
+      SFVMK_ADAPTER_ERROR(pAdapter, "VF %u unexpected filter_op match 0x%x",
+                          vf, matchFields);
+      status = VMK_ACCESS_DENIED;
+      goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "Requested rx mode:0x%x, vf rx mode: 0x%x",
+                      requestedRxMode, pVf->rxMode);
+
+  /* ESXi 5.5 and 6.0 do not grant multicast but grant
+   * all-multicast. We still would like to use exact multicast
+   * filters in this case to avoid the high packet replication
+   * cost. So, request all-multicast as well.
+   */
+  if (SFVMK_WORKAROUND_54586 &&
+      (requestedRxMode & VMK_VF_RXMODE_MULTICAST))
+    requestedRxMode |= VMK_VF_RXMODE_ALLMULTI;
+
+  pPpr->reqdPrivileges |=
+    sfvmk_rxModeToPrivMask(requestedRxMode);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "RequestedRxMode 0x%x, reqdPrivileges: 0x%x",
+                      requestedRxMode, pPpr->reqdPrivileges);
+
+  if (requestedRxMode & ~pVf->rxMode) {
+    pPpr->cfg.rxMode = pVf->rxMode | requestedRxMode;
+    pPpr->cfg.cfgChanged |= VMK_CFG_RXMODE_CHANGED;
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "VF %u request Rx mode 0x%x",
+                        vf, pPpr->cfg.rxMode);
+  }
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
 /*! \brief Function to validate the proxy auth request handle
 **
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
@@ -902,7 +1096,7 @@ sfvmk_proxyAuthorizeRequest(sfvmk_adapter_t *pAdapter,
     status = sfvmk_proxyVadaptorSetMac(pPfAdapter, vf, pCmd);
     break;
   case MC_CMD_FILTER_OP:
-    /* TODO: implementation */
+    status = sfvmk_proxyFilterOp(pPfAdapter, vf, pCmd);
     break;
   case MC_CMD_SET_MAC:
     /* TODO: implementation */

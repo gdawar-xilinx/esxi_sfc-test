@@ -529,6 +529,15 @@ typedef struct sfvmk_pktOps_s {
 #define SFVMK_DECLARE_MAC_BUF(var)   char var[SFVMK_MAC_BUF_SIZE]
 
 #ifdef SFVMK_SUPPORT_SRIOV
+#define SFVMK_MAX_VLANS              4096
+#define SFVMK_WORKAROUND_54586       1
+#define SFVMK_EF10_RX_MODE_PRIVILEGE_MASK \
+                                 (MC_CMD_PRIVILEGE_MASK_IN_GRP_UNICAST |\
+                                  MC_CMD_PRIVILEGE_MASK_IN_GRP_MULTICAST |\
+                                  MC_CMD_PRIVILEGE_MASK_IN_GRP_BROADCAST |\
+                                  MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST |\
+                                  MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS)
+
 /* Structures to help parsing of MCDI request and response buffers */
 typedef struct {
   vmk_uint8      *emr_out_buf;
@@ -548,7 +557,10 @@ typedef struct sfvmk_pendingProxyReq_s {
 typedef struct sfvmk_vfInfo_s {
   vmk_PCIDevice           vfPciDev;
   vmk_PCIDeviceAddr       vfPciDevAddr;
+  vmk_VFRXMode            rxMode;
   sfvmk_pendingProxyReq_t pendingProxyReq;
+  vmk_BitVector           *pAllowedVlans;
+  vmk_BitVector           *pActiveVlans;
 } sfvmk_vfInfo_t;
 
 typedef enum sfvmk_proxyAuthState_e {
@@ -1169,9 +1181,15 @@ sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent);
 char *
 sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer);
 
+vmk_Bool
+sfvmk_macAddrSame(const vmk_uint8 *pAddr1, const vmk_uint8 *pAddr2);
+
 VMK_ReturnStatus
 sfvmk_allocDmaBuffer(sfvmk_adapter_t *pAdapter,
                           efsys_mem_t *pMem,
                           size_t size);
+
+vmk_Bool
+sfvmk_isBroadcastEtherAddr(const vmk_uint8 *pAddr);
 
 #endif /* __SFVMK_DRIVER_H__ */

@@ -243,6 +243,8 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
   efx_vport_config_t *pVportConfig = NULL;
   efx_vport_config_t *pConfig = NULL;
   vmk_uint32 i = 0;
+  vmk_uint32 activeCnt = 0;
+  vmk_uint32 allowedCnt = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
 
@@ -313,6 +315,25 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
 
     pAdapter->pVfInfo = pVfInfo;
 
+    for (i = 0; i < pAdapter->numVfsEnabled; i++) {
+      pVfInfo = pAdapter->pVfInfo + i;
+      pVfInfo->pAllowedVlans = vmk_BitVectorAlloc(sfvmk_modInfo.heapID,
+                                                  SFVMK_MAX_VLANS);
+      if (pVfInfo->pAllowedVlans == NULL) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Allowed Vlan bitvector alloc failed");
+        goto allowed_bitvector_alloc_failed;
+      }
+      ++allowedCnt;
+
+      pVfInfo->pActiveVlans = vmk_BitVectorAlloc(sfvmk_modInfo.heapID,
+                                                 SFVMK_MAX_VLANS);
+      if (pVfInfo->pActiveVlans == NULL) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Active Vlan bitvector alloc failed");
+        goto active_bitvector_alloc_failed;
+      }
+      ++activeCnt;
+    }
+
     /* Allocate vport config structure */
     pVportConfig = (efx_vport_config_t *)
                    sfvmk_memPoolAlloc((pAdapter->numVfsEnabled + 1) *
@@ -342,9 +363,22 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
   goto done;
 
 config_mem_alloc_failed:
-    sfvmk_memPoolFree((vmk_VA)pVfInfo,
-                      pAdapter->numVfsEnabled * sizeof(sfvmk_vfInfo_t));
-    pAdapter->pVfInfo = NULL;
+active_bitvector_alloc_failed:
+allowed_bitvector_alloc_failed:
+
+  for (i = 0; i < activeCnt; i++) {
+    pVfInfo = pAdapter->pVfInfo + i;
+    vmk_BitVectorFree(sfvmk_modInfo.heapID, pVfInfo->pActiveVlans);
+  }
+
+  for (i = 0; i < allowedCnt; i++) {
+    pVfInfo = pAdapter->pVfInfo + i;
+    vmk_BitVectorFree(sfvmk_modInfo.heapID, pVfInfo->pAllowedVlans);
+  }
+
+  sfvmk_memPoolFree((vmk_VA)pAdapter->pVfInfo,
+                    pAdapter->numVfsEnabled * sizeof(sfvmk_vfInfo_t));
+  pAdapter->pVfInfo = NULL;
 
 mem_alloc_failed:
   if (pAdapter->numVfsEnabled) {
@@ -372,6 +406,9 @@ VMK_ReturnStatus
 sfvmk_sriovFini(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_vfInfo_t *pVfInfo = NULL;
+  vmk_uint32 i = 0;
+
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
@@ -386,6 +423,14 @@ sfvmk_sriovFini(sfvmk_adapter_t *pAdapter)
     }
 
     if (pAdapter->pVfInfo) {
+      for (i = 0; i < pAdapter->numVfsEnabled; i++) {
+        pVfInfo = pAdapter->pVfInfo + i;
+        vmk_BitVectorFree(sfvmk_modInfo.heapID,
+                          pVfInfo->pActiveVlans);
+        vmk_BitVectorFree(sfvmk_modInfo.heapID,
+                          pVfInfo->pAllowedVlans);
+      }
+
       sfvmk_memPoolFree((vmk_VA)pAdapter->pVfInfo,
                         pAdapter->numVfsEnabled * sizeof(sfvmk_vfInfo_t));
       pAdapter->pVfInfo = NULL;
@@ -475,6 +520,27 @@ sfvmk_removeVfDevice(vmk_PCIDevice vfPciDev)
   return status;
 }
 
+/*! \brief  Reset the VF info structure members to default values.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[in]  pVf       pointer to VF info structure
+**
+** \return: none
+*/
+static void
+sfvmk_vfInfoReset(sfvmk_adapter_t *pAdapter, sfvmk_vfInfo_t *pVf)
+{
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pVf->rxMode = 0;
+  vmk_Memset(&pVf->pendingProxyReq, 0, sizeof(sfvmk_pendingProxyReq_t));
+  vmk_BitVectorZap(pVf->pActiveVlans);
+  vmk_BitVectorZap(pVf->pAllowedVlans);
+  vmk_BitVectorSet(pVf->pAllowedVlans, 0);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+}
+
 /********vmk_PCIVFDeviceOps Handler********/
 static vmk_PCIVFDeviceOps sfvmk_VfDevOps = {
    .removeVF = sfvmk_removeVfDevice
@@ -546,6 +612,7 @@ sfvmk_registerVFs(sfvmk_adapter_t *pAdapter)
                         pVfInfo->vfPciDevAddr.dev, pVfInfo->vfPciDevAddr.fn);
 
     vmk_PCISetVFPrivateData(pVfInfo->vfPciDev, vfConfigOps);
+    sfvmk_vfInfoReset(pAdapter, pVfInfo);
   }
 
   goto done;

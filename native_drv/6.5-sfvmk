@@ -103,7 +103,7 @@ module_def = {
    "includes"        : [
                          "./imported",
                        ],
-   "cc warnings"     : [ "-Winline", ],
+#   "cc warnings"     : [ "-Winline", ],
    "cc flags"        : [ ],
    "cc defs"         : { 'SFVMK_DRIVER_NAME=\\"%s\\"' % (driver_name)           : None,
                          'SFVMK_DRIVER_VERSION_STRING=\\"%s\\"' % (driver_ver)  : None,

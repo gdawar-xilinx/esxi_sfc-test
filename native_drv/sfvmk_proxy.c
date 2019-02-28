@@ -372,4 +372,103 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
 }
 
+/*! \brief Fuction to handle ESXi authorization request timeouts
+**
+** \param[in] data pointer to ProxyEvent structure
+**
+** \return: None
+**
+*/
+static void
+sfvmk_handleRequestTimeout(vmk_AddrCookie data)
+{
+  /* TODO: implementation */
+}
+
+/*! \brief Fuction to execute proxy request
+**
+** \param[in] data pointer to ProxyEvent structure
+**
+** \return: None
+**
+*/
+
+static void
+sfvmk_processProxyRequest(vmk_AddrCookie data)
+{
+  sfvmk_proxyEvent_t *pProxyEvent = (sfvmk_proxyEvent_t *)data.ptr;
+  sfvmk_adapter_t *pAdapter = pProxyEvent->pAdapter;
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  /* TODO: implementation, free proxy event for now to allow module unload */
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "Processing reqId: %lu", pProxyEvent->requestTag.addr);
+  sfvmk_MemFree(pProxyEvent);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+}
+
+/*! \brief  Submit a proxy event to helper queue for processing
+**
+** \param[in]  pProxyEvent  pointer to proxy event to be processed
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent)
+{
+  vmk_HelperRequestProps props;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_adapter_t *pAdapter = pProxyEvent->pAdapter;
+  sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
+  vmk_uint32 numCancelled = 0;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  vmk_HelperRequestPropsInit(&props);
+
+  /* Create a request and submit */
+  props.requestMayBlock = VMK_FALSE;
+  props.tag = (vmk_AddrCookie)NULL;
+  props.cancelFunc = NULL;
+  props.worldToBill = VMK_INVALID_WORLD_ID;
+
+  /* When timeout handling is required to be cancelled via call to
+   * vmk_HelperCancelRequest, requestTag  will uniquely identify
+   * request to be cancelled */
+  props.tag.addr = vmk_AtomicReadInc64(&sfvmk_modInfo.proxyRequestId);
+
+  /* Creating the timeout handler first avoids the condition when
+   * request handler executes to completion and tries to cancel
+   * timeout handler before it gets created */
+  pProxyEvent->requestTag.addr = props.tag.addr;
+  status = vmk_HelperSubmitDelayedRequest(pProxyState->proxyHelper,
+                                          sfvmk_handleRequestTimeout,
+                                          (vmk_AddrCookie *)pProxyEvent,
+                                          SFVMK_PROXY_REQ_TIMEOUT_MSEC,
+                                          &props);
+  if (status != VMK_OK) {
+     SFVMK_ADAPTER_ERROR(pAdapter,
+                         "vmk_HelperSubmitDelayedRequest proxy failed: %s",
+                         vmk_StatusToString(status));
+     goto done;
+  }
+
+  props.tag.addr = 0;
+  status = vmk_HelperSubmitRequest(pProxyState->proxyHelper,
+                                   sfvmk_processProxyRequest,
+                                   (vmk_AddrCookie *)pProxyEvent,
+                                   &props);
+  if (status != VMK_OK) {
+     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_HelperSubmitRequest proxy failed: %s",
+                         vmk_StatusToString(status));
+     vmk_HelperCancelRequest(pProxyState->proxyHelper,
+                             pProxyEvent->requestTag,
+                             &numCancelled);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
 #endif

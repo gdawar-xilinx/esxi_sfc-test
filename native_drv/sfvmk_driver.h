@@ -540,6 +540,12 @@ typedef enum sfvmk_proxyAuthState_e {
   SFVMK_PROXY_AUTH_STATE_READY,
 } sfvmk_proxyAuthState_t;
 
+typedef struct sfvmk_proxyEvent_s {
+  struct sfvmk_adapter_s    *pAdapter;
+  vmk_uint32                index;
+  vmk_AddrCookie            requestTag;
+} sfvmk_proxyEvent_t;
+
 typedef struct sfvmk_proxyAdminState_s {
   /* Proxy auth module state */
   sfvmk_proxyAuthState_t    authState;
@@ -1066,7 +1072,6 @@ sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCou
 #define SFVMK_MAX_VFS_PER_PF     (SFVMK_MAX_FNS_PER_CARD - SFVMK_MAX_PFS_PER_CARD)/\
                                  SFVMK_MAX_PFS_PER_CARD
 
-
 /* SR-IOV extended capabilites offsets */
 /* Refer PCIE SR-IOV specification, SF-118940-PS Section 3.3.1 */
 #define SFVMK_SRIOV_EXT_CAP_ID      0x10
@@ -1075,6 +1080,9 @@ sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCou
 
 #define SFVMK_ARRAY_SIZE(array)       (sizeof(array) / sizeof(array[0]))
 #define SFVMK_PROXY_AUTH_NUM_BLOCKS   256
+/* Setting the ESXi response timeout shorter than EF10_MCDI_CMD_TIMEOUT_US
+ * (the MCDI timeout) to avoid timeouts in the proxy client (VF driver) */
+#define SFVMK_PROXY_REQ_TIMEOUT_MSEC  5000
 
 extern vmk_int32 max_vfs[SFVMK_MAX_PFS];
 
@@ -1098,6 +1106,8 @@ VMK_ReturnStatus
 sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter);
 void
 sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent);
 #endif
 
 char *

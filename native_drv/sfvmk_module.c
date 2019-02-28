@@ -38,7 +38,10 @@ sfvmk_modInfo_t sfvmk_modInfo = {
    .lockDomain       = VMK_LOCKDOMAIN_INVALID,
    .mgmtHandle       = NULL,
    .vmkdevHashTable  = VMK_INVALID_HASH_HANDLE,
-   .lock             = NULL
+   .lock             = NULL,
+#ifdef SFVMK_SUPPORT_SRIOV
+   .proxyRequestId   = 1
+#endif
 };
 
 static void
@@ -98,7 +101,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  26
+#define SFVMK_ALLOC_DESC_SIZE  27
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -221,6 +224,13 @@ sfvmk_calcHeapSize(void)
 
 #ifdef SFVMK_SUPPORT_SRIOV
   allocDesc[index].size = sizeof(sfvmk_proxyAdminState_t);
+  allocDesc[index].alignment = 0;
+  /* Although this allocation is required per card and not per adapter,
+   * keeping it at per adapter considering upcoming single port 100G card
+   */
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_PROXY_AUTH_NUM_BLOCKS;
+
+  allocDesc[index].size = sizeof(sfvmk_proxyEvent_t);
   allocDesc[index].alignment = 0;
   /* Although this allocation is required per card and not per adapter,
    * keeping it at per adapter considering upcoming single port 100G card

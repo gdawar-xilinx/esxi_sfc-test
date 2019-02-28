@@ -509,6 +509,67 @@ sfvmk_mcdiReset(sfvmk_adapter_t *pAdapter)
   sfvmk_MutexUnlock(pAdapter->mcdi.lock);
 }
 
+
+#if EFSYS_OPT_MCDI_PROXY_AUTH_SERVER && defined(SFVMK_SUPPORT_SRIOV)
+/*! \brief Routine handling mcdi proxy event request.
+**
+** \param[in] pAdapter   pointer to sfvmk_adapter_t
+** \param[in] index      request index from Firmware
+**
+** \return: None
+*/
+static void
+sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
+{
+  VMK_ReturnStatus        status = VMK_FAILURE;
+  sfvmk_proxyEvent_t      *pProxyEvent = NULL;
+  sfvmk_adapter_t         *pAdapter = (sfvmk_adapter_t *)pPriv;
+  sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "Proxy request index %u", index);
+
+  VMK_ASSERT_NOT_NULL(pProxyState);
+
+  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
+                        pProxyState->authState);
+    goto done;
+  }
+
+  pProxyEvent = sfvmk_MemAlloc(sizeof(sfvmk_proxyEvent_t));
+  if (pProxyEvent == NULL) {
+    SFVMK_ERROR("sfvmk_MemAlloc proxy event %lu bytes failed",
+                sizeof(sfvmk_proxyEvent_t));
+    goto done;
+  }
+
+  pProxyEvent->index = index;
+  pProxyEvent->pAdapter = pAdapter;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "pProxyEvent: %p, pAdapter: %p, index: %u",
+                      pProxyEvent, pAdapter, index);
+
+  status = sfvmk_submitProxyRequest(pProxyEvent);
+  if(status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_submitProxyRequest failed: %s",
+                        vmk_StatusToString(status));
+    goto fail;
+  }
+
+  goto done;
+
+fail:
+  sfvmk_MemFree(pProxyEvent);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+}
+#endif
+
 /*! \brief Routine allocating resource for mcdi cmd handling and initializing
 **        mcdi module
 **
@@ -572,6 +633,9 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
 #if EFSYS_OPT_MCDI_LOGGING
   pMcdi->transport.emt_logger = sfvmk_mcdiLogger;
   pMcdi->mcLogging = VMK_FALSE;
+#endif
+#if EFSYS_OPT_MCDI_PROXY_AUTH_SERVER && defined(SFVMK_SUPPORT_SRIOV)
+  pMcdi->transport.emt_ev_proxy_request = sfvmk_mcdiProxyRequest;
 #endif
 
   pAdapter->mcdi.completionEvent =

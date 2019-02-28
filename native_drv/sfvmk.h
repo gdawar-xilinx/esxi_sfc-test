@@ -52,6 +52,8 @@ typedef struct sfvmk_modInfo_s {
 #ifdef SFVMK_SUPPORT_SRIOV
    vmk_ListLinks      primaryList;
    vmk_ListLinks      unassociatedList;
+   /* Unique identifier for each proxy request */
+   vmk_atomic64       proxyRequestId;
 #endif
 } sfvmk_modInfo_t;
 

@@ -45,6 +45,8 @@ sfvmk_mcdiTimeout(sfvmk_adapter_t *pAdapter)
 
   SFVMK_ADAPTER_ERROR(pAdapter, "MC_TIMEOUT");
 
+  pAdapter->mcdi.mode = SFVMK_MCDI_MODE_DEAD;
+
   if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
                         vmk_StatusToString(status));
@@ -88,7 +90,7 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
   while (currentTime < timeOut) {
     if (efx_mcdi_request_poll(pAdapter->pNic)) {
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_MCDI, SFVMK_LOG_LEVEL_DBG,
-		          "mcdi delay is %lu US", currentTime - startTime);
+                         "mcdi delay is %lu US", currentTime - startTime);
       return;
     }
 
@@ -113,6 +115,95 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
     SFVMK_ADAPTER_ERROR(pAdapter, "Abort failed");
 
   sfvmk_mcdiTimeout(pAdapter);
+}
+
+/*! \brief Local routine to wait for MCDI completion event.
+**
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
+** \param[in] timeoutUS wait time for event completion in micro seconds
+**
+** \return: void
+*/
+static void
+sfvmk_mcdiWaitForCompletion(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
+{
+  VMK_ReturnStatus status;
+  vmk_uint64 currentTime;
+  vmk_uint64 startTime;
+  vmk_uint64 timeOut;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  sfvmk_getTime(&startTime);
+  currentTime = startTime;
+  timeOut = startTime + timeoutUS;
+
+  while (currentTime < timeOut) {
+    status = vmk_WorldWait((vmk_WorldEventID) pAdapter->mcdi.completionEvent,
+                           VMK_LOCK_INVALID,
+                           EFX_DIV_ROUND_UP((timeOut - currentTime), VMK_USEC_PER_MSEC),
+                           "sfvmk_mcdiWaitForCompletion");
+    if (status == VMK_WAIT_INTERRUPTED) {
+      sfvmk_getTime(&currentTime);
+      continue;
+    } else if (status == VMK_TIMEOUT) {
+      /* Attempt to abort any pending request. If there is no pending request,
+       * we have simultaneous completion and timeout. Do nothing. */
+      if (efx_mcdi_request_abort(pAdapter->pNic)) {
+        sfvmk_mcdiTimeout(pAdapter);
+      }
+    } else if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldWait Failed status: %s",
+                          vmk_StatusToString(status));
+      if (status == VMK_BAD_PARAM) {
+        VMK_ASSERT(0);
+      }
+    }
+    break;
+  }
+}
+
+/*! \brief Routine for setting event completion mode.
+**
+** \param[in] pAdapter  pointer to sfvmk_adapter_t
+** \param[in] mode      event completion mode
+**
+** \return: void
+*/
+void
+sfvmk_setMCDIMode(sfvmk_adapter_t *pAdapter, sfvmk_mcdiMode_t mode)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  sfvmk_MutexLock(pAdapter->mcdi.lock);
+
+  if (pAdapter->mcdi.mode != SFVMK_MCDI_MODE_DEAD) {
+    pAdapter->mcdi.mode = mode;
+  }
+
+  sfvmk_MutexUnlock(pAdapter->mcdi.lock);
+}
+
+/*! \brief Callback routine to be used by common code to signal completion
+**         of MCDI event.
+**
+** \param[in] pArg      pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+static void
+sfvmk_mcdiEventCompletion(void *pArg)
+{
+  sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)pArg;
+  VMK_ReturnStatus status;
+
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  status = vmk_WorldWakeup(pAdapter->mcdi.completionEvent);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldWakeup failed with error status: %s",
+                        vmk_StatusToString(status));
+  }
 }
 
 /*! \brief Routine for sending mcdi cmd.
@@ -144,15 +235,32 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
     goto done;
   }
 
-  /* Issue request and poll for completion. */
   efx_mcdi_get_timeout(pAdapter->pNic, pEmrp, &timeoutUS);
-  efx_mcdi_request_start(pAdapter->pNic, pEmrp, B_FALSE);
-  sfvmk_mcdiPoll(pAdapter, timeoutUS);
+
+  switch (pAdapter->mcdi.mode) {
+    case SFVMK_MCDI_MODE_POLL:
+      /* Issue request and poll for completion. */
+      efx_mcdi_request_start(pAdapter->pNic, pEmrp, B_FALSE);
+      sfvmk_mcdiPoll(pAdapter, timeoutUS);
+      break;
+    case SFVMK_MCDI_MODE_EVENT:
+      /* Send request, block until completion event received */
+      efx_mcdi_request_start(pAdapter->pNic, pEmrp, B_TRUE);
+      sfvmk_mcdiWaitForCompletion(pAdapter, timeoutUS);
+      break;
+    default:
+    /* FALLTHRU */
+    case SFVMK_MCDI_MODE_DEAD:
+      /* MC Timeout already seen, so fail early */
+      pEmrp->emr_rc = efx_mcdi_request_errcode(MC_CMD_ERR_ETIME);
+      pEmrp->emr_out_length_used = 0;
+      break;
+  }
 
   sfvmk_MutexUnlock(pAdapter->mcdi.lock);
 
   /* Check if driver reset required */
-  if ((pEmrp->emr_rc == EIO) && (pAdapter->mcdi.mode == SFVMK_MCDI_MODE_POLL)) {
+  if (pEmrp->emr_rc == EIO) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Reboot detected, schedule the reset helper");
     if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
@@ -187,6 +295,9 @@ sfvmk_mcdiException(void *arg, efx_mcdi_exception_t eme)
   SFVMK_ADAPTER_ERROR(pAdapter, "MC_%s", (eme == EFX_MCDI_EXCEPTION_MC_REBOOT)
                       ? "REBOOT" : (eme == EFX_MCDI_EXCEPTION_MC_BADASSERT)
                       ? "BADASSERT" : "UNKNOWN");
+
+
+  pAdapter->mcdi.mode = SFVMK_MCDI_MODE_DEAD;
 
   if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",
@@ -378,6 +489,26 @@ sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state)
 }
 #endif
 
+/*! \brief Routine to reset the MCDI completion mode and starting new epoch
+**
+** \param[in] pAdapter pointer to sfvmk_adapter_t
+**
+** \return: void
+*/
+void
+sfvmk_mcdiReset(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ASSERT_NOT_NULL(pAdapter);
+
+  /* Start a new epoch (allow fresh MCDI requests to succeed) */
+  efx_mcdi_new_epoch(pAdapter->pNic);
+
+  /* Set MCDI mode to polling */
+  sfvmk_MutexLock(pAdapter->mcdi.lock);
+  pAdapter->mcdi.mode = SFVMK_MCDI_MODE_POLL;
+  sfvmk_MutexUnlock(pAdapter->mcdi.lock);
+}
+
 /*! \brief Routine allocating resource for mcdi cmd handling and initializing
 **        mcdi module
 **
@@ -435,12 +566,16 @@ sfvmk_mcdiInit(sfvmk_adapter_t *pAdapter)
 
   pMcdi->transport.emt_context = pAdapter;
   pMcdi->transport.emt_dma_mem = &pMcdi->mem;
+  pMcdi->transport.emt_ev_cpl = sfvmk_mcdiEventCompletion;
   pMcdi->transport.emt_execute = sfvmk_mcdiExecute;
   pMcdi->transport.emt_exception = sfvmk_mcdiException;
 #if EFSYS_OPT_MCDI_LOGGING
   pMcdi->transport.emt_logger = sfvmk_mcdiLogger;
   pMcdi->mcLogging = VMK_FALSE;
 #endif
+
+  pAdapter->mcdi.completionEvent =
+                       (vmk_WorldEventID)&pAdapter->mcdi.completionEvent;
 
   if ((status = efx_mcdi_init(pAdapter->pNic, &pMcdi->transport)) != 0) {
     SFVMK_ADAPTER_ERROR(pAdapter,"efx_mcdi_init failed status %s",

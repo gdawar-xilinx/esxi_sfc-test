@@ -125,7 +125,8 @@ typedef enum sfvmk_mcdiState_e {
 
 typedef enum sfvmk_mcdiMode_e {
   SFVMK_MCDI_MODE_POLL,
-  SFVMK_MCDI_MODE_EVENT
+  SFVMK_MCDI_MODE_EVENT,
+  SFVMK_MCDI_MODE_DEAD
 } sfvmk_mcdiMode_t;
 
 typedef struct sfvmk_mcdi_s {
@@ -134,6 +135,7 @@ typedef struct sfvmk_mcdi_s {
   sfvmk_mcdiState_t     state;
   sfvmk_mcdiMode_t      mode;
   efx_mcdi_transport_t  transport;
+  vmk_WorldEventID      completionEvent;
 #if EFSYS_OPT_MCDI_LOGGING
   /* Flag for enable/disable MCDI logging at run time */
   vmk_Bool              mcLogging;
@@ -773,6 +775,8 @@ int sfvmk_mcdiIOHandler(struct sfvmk_adapter_s *pAdapter,
 vmk_Bool sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter);
 void sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state);
 #endif
+void sfvmk_setMCDIMode(sfvmk_adapter_t *pAdapter, sfvmk_mcdiMode_t mode);
+void sfvmk_mcdiReset(sfvmk_adapter_t *pAdapter);
 
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);

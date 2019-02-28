@@ -969,6 +969,9 @@ sfvmk_evStart(sfvmk_adapter_t *pAdapter)
     }
   }
 
+  /* Switch to event based MCDI completion */
+  sfvmk_setMCDIMode(pAdapter, SFVMK_MCDI_MODE_EVENT);
+
   goto done;
 
 failed_evqstart:
@@ -1006,6 +1009,9 @@ sfvmk_evStop(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter, "Interrupt is not started");
     goto done;
   }
+
+  /* Switch back to polled MCDI completion */
+  sfvmk_setMCDIMode(pAdapter, SFVMK_MCDI_MODE_POLL);
 
   qIndex = pAdapter->numEvqsAllocated;
   while (qIndex--)

@@ -4670,6 +4670,8 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     goto end;
   }
 
+  sfvmk_mcdiReset(pAdapter);
+
   status = efx_nic_reset(pAdapter->pNic);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",

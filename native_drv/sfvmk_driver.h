@@ -529,10 +529,26 @@ typedef struct sfvmk_pktOps_s {
 #define SFVMK_DECLARE_MAC_BUF(var)   char var[SFVMK_MAC_BUF_SIZE]
 
 #ifdef SFVMK_SUPPORT_SRIOV
+/* Structures to help parsing of MCDI request and response buffers */
+typedef struct {
+  vmk_uint8      *emr_out_buf;
+} sfvmk_outbuf_t;
+
+typedef struct {
+  vmk_uint8      *emr_in_buf;
+} sfvmk_inbuf_t;
+
+typedef struct sfvmk_pendingProxyReq_s {
+  vmk_uint32             reqdPrivileges;
+  vmk_NetVFCfgInfo       cfg;
+  vmk_uint64             uhandle;
+} sfvmk_pendingProxyReq_t;
+
 /* VF info structure */
 typedef struct sfvmk_vfInfo_s {
   vmk_PCIDevice           vfPciDev;
   vmk_PCIDeviceAddr       vfPciDevAddr;
+  sfvmk_pendingProxyReq_t pendingProxyReq;
 } sfvmk_vfInfo_t;
 
 typedef enum sfvmk_proxyAuthState_e {
@@ -541,8 +557,10 @@ typedef enum sfvmk_proxyAuthState_e {
 } sfvmk_proxyAuthState_t;
 
 typedef struct sfvmk_proxyReqState_s {
-  vmk_atomic64 reqState;
-  vmk_int32    result;
+  vmk_atomic64              reqState;
+  vmk_int32                 result;
+  vmk_uint32                grantedPrivileges;
+  struct sfvmk_proxyEvent_s *pProxyEvent;
 } sfvmk_proxyReqState_t;
 
 typedef struct sfvmk_proxyEvent_s {
@@ -586,6 +604,7 @@ typedef enum sfvmk_proxyRequestState_e {
   SFVMK_PROXY_REQ_STATE_OUTSTANDING,
   /* Proxy request moves to COMPLETED state on ESXi authorization or Timeout */
   SFVMK_PROXY_REQ_STATE_COMPLETED,
+  SFVMK_PROXY_REQ_STATE_RESPONDING,
 } sfvmk_proxyRequestState_t;
 
 /* Host memory status buffer used to manage proxied requests.
@@ -739,6 +758,8 @@ typedef struct sfvmk_adapter_s {
   sfvmk_proxyAdminState_t    *pProxyState;
   /* Number of VFs currently active for proxy auth */
   vmk_uint32                 proxiedVfs;
+  /* PF index */
+  vmk_uint32                 pfIndex;
 #endif
 } sfvmk_adapter_t;
 

@@ -1268,6 +1268,8 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
+  pAdapter->pfIndex = pNicCfg->enc_pf;
+
   status = sfvmk_getSerialNumber(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_getSerialNumber failed with error %s",

@@ -85,12 +85,25 @@ sfvmk_proxyAuthConfigureList(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
+  pAdapter->pProxyState = pProxyState;
+
   /* We need a block for every function, both PF and VF. There is
    * currently no way to determine this at runtime, since it can be
    * reconfigure quite arbitrarily. However, the index in to the various
    * buffers is only 8 bits, so we have an upper bound of 256 entries.
    */
   blockCount = SFVMK_PROXY_AUTH_NUM_BLOCKS;
+
+  /* Allocate per-request storage. */
+  pProxyState->pReqState = (sfvmk_proxyReqState_t *)
+                           sfvmk_memPoolAlloc(blockCount *
+                                              sizeof(sfvmk_proxyReqState_t));
+  if (!pProxyState->pReqState) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_memPoolAlloc reqState failed: %s",
+                        vmk_StatusToString(status));
+    status = VMK_NO_MEMORY;
+    goto alloc_req_state_failed;
+  }
 
   /* Allocate three contiguous buffers for receiving requests, returning
    * responses and bookkeeping. These must all be power of 2 sizes.
@@ -139,8 +152,9 @@ sfvmk_proxyAuthConfigureList(sfvmk_adapter_t *pAdapter,
   pProxyState->responseSize = responseSize;
   pProxyState->blockCount = blockCount;
   pProxyState->handledPrivileges = handledPrivileges;
+  pProxyState->defaultResult = MC_CMD_PROXY_COMPLETE_IN_DECLINED;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                       "reqSize: %lu, respSize: %lu, handPriv: 0x%x",
                       requestSize, responseSize, handledPrivileges);
 
@@ -160,8 +174,6 @@ sfvmk_proxyAuthConfigureList(sfvmk_adapter_t *pAdapter,
                         vmk_StatusToString(status));
     goto proxy_auth_configure_failed;
   }
-
-  pAdapter->pProxyState = pProxyState;
 
   pProxyState->authState = SFVMK_PROXY_AUTH_STATE_READY;
 
@@ -190,6 +202,11 @@ response_buffer_alloc_failed:
                          pProxyState->requestBuffer.ioElem.length);
 
 request_buffer_alloc_failed:
+  sfvmk_memPoolFree((vmk_VA)pProxyState->pReqState,
+                     blockCount * sizeof(sfvmk_proxyReqState_t));
+  pProxyState->pReqState = NULL;
+
+alloc_req_state_failed:
   vmk_HeapFree(sfvmk_modInfo.heapID, pProxyState);
   pAdapter->pProxyState = NULL;
 
@@ -365,6 +382,10 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
                          pProxyState->requestBuffer.ioElem.ioAddr,
                          pProxyState->requestBuffer.ioElem.length);
 
+  sfvmk_memPoolFree((vmk_VA)pProxyState->pReqState,
+                     pProxyState->blockCount * sizeof(sfvmk_proxyReqState_t));
+  pProxyState->pReqState = NULL;
+
   vmk_HeapFree(sfvmk_modInfo.heapID, pProxyState);
   pPrimary->pProxyState = NULL;
 
@@ -385,6 +406,65 @@ sfvmk_handleRequestTimeout(vmk_AddrCookie data)
   /* TODO: implementation */
 }
 
+/*! \brief Fuction to parse proxy request and invoke vmk_NetPTConfigureVF
+**         to seek ESXi authorization if configuration change is desired.
+**
+** \param[in]  pAdapter            pointer to sfvmk_adapter_t
+** \param[in]  uhandle             request handle
+** \param[in]  pf                  physical function index
+** \param[in]  vf                  virtual function index
+** \param[in]  rid                 request id as received from firmware
+** \param[in]  pRequestBuffer      address of request buffer
+** \param[in]  requestLen          request length
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyAuthorizeRequest(sfvmk_adapter_t *pAdapter,
+                            vmk_uint64 uhandle,
+                            vmk_uint16 pf,
+                            vmk_uint16 vf,
+                            vmk_uint16 rid,
+                            void *pRequestBuffer,
+                            size_t requestLen)
+{
+  VMK_ReturnStatus status = VMK_OK;
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  /* TODO: implementation */
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
+/*! \brief Fuction to indicate completion of proxy request and
+**         convey result to Firmware.
+**
+** \param[in]  pAdapter            pointer to sfvmk_adapter_t
+** \param[in]  pProxyState         pointer to sfvmk_proxyAdminState_t
+** \param[in]  index               proxy request index
+** \param[in]  pReqState           pointer to sfvmk_proxyReqState_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyCompleteRequest(sfvmk_adapter_t *pAdapter,
+                           sfvmk_proxyAdminState_t *pProxyState,
+                           vmk_uint32 index,
+                           sfvmk_proxyReqState_t *pReqState)
+
+{
+  VMK_ReturnStatus status = VMK_OK;
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  /* TODO: implementation */
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
 /*! \brief Fuction to execute proxy request
 **
 ** \param[in] data pointer to ProxyEvent structure
@@ -396,17 +476,92 @@ sfvmk_handleRequestTimeout(vmk_AddrCookie data)
 static void
 sfvmk_processProxyRequest(vmk_AddrCookie data)
 {
+  VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_proxyEvent_t *pProxyEvent = (sfvmk_proxyEvent_t *)data.ptr;
+  sfvmk_proxyReqState_t *pReqState = pProxyEvent->pReqState;
   sfvmk_adapter_t *pAdapter = pProxyEvent->pAdapter;
+  sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
+  vmk_uint32 index = pProxyEvent->index;
+  sfvmk_proxyMcState_t *pMcState = NULL;
+  vmk_uint8 *pRequestBuff = NULL;
+  vmk_uint32 handle = 0;
+  vmk_uint64 uhandle = 0;
+  vmk_uint16 pf = 0, vf = 0, rid = 0;
+
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
-  /* TODO: implementation, free proxy event for now to allow module unload */
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                      "Processing reqId: %lu", pProxyEvent->requestTag.addr);
+                      "pProxyEvent: %p, index: %u, reqId: %lu",
+                      pProxyEvent, index, pProxyEvent->requestTag.addr);
+
+  VMK_ASSERT(index < pProxyState->blockCount);
+
+  if(index != pReqState - pProxyState->pReqState) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid index %u ReqState %lu",
+                        index, pReqState - pProxyState->pReqState);
+    goto done;
+  }
+
+  if (vmk_AtomicReadIfEqualWrite64(&pReqState->reqState,
+                                   SFVMK_PROXY_REQ_STATE_INCOMING,
+                                   SFVMK_PROXY_REQ_STATE_OUTSTANDING) !=
+                                   SFVMK_PROXY_REQ_STATE_INCOMING) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid req state on index %u", index);
+    goto done;
+  }
+
+  pMcState = (sfvmk_proxyMcState_t *)pProxyState->statusBuffer.pEsmBase;
+  pMcState += index;
+  pf = pMcState->pf;
+  vf = pMcState->vf;
+  rid = pMcState->rid;
+  handle = pMcState->handle;
+
+  if (vf == MC_CMD_PROXY_CMD_IN_VF_NULL)
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "Handling req %u on PF %u, PCI %02x.%x\n",
+                        handle, pf, (rid >> 3) & 0x1f, rid & 7);
+  else
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "Handling req %d on VF %u:%u, PCI %02x.%x\n",
+                        handle, pf, vf, (rid >> 3) & 0x1f, rid & 7);
+
+  pRequestBuff = pProxyState->requestBuffer.pEsmBase;
+  pRequestBuff += pProxyState->requestSize * index;
+
+  /* Combine the index and handle to an opaque 64 bit value */
+  uhandle = (vmk_uint64)handle << 32 | (index & 0xffff) << 16;
+
+  status = sfvmk_proxyAuthorizeRequest(pAdapter, uhandle, pf, vf, rid,
+                                       pRequestBuff, pProxyState->requestSize);
+
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_proxyAuthorizeRequest %lu failed: %s",
+                        pProxyEvent->requestTag.addr,
+                        vmk_StatusToString(status));
+
+    pReqState->result = pProxyState->defaultResult;
+    if (pProxyState->authState == SFVMK_PROXY_AUTH_STATE_READY) {
+      vmk_AtomicWrite64(&pReqState->reqState, SFVMK_PROXY_REQ_STATE_COMPLETED);
+
+      status = sfvmk_proxyCompleteRequest(pAdapter, pProxyState, index, pReqState);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter,
+                            "sfvmk_proxyCompleteRequest %lu failed status: %s",
+                            pProxyEvent->requestTag.addr,
+                            vmk_StatusToString(status));
+      }
+    }
+  }
+
+  /* For now, free the proxy event memory here to allow module unload */
   sfvmk_MemFree(pProxyEvent);
 
+done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return;
 }
+
 
 /*! \brief  Submit a proxy event to helper queue for processing
 **

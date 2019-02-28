@@ -540,8 +540,14 @@ typedef enum sfvmk_proxyAuthState_e {
   SFVMK_PROXY_AUTH_STATE_READY,
 } sfvmk_proxyAuthState_t;
 
+typedef struct sfvmk_proxyReqState_s {
+  vmk_atomic64 reqState;
+  vmk_int32    result;
+} sfvmk_proxyReqState_t;
+
 typedef struct sfvmk_proxyEvent_s {
   struct sfvmk_adapter_s    *pAdapter;
+  sfvmk_proxyReqState_t     *pReqState;
   vmk_uint32                index;
   vmk_AddrCookie            requestTag;
 } sfvmk_proxyEvent_t;
@@ -549,6 +555,10 @@ typedef struct sfvmk_proxyEvent_s {
 typedef struct sfvmk_proxyAdminState_s {
   /* Proxy auth module state */
   sfvmk_proxyAuthState_t    authState;
+  /* Pointer to array of proxy request state for all functions */
+  sfvmk_proxyReqState_t     *pReqState;
+  /* Proxy result in case of authorization failure/timeout */
+  vmk_uint32                defaultResult;
   /* Maximum size of proxy request */
   size_t                    requestSize;
   /* Maximum size of proxy response */
@@ -566,6 +576,31 @@ typedef struct sfvmk_proxyAdminState_s {
   /* Helper world for processing proxy requests */
   vmk_Helper                proxyHelper;
 } sfvmk_proxyAdminState_t;
+
+typedef enum sfvmk_proxyRequestState_e {
+  /* Proxy request state is set to IDLE on creation and closure */
+  SFVMK_PROXY_REQ_STATE_IDLE,
+  /* Proxy request state is set to INCOMING on receiving the MCDI event */
+  SFVMK_PROXY_REQ_STATE_INCOMING,
+  /* Proxy request state is set OUTSTANDING before seeking ESXi authorization */
+  SFVMK_PROXY_REQ_STATE_OUTSTANDING,
+  /* Proxy request moves to COMPLETED state on ESXi authorization or Timeout */
+  SFVMK_PROXY_REQ_STATE_COMPLETED,
+} sfvmk_proxyRequestState_t;
+
+/* Host memory status buffer used to manage proxied requests.
+ * This structure is shared with Firmware MC_PROXY_STATUS_BUFFER
+ * structure definition in efx_regs_mcdi.h
+ */
+typedef struct sfvmk_proxyMcState_s {
+  vmk_uint32 handle;
+  vmk_uint16 pf;
+  vmk_uint16 vf;
+  vmk_uint16 rid;
+  vmk_uint16 status;
+  vmk_uint32 grantedPrivileges;
+} __attribute__ (( packed )) sfvmk_proxyMcState_t;
+
 #endif
 
 /* Adapter structure */

@@ -525,6 +525,7 @@ sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
   sfvmk_proxyEvent_t      *pProxyEvent = NULL;
   sfvmk_adapter_t         *pAdapter = (sfvmk_adapter_t *)pPriv;
   sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
+  sfvmk_proxyReqState_t   *pReqState = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
@@ -539,6 +540,15 @@ sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
     goto done;
   }
 
+  pReqState = &pProxyState->pReqState[index];
+  if (vmk_AtomicReadIfEqualWrite64(&pReqState->reqState,
+                                   SFVMK_PROXY_REQ_STATE_IDLE,
+                                   SFVMK_PROXY_REQ_STATE_INCOMING) !=
+                                   SFVMK_PROXY_REQ_STATE_IDLE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid req state");
+    goto done;
+  }
+
   pProxyEvent = sfvmk_MemAlloc(sizeof(sfvmk_proxyEvent_t));
   if (pProxyEvent == NULL) {
     SFVMK_ERROR("sfvmk_MemAlloc proxy event %lu bytes failed",
@@ -548,6 +558,7 @@ sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
 
   pProxyEvent->index = index;
   pProxyEvent->pAdapter = pAdapter;
+  pProxyEvent->pReqState = pReqState;
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                       "pProxyEvent: %p, pAdapter: %p, index: %u",
@@ -563,6 +574,7 @@ sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
   goto done;
 
 fail:
+  vmk_AtomicWrite64(&pReqState->reqState, SFVMK_PROXY_REQ_STATE_IDLE);
   sfvmk_MemFree(pProxyEvent);
 
 done:

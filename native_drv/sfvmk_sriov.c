@@ -454,6 +454,28 @@ done:
   return status;
 }
 
+/*! \brief  Reset the VF info structure members to default values.
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+** \param[in]  pVf       pointer to VF info structure
+**
+** \return: none
+*/
+static void
+sfvmk_vfInfoReset(sfvmk_adapter_t *pAdapter, sfvmk_vfInfo_t *pVf)
+{
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pVf->rxMode = 0;
+  pVf->macMtu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
+  vmk_Memset(&pVf->pendingProxyReq, 0, sizeof(sfvmk_pendingProxyReq_t));
+  vmk_BitVectorZap(pVf->pActiveVlans);
+  vmk_BitVectorZap(pVf->pAllowedVlans);
+  vmk_BitVectorSet(pVf->pAllowedVlans, 0);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+}
+
 /*! \brief Function used as callback to set VF MAC address
 **
 ** \param[in]  pAdapter       pointer to sfvmk_adapter_t
@@ -617,6 +639,112 @@ done:
   return status;
 }
 
+/*! \brief  VF_SET_DEFAULT_VLAN net passthrough operation handler
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  vid      default vlan id to set
+** \param[in]  qos      Vlan priority value
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovSetVfVlan(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                     vmk_uint16 vid, vmk_uint8 qos)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  vmk_uint16 newVlan;
+  efx_vport_config_t *pConfig = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto done;
+  }
+
+  if (pNicCfg->enc_vport_reconfigure_supported == VMK_FALSE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Firmware doesn't support vport reconfigure");
+    status = VMK_NOT_SUPPORTED;
+    goto done;
+  }
+
+  newVlan = (vid == 0) ? EFX_FILTER_VID_UNSPEC : vid;
+  if ((vid & ~SFVMK_VLAN_VID_MASK) ||
+      (qos & ~(SFVMK_VLAN_PRIO_MASK >> SFVMK_VLAN_PRIO_SHIFT))) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Invalid vlanid: %u or qos: %u", vid, qos);
+      status = VMK_BAD_PARAM;
+      goto done;
+  }
+
+  pConfig = pAdapter->pVportConfig + vfIdx + 1;
+  if (pConfig->evc_vid == newVlan) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "VF %u VLAN id %u unchanged", vfIdx, newVlan);
+    status = VMK_OK;
+    goto done;
+  }
+
+  status = efx_evb_vport_vlan_set(pAdapter->pNic, pAdapter->pVswitch,
+                                  SFVMK_VF_VPORT_ID(pAdapter, vfIdx),
+                                  newVlan);
+  if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_evb_vport_vlan_set failed: %s",
+                          vmk_StatusToString(status));
+      goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "VF %u has been reset to reconfigure VLAN", vfIdx);
+done:
+  /* Successfully reconfigured */
+  if (status == VMK_OK)
+    pConfig->evc_vid = newVlan;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
+/*! \brief  VF_QUIESCE net passthrough operation handler
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+static VMK_ReturnStatus
+sfvmk_sriovQuiesceVf(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx)
+{
+  sfvmk_vfInfo_t *pVf = NULL;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  if (vfIdx >= pAdapter->numVfsEnabled) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid vfIdx: %u", vfIdx);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  pVf = pAdapter->pVfInfo + vfIdx;
+  if (pVf == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid VF info, vfIdx: %u", vfIdx);
+    goto done;
+  }
+
+  sfvmk_vfInfoReset(pAdapter, pVf);
+
+  status = VMK_OK;
+  SFVMK_DEBUG(SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+              "VF %u quiesced", vfIdx);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -635,6 +763,16 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                       "sfvmk_vfConfigOps PTOP: 0x%x called", op);
 
   switch (op) {
+    case VMK_NETPTOP_VF_QUIESCE:
+    {
+      vmk_NetPTOPVFSimpleArgs *pVfArgs = pArgs;
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u quiesce", pVfArgs->vf);
+      status = sfvmk_sriovQuiesceVf(pAdapter, pVfArgs->vf);
+      break;
+    }
+
     case VMK_NETPTOP_VF_SET_MAC:
     {
       vmk_NetPTOPVFSetMacArgs *pVfArgs = pArgs;
@@ -645,6 +783,24 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           sfvmk_printMac(pVfArgs->mac, mac));
 
       status = sfvmk_sriovSetVfMac(pAdapter, pVfArgs->vf, pVfArgs->mac);
+      break;
+    }
+
+    case VMK_NETPTOP_VF_SET_DEFAULT_VLAN:
+    {
+      vmk_NetPTOPVFSetDefaultVlanArgs *pVfArgs = pArgs;
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u %s default VLAN %u prio %u",
+                          pVfArgs->vf, pVfArgs->enable ? "enable" : "disable",
+                          pVfArgs->vid, pVfArgs->prio);
+
+      if (pVfArgs->enable)
+        status = sfvmk_sriovSetVfVlan(pAdapter, pVfArgs->vf,
+                                      pVfArgs->vid, pVfArgs->prio);
+      else
+        status = sfvmk_sriovSetVfVlan(pAdapter, pVfArgs->vf, 0, 0);
+
       break;
     }
 
@@ -700,28 +856,6 @@ sfvmk_removeVfDevice(vmk_PCIDevice vfPciDev)
 
   SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_SRIOV);
   return status;
-}
-
-/*! \brief  Reset the VF info structure members to default values.
-**
-** \param[in]  pAdapter  pointer to sfvmk_adapter_t
-** \param[in]  pVf       pointer to VF info structure
-**
-** \return: none
-*/
-static void
-sfvmk_vfInfoReset(sfvmk_adapter_t *pAdapter, sfvmk_vfInfo_t *pVf)
-{
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
-
-  pVf->rxMode = 0;
-  pVf->macMtu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
-  vmk_Memset(&pVf->pendingProxyReq, 0, sizeof(sfvmk_pendingProxyReq_t));
-  vmk_BitVectorZap(pVf->pActiveVlans);
-  vmk_BitVectorZap(pVf->pAllowedVlans);
-  vmk_BitVectorSet(pVf->pAllowedVlans, 0);
-
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
 }
 
 /********vmk_PCIVFDeviceOps Handler********/

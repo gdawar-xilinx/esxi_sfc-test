@@ -528,6 +528,11 @@ typedef struct sfvmk_pktOps_s {
 #define SFVMK_MAC_BUF_SIZE           18
 #define SFVMK_DECLARE_MAC_BUF(var)   char var[SFVMK_MAC_BUF_SIZE]
 
+/* utility macros for VLAN handling */
+#define SFVMK_VLAN_PRIO_SHIFT                 13
+#define SFVMK_VLAN_PRIO_MASK                  0xe000
+#define SFVMK_VLAN_VID_MASK                   0x0fff
+
 #ifdef SFVMK_SUPPORT_SRIOV
 #define SFVMK_MAX_VLANS              4096
 #define SFVMK_WORKAROUND_54586       1

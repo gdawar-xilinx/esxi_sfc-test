@@ -33,9 +33,6 @@
 #define SFVMK_TXQ_UNBLOCK_LEVEL(n)            (EFX_TXQ_LIMIT(n) / 4)
 /* Number of desc needed for each SG */
 #define SFVMK_TXD_NEEDED(sgSize, maxBufSize)  EFX_DIV_ROUND_UP(sgSize, maxBufSize)
-/* utility macros for VLAN handling */
-#define SFVMK_VLAN_PRIO_SHIFT                 13
-#define SFVMK_VLAN_VID_MASK                   0x0fff
 #define SFVMK_TX_TSO_DMA_DESC_MAX             EFX_TX_FATSOV2_DMA_SEGS_PER_PKT_MAX
 
 static const

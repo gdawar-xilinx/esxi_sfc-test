@@ -62,14 +62,6 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
   [EFX_LINK_100000FDX] = VMK_LINK_DUPLEX_FULL
 };
 
-#if VMKAPI_REVISION < VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
-/* ESX 6.0 uses unsigned 16 bit for the speed info so it can hold max up to 65536.
- * With 100000 (for 100G) it overflows and it shows speed as 34464 (100000 - 65536)
- * Due to this constraint 100G capability is not being advertised for ESXi 6.0.
- */
-#define BUG_84582_WORKAROUND
-#endif
-
 #define SFVMK_PHY_CAP_ALL_SPEEDS_MASK     \
   ((1 << EFX_PHY_CAP_AN) |              \
    (1 << EFX_PHY_CAP_100000FDX) |       \
@@ -83,21 +75,6 @@ const vmk_uint32 sfvmk_linkDuplex[EFX_LINK_NMODES] = {
    (1 << EFX_PHY_CAP_100HDX) |          \
    (1 << EFX_PHY_CAP_10FDX) |           \
    (1 << EFX_PHY_CAP_10HDX))
-
-#ifdef BUG_84582_WORKAROUND
-#define SFVMK_ESX_6_0_PHY_CAP_ALL_SPEEDS_MASK     \
-  ((1 << EFX_PHY_CAP_AN) |              \
-   (1 << EFX_PHY_CAP_50000FDX) |        \
-   (1 << EFX_PHY_CAP_40000FDX) |        \
-   (1 << EFX_PHY_CAP_25000FDX) |        \
-   (1 << EFX_PHY_CAP_10000FDX) |        \
-   (1 << EFX_PHY_CAP_1000FDX) |         \
-   (1 << EFX_PHY_CAP_1000HDX) |         \
-   (1 << EFX_PHY_CAP_100FDX) |          \
-   (1 << EFX_PHY_CAP_100HDX) |          \
-   (1 << EFX_PHY_CAP_10FDX) |           \
-   (1 << EFX_PHY_CAP_10HDX))
-#endif
 
 #define SFVMK_PHY_CAP_ALL_FEC_MASK                 \
   ((1 << EFX_PHY_CAP_BASER_FEC)                |   \
@@ -140,11 +117,9 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
   advertisedCapabilities &= ~SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
 
   switch (speed) {
-#ifndef BUG_84582_WORKAROUND
     case VMK_LINK_SPEED_100000_MBPS:
       advertisedCapabilities |= 1 << EFX_PHY_CAP_100000FDX;
       break;
-#endif
 
     case VMK_LINK_SPEED_50000_MBPS:
       advertisedCapabilities |= 1 << EFX_PHY_CAP_50000FDX;
@@ -167,13 +142,8 @@ sfvmk_phyLinkSpeedSet(sfvmk_adapter_t *pAdapter, vmk_LinkSpeed speed)
       break;
 
     case VMK_LINK_SPEED_AUTO:
-#ifdef BUG_84582_WORKAROUND
-      advertisedCapabilities |= supportedCapabilities &
-                                SFVMK_ESX_6_0_PHY_CAP_ALL_SPEEDS_MASK;
-#else
       advertisedCapabilities |= supportedCapabilities &
                                 SFVMK_PHY_CAP_ALL_SPEEDS_MASK;
-#endif
       break;
 
     default:
@@ -772,15 +742,6 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
   }
   efx_phy_media_type_get(pAdapter->pNic, &pPort->mediumType);
 
-#ifdef BUG_84582_WORKAROUND
-  status = sfvmk_phyLinkSpeedSet(pAdapter, VMK_LINK_SPEED_AUTO);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Link speed set failed with error %s",
-                        vmk_StatusToString(status));
-    goto failed_speed_set;
-  }
-#endif
-
   /* Store advertised capability to be set at IO start */
   efx_phy_adv_cap_get(pAdapter->pNic, EFX_PHY_CAP_CURRENT,
                       &pPort->advertisedCapabilities);
@@ -797,9 +758,6 @@ sfvmk_portInit(sfvmk_adapter_t *pAdapter)
 
   goto done;
 
-#ifdef BUG_84582_WORKAROUND
-failed_speed_set:
-#endif
 failed_port_init:
   efx_filter_fini(pAdapter->pNic);
 
@@ -947,13 +905,11 @@ sfvmk_getPhyAdvCaps(sfvmk_adapter_t *pAdapter, vmk_uint8 efxPhyCap,
         SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
 
-#ifndef BUG_84582_WORKAROUND
       case EFX_PHY_CAP_100000FDX:
         pSupportedModes[index].speed = VMK_LINK_SPEED_100000_MBPS;
         pSupportedModes[index].duplex = VMK_LINK_DUPLEX_FULL;
         SFVMK_UPDATE_MEDIA(pSupportedModes[index].media, VMK_LINK_MEDIA_BASE_CR4);
         break;
-#endif
 
       case EFX_PHY_CAP_AN:
         pSupportedModes[index].speed = VMK_LINK_SPEED_AUTO;

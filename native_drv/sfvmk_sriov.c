@@ -26,6 +26,7 @@
 
 #include "sfvmk_driver.h"
 #ifdef SFVMK_SUPPORT_SRIOV
+#include "efx_regs_mcdi.h"
 
 static vmk_uint32 sfvmk_sriovPfCount = 0;
 
@@ -453,6 +454,169 @@ done:
   return status;
 }
 
+/*! \brief Function used as callback to set VF MAC address
+**
+** \param[in]  pAdapter       pointer to sfvmk_adapter_t
+** \param[in]  pfIdx          PF index
+** \param[in]  vfIdx          VF index
+** \param[in]  pRequestBuff   pointer to buffer carrying request
+** \param[in]  requestSize    size of proxy request
+** \param[in]  pResponseBuff  pointer to buffer for posting response
+** \param[in]  responseSize   size of proxy response
+** \param[in]  pContext       pointer to MAC address set context
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyDoSetMac(sfvmk_adapter_t *pAdapter, vmk_uint32 pfIdx,
+                    vmk_uint32 vfIdx, void* pRequestBuff,
+                    size_t requestSize, void* pResponseBuff,
+                    size_t responseSize, void *pContext)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  efx_dword_t *pHdr;
+  vmk_Bool *pDone = (vmk_Bool *)pContext;
+  size_t responseSizeActual = 0;
+  efx_proxy_cmd_params_t cmdParams;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  cmdParams.pf_index = pfIdx;
+  cmdParams.vf_index = vfIdx;
+  cmdParams.request_bufferp = pRequestBuff;
+  cmdParams.request_size = requestSize;
+  cmdParams.response_bufferp = pResponseBuff;
+  cmdParams.response_size = responseSize;
+  cmdParams.response_size_actualp = &responseSizeActual;
+
+  status = efx_proxy_auth_exec_cmd(pAdapter->pNic, &cmdParams);
+  if (status) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_proxy_auth_exec_cmd failed, status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  VMK_ASSERT(responseSizeActual >= sizeof(*pHdr));
+
+  pHdr = (efx_dword_t *)pResponseBuff;
+  *pDone = !EFX_DWORD_FIELD(*pHdr, MCDI_HEADER_ERROR);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
+/*! \brief  Function to handle ESXi response to set VF MAC address request
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  pMac     VF MAC address to be set
+**
+** \return: VMK_TRUE if mac address was set, VMK_FALSE otherwise
+*/
+vmk_Bool
+sfvmk_proxyHandleResponseSetMac(sfvmk_adapter_t *pAdapter,
+                                vmk_uint32 vfIdx,
+                                const vmk_uint8 *pMac)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  sfvmk_pendingProxyReq_t *pPpr = &pVf->pendingProxyReq;
+  vmk_Bool macSet = VMK_FALSE;
+  vmk_Bool match = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  if ((pPpr->cfg.cfgChanged & VMK_CFG_MAC_CHANGED) == 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MAC change not requested [0x%x]",
+                        pPpr->cfg.cfgChanged);
+    goto done;
+  }
+
+  pPpr->cfg.cfgChanged = 0;
+  match = sfvmk_macAddrSame(pMac, pPpr->cfg.macAddr);
+  if (match) {
+    /* VF has requested MAC change, so driver is ready to do
+     * it, complete request using PROXY_CMD to know status.
+     */
+    sfvmk_proxyAuthExecuteRequest(pAdapter->pPrimary, pPpr->uhandle,
+                                   sfvmk_proxyDoSetMac, (void *)&macSet);
+  } else {
+    sfvmk_proxyAuthHandleResponse(pAdapter, pAdapter->pPrimary->pProxyState,
+                                  pPpr->uhandle,
+                                  MC_CMD_PROXY_COMPLETE_IN_DECLINED, 0);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return macSet;
+}
+
+/*! \brief  VF_SET_MAC net passthrough operation handler
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  pMac     VF MAC address to be set
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovSetVfMac(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                    vmk_uint8 *pMac)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  efx_vport_config_t *pConfig = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pConfig = pAdapter->pVportConfig + vfIdx + 1;
+
+  if (sfvmk_macAddrSame(pMac, pConfig->evc_mac_addr)) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "MAC address unchanged");
+    status = VMK_OK;
+    goto done;
+  }
+
+  if (sfvmk_proxyHandleResponseSetMac(pAdapter, vfIdx, pMac) == VMK_TRUE) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "sfvmk_proxyHandleResponseSetMac returned true");
+    status = VMK_OK;
+    goto done;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto done;
+  }
+
+  if (pNicCfg->enc_vport_reconfigure_supported == VMK_FALSE) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Firmware doesn't support vport reconfigure");
+    status = VMK_NOT_SUPPORTED;
+    goto done;
+  }
+
+  status = efx_evb_vport_mac_set(pAdapter->pNic, pAdapter->pVswitch,
+                                 SFVMK_VF_VPORT_ID(pAdapter, vfIdx), pMac);
+  if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_evb_vport_mac_set failed: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "VF %u has been reset to reconfigure MAC", vfIdx);
+done:
+  /* Successfully reconfigured */
+  if (status == VMK_OK)
+    vmk_Memcpy(pConfig->evc_mac_addr, pMac, VMK_ETH_ADDR_LENGTH);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -470,11 +634,29 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                       "sfvmk_vfConfigOps PTOP: 0x%x called", op);
 
-  /* TODO: Implement vmk_NetPTOP operations */
+  switch (op) {
+    case VMK_NETPTOP_VF_SET_MAC:
+    {
+      vmk_NetPTOPVFSetMacArgs *pVfArgs = pArgs;
+      SFVMK_DECLARE_MAC_BUF(mac);
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u set mac %s", pVfArgs->vf,
+                          sfvmk_printMac(pVfArgs->mac, mac));
+
+      status = sfvmk_sriovSetVfMac(pAdapter, pVfArgs->vf, pVfArgs->mac);
+      break;
+    }
+
+    default:
+      SFVMK_ADAPTER_ERROR(pAdapter, "PTOP %d unhandled", op);
+  }
+
+  SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s", op,
+                      vmk_StatusToString(status));
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
   return status;
-
 }
 
 /*! \brief  VMKernel invoked callback function to unregister VF.

@@ -538,6 +538,9 @@ typedef struct sfvmk_pktOps_s {
                                   MC_CMD_PRIVILEGE_MASK_IN_GRP_ALL_MULTICAST |\
                                   MC_CMD_PRIVILEGE_MASK_IN_GRP_PROMISCUOUS)
 
+/* First index in pVportConfig holds PF configuration & VFs start at index 1 */
+#define SFVMK_VF_VPORT_ID(pAdapter, vf) \
+                                 (pAdapter->pVportConfig[vf + 1].evc_vport_id)
 /* Structures to help parsing of MCDI request and response buffers */
 typedef struct {
   vmk_uint8      *emr_out_buf;
@@ -1179,6 +1182,21 @@ void
 sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus
 sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent);
+VMK_ReturnStatus
+sfvmk_proxyAuthHandleResponse(sfvmk_adapter_t *pAdapter,
+                              sfvmk_proxyAdminState_t *pProxyState,
+                              vmk_uint64 uhandle,
+                              vmk_uint32 result,
+                              vmk_uint32 grantedPrivileges);
+VMK_ReturnStatus
+sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
+                               vmk_uint64 uhandle,
+                               VMK_ReturnStatus (*pDoCb)(sfvmk_adapter_t *,
+                                                  vmk_uint32, vmk_uint32,
+                                                  void *,
+                                                  size_t, void *,
+                                                  size_t, void *),
+                               void *pCbContext);
 #endif
 
 char *

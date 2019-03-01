@@ -1182,7 +1182,7 @@ done:
 ** \return: VMK_OK [success] error code [failure]
 **
 */
-static VMK_ReturnStatus
+VMK_ReturnStatus
 sfvmk_proxyAuthHandleResponse(sfvmk_adapter_t *pAdapter,
                               sfvmk_proxyAdminState_t *pProxyState,
                               vmk_uint64 uhandle,

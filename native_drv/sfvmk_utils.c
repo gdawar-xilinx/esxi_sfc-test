@@ -437,6 +437,19 @@ sfvmk_printMac(const vmk_uint8 *pAddr, vmk_int8 *pBuffer)
   return pBuffer;
 }
 
+/*! \brief helper function to compare two mac addresses
+**
+** \param[in]   pAddr1     first mac address
+** \param[in]   pAddr2     second mac address
+**
+** \return: VMK_TRUE if entered mac address are same, VMK_FALSE otherwise
+*/
+inline vmk_Bool
+sfvmk_macAddrSame(const vmk_uint8 *pAddr1, const vmk_uint8 *pAddr2)
+{
+  return (memcmp(pAddr1, pAddr2, VMK_ETH_ADDR_LENGTH) == 0);
+}
+
 /*! \brief Helper function check if the given MAC address is Broadcast address
 **
 ** \param[in]   pAddr      MAC address to be checked

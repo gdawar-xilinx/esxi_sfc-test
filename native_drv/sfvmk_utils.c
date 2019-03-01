@@ -463,6 +463,26 @@ sfvmk_isBroadcastEtherAddr(const vmk_uint8 *pAddr)
            0xff);
 }
 
+/*! \brief Helper function to find first set bit
+**
+** \param[in]   mask       Input byte to be scanned
+**
+** \return: first set bit position considering lsb as 1
+*/
+inline vmk_uint8
+sfvmk_firstBitSet(vmk_uint8 mask)
+{
+  register vmk_int8 bit;
+
+  if (mask == 0)
+    return 0;
+
+  for (bit = 1; !(mask & 1); bit++)
+    mask >>= 1;
+
+  return bit;
+}
+
 /*! \brief wrapper function to allocate dma-able memory
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t

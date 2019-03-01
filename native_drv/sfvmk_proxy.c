@@ -647,7 +647,7 @@ done:
 ** \return: converted privilege mode bitmask value
 **
 */
-static vmk_uint32
+vmk_uint32
 sfvmk_rxModeToPrivMask(vmk_VFRXMode rxMode)
 {
   vmk_uint32 privilegeMask = 0;

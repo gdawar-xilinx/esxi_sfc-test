@@ -1202,6 +1202,8 @@ sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
                                                   size_t, void *,
                                                   size_t, void *),
                                void *pCbContext);
+vmk_uint32
+sfvmk_rxModeToPrivMask(vmk_VFRXMode rxMode);
 #endif
 
 char *
@@ -1217,5 +1219,7 @@ sfvmk_allocDmaBuffer(sfvmk_adapter_t *pAdapter,
 
 vmk_Bool
 sfvmk_isBroadcastEtherAddr(const vmk_uint8 *pAddr);
+vmk_uint8
+sfvmk_firstBitSet(vmk_uint8 mask);
 
 #endif /* __SFVMK_DRIVER_H__ */

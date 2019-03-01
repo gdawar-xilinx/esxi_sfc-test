@@ -745,6 +745,217 @@ done:
   return status;
 }
 
+/*! \brief  Function to get the VLAN id set in pending proxy request
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pPpr     pointer to pending proxy request
+**
+** \return: VLAN id set in pending proxy request or EFX_FILTER_VID_UNSPEC
+*/
+static vmk_uint16
+sfvmk_pendingProxyReqGetVid(sfvmk_adapter_t *pAdapter,
+                            sfvmk_pendingProxyReq_t *pPpr)
+{
+  vmk_uint16 vid = EFX_FILTER_VID_UNSPEC;
+  vmk_uint32 i;
+  vmk_uint32 bitInByte;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  if ((pPpr->cfg.cfgChanged & VMK_CFG_GUEST_VLAN_ADD) == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "cfgChanged doesn't include VLAN_ADD");
+    goto done;
+  }
+
+  /* Find requested VLAN ID in guest VLANs bitmap */
+  for (i = 0; i < SFVMK_ARRAY_SIZE(pPpr->cfg.vlan.guestVlans); ++i) {
+    if ((bitInByte = sfvmk_firstBitSet(pPpr->cfg.vlan.guestVlans[i])) > 0) {
+      vid = (i * sizeof(pPpr->cfg.vlan.guestVlans[0]) * 8) + bitInByte - 1;
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "Bit %u found set, vid: %u", bitInByte, vid);
+      break;
+    }
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return vid;
+}
+
+/*! \brief  Function to handle the VLAN range response from VMKernel
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+**
+** \return: none
+*/
+static void
+sfvmk_proxyHandleResponseVlanRange(sfvmk_adapter_t *pAdapter,
+                                   vmk_uint32 vfIdx)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  sfvmk_pendingProxyReq_t *pPpr = NULL;
+  vmk_uint32 privilegeMask = 0;
+  vmk_uint16 vid;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  VMK_ASSERT_NOT_NULL(pVf);
+  pPpr = &pVf->pendingProxyReq;
+
+  vid = sfvmk_pendingProxyReqGetVid(pAdapter, pPpr);
+  if (vid == EFX_FILTER_VID_UNSPEC) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "VF %u pprVid: %u", vfIdx, vid);
+    goto done;
+  }
+
+  if (!vmk_BitVectorTest(pVf->pAllowedVlans, vid)) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "vid %u bit not in allowed set", vid);
+    goto done;
+  }
+
+  pPpr->cfg.cfgChanged &= ~VMK_CFG_GUEST_VLAN_ADD;
+  if (pPpr->cfg.cfgChanged != 0) {
+    /* Only Rx mode change is valid with VLAN add */
+    if ((pPpr->cfg.cfgChanged & ~VMK_CFG_RXMODE_CHANGED) != 0)
+      SFVMK_ADAPTER_ERROR(pAdapter, "Invalid cfg: %x for VLAN_ADD operation",
+                          pPpr->cfg.cfgChanged);
+    goto done;
+  }
+
+  privilegeMask |= sfvmk_rxModeToPrivMask(pVf->rxMode) |
+                   MC_CMD_PRIVILEGE_MASK_IN_GRP_UNRESTRICTED_VLAN;
+
+  /* Authorize request with current privilege mask.
+   * It will be declined by FW if privileges are insufficient.
+   */
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "VF %u authorize filter_op VLAN %u privilegeMask 0x%x"
+                      " vs required 0x%x",
+                       vfIdx, vid, privilegeMask, pPpr->reqdPrivileges);
+
+  sfvmk_proxyAuthHandleResponse(pAdapter,
+                                pAdapter->pPrimary->pProxyState,
+                                pPpr->uhandle,
+                                MC_CMD_PROXY_COMPLETE_IN_AUTHORIZED,
+                                privilegeMask);
+
+done:
+  pPpr->cfg.cfgChanged = 0;
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+}
+
+/*! \brief  Function to perform VF datapath reset
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+static VMK_ReturnStatus
+sfvmk_sriovResetVf(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  efx_vport_config_t *pConfig = NULL;
+  vmk_Bool reset;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  if (!pVf) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid VF %u info", vfIdx);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pConfig = pAdapter->pVportConfig + vfIdx + 1;
+  status = efx_evb_vport_reset(pAdapter->pNic, pAdapter->pVswitch,
+                               SFVMK_VF_VPORT_ID(pAdapter, vfIdx),
+                               pConfig->evc_mac_addr, pConfig->evc_vid,
+                               &reset);
+  if ((status != VMK_OK) || (reset == VMK_FALSE)) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "Could not reset VF %u using VPORT_RECONFIGURE: %s",
+                        vfIdx, vmk_StatusToString(status));
+  } else {
+    vmk_BitVectorZap(pVf->pActiveVlans);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
+/*! \brief  ADD/DEL VLAN_RANGE net passthrough operation handler
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  add      VMK_TRUE if this is an add vlan range request
+** \param[in]  first    first vlan id in the requested range
+** \param[in]  last     last vlan id in the requested range
+**
+** \return: none
+*/
+void
+sfvmk_sriovSetVfVlanRange(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                          vmk_Bool add, vmk_uint16 first, vmk_uint16 last)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  vmk_uint16 i = 0;
+  vmk_uint16 pprVid = 0;
+  vmk_Bool changeActive = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pprVid = sfvmk_pendingProxyReqGetVid(pAdapter, &pVf->pendingProxyReq);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "VF %u pprVid: %u", vfIdx, pprVid);
+
+  if (add) {
+    for (i = first; i <= last; ++i) {
+      if (!vmk_BitVectorTest(pVf->pAllowedVlans, i)) {
+        vmk_BitVectorSet(pVf->pAllowedVlans, i);
+
+        /* If current pending proxy request made the VLAN active,
+         * do not consider it as asynchronous permission granting
+         * which requires VF datapath reset
+         */
+        if ((i != pprVid) && vmk_BitVectorTest(pVf->pActiveVlans, i)) {
+          SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                              "Active vlan: %u", i);
+          changeActive = VMK_TRUE;
+        }
+      }
+    }
+  } else {
+    for (i = first; i <= last; ++i) {
+       if (vmk_BitVectorTest(pVf->pAllowedVlans, i)) {
+         vmk_BitVectorClear(pVf->pAllowedVlans, i);
+         if (vmk_BitVectorTest(pVf->pActiveVlans, i)) {
+           SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                               "Active vlan: %u", i);
+           changeActive = VMK_TRUE;
+        }
+      }
+    }
+  }
+
+  sfvmk_proxyHandleResponseVlanRange(pAdapter, vfIdx);
+
+  if (changeActive) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                        "VF %u allowed VLAN range changes active VLAN,"
+                        "reset VF to enforce", vfIdx);
+    sfvmk_sriovResetVf(pAdapter, vfIdx);
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -801,6 +1012,23 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
       else
         status = sfvmk_sriovSetVfVlan(pAdapter, pVfArgs->vf, 0, 0);
 
+      break;
+    }
+
+    case VMK_NETPTOP_VF_ADD_VLAN_RANGE:
+    case VMK_NETPTOP_VF_DEL_VLAN_RANGE:
+    {
+      vmk_NetPTOPVFVlanRangeArgs *pVfArgs = pArgs;
+      vmk_Bool isAddVlanRange = (op == VMK_NETPTOP_VF_ADD_VLAN_RANGE);
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u %s VLAN range %u-%u",
+                          pVfArgs->vf,
+                          isAddVlanRange ? "add" : "delete",
+                          pVfArgs->first, pVfArgs->last);
+
+      sfvmk_sriovSetVfVlanRange(pAdapter, pVfArgs->vf, isAddVlanRange,
+                                pVfArgs->first, pVfArgs->last);
       break;
     }
 

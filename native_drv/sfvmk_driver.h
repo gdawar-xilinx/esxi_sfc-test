@@ -463,6 +463,7 @@ typedef struct sfvmk_rxq_s {
                                     (SFVMK_MAX_RXQ * SFVMK_RXQ_MAX_STATS)) * \
                                     SFVMK_STATS_ENTRY_LEN)
 #define SFVMK_STATS_BUFFER_SZ     (SFVMK_QUEUE_STATS_BUF_LEN + SFVMK_MAC_STATS_BUF_LEN)
+#define SFVMK_STATS_UPDATE_WAIT_USEC  VMK_USEC_PER_MSEC
 
 /* Data structure for filter database entry
 ** Note:

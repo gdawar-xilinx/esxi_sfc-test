@@ -1207,6 +1207,128 @@ done:
   return status;
 }
 
+/*! \brief  VF_GET_QUEUE_STATS net passthrough operation handler
+**
+** \param[in]  pAdapter     pointer to sfvmk_adapter_t
+** \param[in]  vfIdx        VF index
+** \param[out] pTxqStats    pointer to Txq stats structure
+** \param[out] pRxqStats    pointer to Txq stats structure
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovGetVfStats(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                      vmk_NetVFTXQueueStats *pTxqStats,
+                      vmk_NetVFRXQueueStats *pRxqStats)
+{
+  VMK_ReturnStatus status = VMK_OK;
+  vmk_uint32 count;
+  size_t macStatsSize;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+  efsys_mem_t  macStatsDmaBuf;
+  efsys_mem_t  *pStats = &macStatsDmaBuf;
+  efsys_stat_t  vfStats[EFX_MAC_NSTATS] = {0};
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto done;
+  }
+
+  macStatsSize = P2ROUNDUP(pNicCfg->enc_mac_stats_nstats * sizeof(uint64_t),
+                           EFX_BUF_SIZE);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "EFX_MAC_NSTATS: %u, numMacStats: %u",
+                      EFX_MAC_NSTATS, pNicCfg->enc_mac_stats_nstats);
+
+  pStats->esmHandle = pAdapter->dmaEngine;
+  pStats->ioElem.length = macStatsSize;
+
+  /* Allocate DMA space. */
+  pStats->pEsmBase = sfvmk_allocDMAMappedMem(pAdapter->dmaEngine,
+                                             pStats->ioElem.length,
+                                             &pStats->ioElem.ioAddr);
+  if (pStats->pEsmBase == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Failed to allocate mac stats buffer: %s",
+                        vmk_StatusToString(status));
+    status = VMK_NO_MEMORY;
+    goto done;
+  }
+
+  status = efx_evb_vport_stats(pAdapter->pNic, pAdapter->pVswitch,
+                               SFVMK_VF_VPORT_ID(pAdapter, vfIdx), pStats);
+
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_evb_vport_stats failed status: %s",
+                        vmk_StatusToString(status));
+    goto vport_stats_failed;
+  }
+
+  vmk_CPUMemFenceRead();
+
+  /* If we're unlucky enough to read statistics during the DMA, wait
+   * up to 10ms for it to finish (typically takes <500us)
+   */
+  for (count = 0; count < 10; ++count) {
+    /* Try to update the cached counters */
+    status = efx_mac_stats_update(pAdapter->pNic, pStats,
+                                  vfStats, NULL);
+    vmk_CPUMemFenceRead();
+
+    if (status == VMK_OK)
+      break;
+
+    if (status != VMK_RETRY) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_stats_update failed status: %s",
+                          vmk_StatusToString(status));
+      goto free_stats_memory;
+    }
+
+    status = sfvmk_worldSleep(SFVMK_STATS_UPDATE_WAIT_USEC);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_worldSleep failed status: %s",
+                          vmk_StatusToString(status));
+      /* World is dying */
+      goto free_stats_memory;
+    }
+  }
+
+  if (pTxqStats) {
+    pTxqStats->unicastPkts = vfStats[EFX_MAC_VADAPTER_TX_UNICAST_PACKETS];
+    pTxqStats->unicastBytes = vfStats[EFX_MAC_VADAPTER_TX_UNICAST_BYTES];
+    pTxqStats->multicastPkts = vfStats[EFX_MAC_VADAPTER_TX_MULTICAST_PACKETS];
+    pTxqStats->multicastBytes = vfStats[EFX_MAC_VADAPTER_TX_MULTICAST_BYTES];
+    pTxqStats->broadcastPkts = vfStats[EFX_MAC_VADAPTER_TX_BROADCAST_PACKETS];
+    pTxqStats->broadcastBytes = vfStats[EFX_MAC_VADAPTER_TX_BROADCAST_BYTES];
+    pTxqStats->errors = vfStats[EFX_MAC_VADAPTER_TX_BAD_PACKETS];
+    pTxqStats->discards = vfStats[EFX_MAC_VADAPTER_TX_OVERFLOW];
+    /* FW-assisted TSO statistics not available */
+  }
+
+  if (pRxqStats) {
+    pRxqStats->unicastPkts = vfStats[EFX_MAC_VADAPTER_RX_UNICAST_PACKETS];
+    pRxqStats->unicastBytes = vfStats[EFX_MAC_VADAPTER_RX_UNICAST_BYTES];
+    pRxqStats->multicastPkts = vfStats[EFX_MAC_VADAPTER_RX_MULTICAST_PACKETS];
+    pRxqStats->multicastBytes = vfStats[EFX_MAC_VADAPTER_RX_MULTICAST_BYTES];
+    pRxqStats->broadcastPkts = vfStats[EFX_MAC_VADAPTER_RX_BROADCAST_PACKETS];
+    pRxqStats->broadcastBytes = vfStats[EFX_MAC_VADAPTER_RX_BROADCAST_BYTES];
+    pRxqStats->outOfBufferDrops = vfStats[EFX_MAC_VADAPTER_RX_OVERFLOW];
+    pRxqStats->errorDrops = vfStats[EFX_MAC_VADAPTER_RX_BAD_PACKETS];
+    /* LRO is done in SW */
+  }
+
+free_stats_memory:
+vport_stats_failed:
+  sfvmk_freeDMAMappedMem(pAdapter->dmaEngine, pStats->pEsmBase,
+                         pStats->ioElem.ioAddr, pStats->ioElem.length);
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -1327,6 +1449,29 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           pVfArgs->vf, pVfArgs->mtu);
 
       status = sfvmk_sriovSetVfMtu(pAdapter, pVfArgs->vf, pVfArgs->mtu);
+      break;
+    }
+
+    case VMK_NETPTOP_VF_GET_QUEUE_STATS:
+    {
+      vmk_NetPTOPVFGetQueueStatsArgs *pVfArgs = pArgs;
+
+      /* Make sure that all stats are filled in with zeros */
+      vmk_Memset(pVfArgs->tqStats, 0,
+                 pVfArgs->numTxQueues * sizeof(*pVfArgs->tqStats));
+      vmk_Memset(pVfArgs->rqStats, 0,
+                 pVfArgs->numRxQueues * sizeof(*pVfArgs->rqStats));
+
+      status = sfvmk_sriovGetVfStats(pAdapter, pVfArgs->vf,
+                                     pVfArgs->numTxQueues ?
+                                     pVfArgs->tqStats : NULL,
+                                     pVfArgs->numRxQueues ?
+                                     pVfArgs->rqStats : NULL);
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u get queue stats n_txq=%u n_rxq=%u: %s",
+                          pVfArgs->vf, pVfArgs->numTxQueues, pVfArgs->numRxQueues,
+                          vmk_StatusToString(status));
       break;
     }
 

@@ -26,8 +26,6 @@
 
 #include "sfvmk_driver.h"
 
-#define SFVMK_STATS_UPDATE_WAIT_USEC  VMK_USEC_PER_MSEC
-
 #ifndef VMK_LINK_SPEED_25000_MBPS
 #define VMK_LINK_SPEED_25000_MBPS     25000
 #endif

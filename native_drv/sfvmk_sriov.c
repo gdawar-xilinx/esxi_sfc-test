@@ -533,6 +533,7 @@ sfvmk_vfInfoReset(sfvmk_adapter_t *pAdapter, sfvmk_vfInfo_t *pVf)
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
 
   pVf->rxMode = 0;
+  pVf->macMtu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
   vmk_Memset(&pVf->pendingProxyReq, 0, sizeof(sfvmk_pendingProxyReq_t));
   vmk_BitVectorZap(pVf->pActiveVlans);
   vmk_BitVectorZap(pVf->pAllowedVlans);

@@ -834,6 +834,98 @@ done:
   return status;
 }
 
+/*! \brief Function to calculate MAC MTU
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+**
+** \return: Maximum MAC MTU across PF and all VFs
+**
+*/
+static vmk_uint32
+sfvmk_calcMacMtuPf(sfvmk_adapter_t *pAdapter)
+{
+  vmk_uint32 macMtu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo;
+  int vfIndex;
+
+  for (vfIndex = 0; vfIndex < pAdapter->numVfsEnabled; ++vfIndex)
+    macMtu = MAX(macMtu, pVf[vfIndex].macMtu);
+
+  return macMtu;
+}
+
+/*! \brief Function used as callback to set VF MTU
+**
+** \param[in]  pAdapter       pointer to sfvmk_adapter_t
+** \param[in]  pf             PF index
+** \param[in]  vf             VF index
+** \param[in]  pRequestBuff   pointer to buffer carrying request
+** \param[in]  requestSize    size of proxy request
+** \param[in]  pResponseBuff  pointer to buffer for posting response
+** \param[in]  responseSize   size of proxy response
+** \param[in]  pContext       pointer to MTU context
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyDoSetMtu(sfvmk_adapter_t *pAdapter, vmk_uint32 pf,
+                    vmk_uint32 vf, void* pRequestBuff,
+                    size_t requestSize, void* pResponseBuff,
+                    size_t responseSize, void *pContext)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  efx_dword_t *pHdr = NULL;
+  vmk_uint32 macMtu = 0;
+  sfvmk_inbuf_t buf;
+  vmk_Bool *pMtuSet = (vmk_Bool *)pContext;
+  size_t responseSizeActual = 0;
+  efx_proxy_cmd_params_t cmdParams;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  EFX_MCDI_DECLARE_BUF(inbuf,
+                       sizeof(efx_dword_t) * 2 + MC_CMD_SET_MAC_EXT_IN_LEN, 0);
+
+  vmk_Memcpy(inbuf, pRequestBuff, sizeof(inbuf));
+  pHdr = (efx_dword_t *)inbuf;
+
+  VMK_ASSERT_EQ(EFX_DWORD_FIELD(pHdr[0], MCDI_HEADER_CODE), MC_CMD_V2_EXTN);
+  VMK_ASSERT_EQ(EFX_DWORD_FIELD(pHdr[1], MC_CMD_V2_EXTN_IN_EXTENDED_CMD),
+                MC_CMD_SET_MAC);
+
+  macMtu = sfvmk_calcMacMtuPf(pAdapter);
+  buf.emr_in_buf = (vmk_uint8 *)pHdr[2].ed_u8;
+  MCDI_IN_SET_DWORD(buf, SET_MAC_EXT_IN_MTU, macMtu);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "req_size: %lu, resp_size: %lu, mtu: %u",
+                      requestSize, responseSize, macMtu);
+
+  cmdParams.pf_index = pf;
+  cmdParams.vf_index = vf;
+  cmdParams.request_bufferp = inbuf;
+  cmdParams.request_size = requestSize;
+  cmdParams.response_bufferp = pResponseBuff;
+  cmdParams.response_size = responseSize;
+  cmdParams.response_size_actualp = &responseSizeActual;
+
+  status = efx_proxy_auth_exec_cmd(pAdapter->pNic, &cmdParams);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_proxy_auth_exec_cmd failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  VMK_ASSERT(responseSizeActual >= sizeof(*pHdr));
+  pHdr = (efx_dword_t *)pResponseBuff;
+  *pMtuSet = !EFX_DWORD_FIELD(*pHdr, MCDI_HEADER_ERROR);
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
 /*! \brief Function to validate the proxy auth request handle
 **
 ** \param[in]  pAdapter    pointer to sfvmk_adapter_t
@@ -884,6 +976,199 @@ sfvmk_proxyAuthValidHandle(sfvmk_adapter_t *pAdapter,
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return isValidHandle;
+}
+
+/*! \brief Function to execute proxy request
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  uhandle     proxy request handle
+** \param[in]  pDoCb       callback function pointer to run
+** \param[in]  pCbContext  parameter for callback function
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
+                              vmk_uint64 uhandle,
+                              VMK_ReturnStatus (*pDoCb)(sfvmk_adapter_t *,
+                                                 vmk_uint32, vmk_uint32,
+                                                 void *,
+                                                 size_t, void *,
+                                                 size_t, void *),
+                              void *pCbContext)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
+  sfvmk_proxyMcState_t *pMcState = NULL;
+  sfvmk_proxyReqState_t *pReqState = NULL;
+  vmk_int8* pRequestBuff;
+  vmk_int8* pResponseBuff;
+  vmk_uint32 handle;
+  vmk_uint32 index;
+  vmk_uint32 pf;
+  vmk_uint32 vf;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  VMK_ASSERT_NOT_NULL(pProxyState);
+  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
+                        pProxyState->authState);
+    goto done;
+  }
+
+  if (sfvmk_proxyAuthValidHandle(pAdapter, pProxyState, uhandle,
+                                  &handle, &index) == VMK_FALSE) {
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  pReqState = &pProxyState->pReqState[index];
+
+  if (vmk_AtomicReadIfEqualWrite64(&pReqState->reqState,
+                                   SFVMK_PROXY_REQ_STATE_OUTSTANDING,
+                                   SFVMK_PROXY_REQ_STATE_COMPLETING) !=
+                                   SFVMK_PROXY_REQ_STATE_OUTSTANDING) {
+     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid state %lu on index %u",
+                         vmk_AtomicRead64(&pReqState->reqState), index);
+     status = VMK_TIMEOUT;
+     goto done;
+  }
+
+  pMcState = (sfvmk_proxyMcState_t *)pProxyState->statusBuffer.pEsmBase;
+  pMcState += index;
+
+  pf = pMcState->pf;
+  vf = pMcState->vf;
+
+  pRequestBuff = pProxyState->requestBuffer.pEsmBase;
+  pRequestBuff += pProxyState->requestSize * index;
+
+  pResponseBuff = pProxyState->responseBuffer.pEsmBase;
+  pResponseBuff += pProxyState->responseSize * index;
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "Callback with req_size: %lu, resp_size: %lu",
+                      pProxyState->requestSize, pProxyState->responseSize);
+
+  status = pDoCb(pAdapter->pPrimary, pf, vf, pRequestBuff,
+                 pProxyState->requestSize, pResponseBuff,
+                 pProxyState->responseSize, pCbContext);
+
+  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
+                        pProxyState->authState);
+    goto done;
+  }
+
+  pReqState->result = (status == VMK_OK) ? MC_CMD_PROXY_COMPLETE_IN_COMPLETE:
+                                           MC_CMD_PROXY_COMPLETE_IN_DECLINED;
+
+  vmk_AtomicWrite64(&pReqState->reqState, SFVMK_PROXY_REQ_STATE_COMPLETED);
+  status = sfvmk_proxyCompleteRequest(pAdapter, pProxyState, index, pReqState);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_proxyCompleteRequest status: %s",
+                        vmk_StatusToString(status));
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
+/*! \brief Function to apply VF MTU
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  uhandle     proxy request handle
+** \param[in]  pMtuSet     pointer to MTU value set
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxyCompleteSetMtu(sfvmk_adapter_t *pAdapter,
+                          vmk_uint64 uhandle,
+                          vmk_Bool *pMtuSet)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  status = sfvmk_proxyAuthExecuteRequest(pAdapter->pPrimary,
+                                          uhandle, sfvmk_proxyDoSetMtu,
+                                          (void *)pMtuSet);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
+}
+
+/*! \brief Handler function for SET_MAC MC CMD
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  vf          virtual function index
+** \param[in]  pCmd        pointer to proxy command received from MC
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_proxySetMtu(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
+                  const efx_dword_t *pCmd)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vf;
+  sfvmk_pendingProxyReq_t *pPpr = &pVf->pendingProxyReq;
+  vmk_uint32 macMtu;
+  vmk_Bool mtuApplied;
+  sfvmk_outbuf_t outbuf;
+
+  outbuf.emr_out_buf = (vmk_uint8 *)pCmd->ed_u8;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+
+  if (MCDI_OUT_DWORD(outbuf, SET_MAC_EXT_IN_CONTROL) !=
+      (1 << MC_CMD_SET_MAC_EXT_IN_CFG_MTU_LBN)) {
+    status = VMK_NO_ACCESS;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Set MTU not allowed");
+    goto done;
+  }
+
+  macMtu = MCDI_OUT_DWORD(outbuf, SET_MAC_IN_MTU);
+  if (macMtu > EFX_MAC_PDU(EFX_MAC_SDU_MAX)) {
+    status = VMK_BAD_PARAM;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid mtu %u passed", macMtu);
+    goto done;
+  }
+
+  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                      "MacMtu: %u  Vf Mtu: %u", macMtu, pVf->macMtu);
+  if (macMtu != pVf->macMtu) {
+    pPpr->cfg.mtu = macMtu;
+    pPpr->cfg.cfgChanged = VMK_CFG_MTU_CHANGED;
+    pPpr->reqdPrivileges = MC_CMD_PRIVILEGE_MASK_IN_GRP_LINK;
+  } else {
+    /* We can't simply authorize since maximum MTU should be applied */
+    status = sfvmk_proxyCompleteSetMtu(pAdapter, pPpr->uhandle, &mtuApplied);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "sfvmk_proxyCompleteSetMtu failed status: %s",
+                          vmk_StatusToString(status));
+    } else {
+      /* Either complete or declined */
+      pPpr->uhandle = 0;
+    }
+
+    SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "uhandle: 0x%lx mtuApplied: %u",
+                        pPpr->uhandle, mtuApplied);
+  }
+
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
+  return status;
 }
 
 /*! \brief Function to handle proxy response from ESXi authorization
@@ -1099,7 +1384,7 @@ sfvmk_proxyAuthorizeRequest(sfvmk_adapter_t *pAdapter,
     status = sfvmk_proxyFilterOp(pPfAdapter, vf, pCmd);
     break;
   case MC_CMD_SET_MAC:
-    /* TODO: implementation */
+    status = sfvmk_proxySetMtu(pPfAdapter, vf, pCmd);
     break;
   default:
     status = VMK_EOPNOTSUPP;

@@ -558,6 +558,7 @@ typedef struct sfvmk_vfInfo_s {
   vmk_PCIDevice           vfPciDev;
   vmk_PCIDeviceAddr       vfPciDevAddr;
   vmk_VFRXMode            rxMode;
+  vmk_uint32              macMtu;
   sfvmk_pendingProxyReq_t pendingProxyReq;
   vmk_BitVector           *pAllowedVlans;
   vmk_BitVector           *pActiveVlans;
@@ -616,6 +617,8 @@ typedef enum sfvmk_proxyRequestState_e {
   SFVMK_PROXY_REQ_STATE_OUTSTANDING,
   /* Proxy request moves to COMPLETED state on ESXi authorization or Timeout */
   SFVMK_PROXY_REQ_STATE_COMPLETED,
+  /* COMPLETING state is entered when it is executed by PF on VF's behalf */
+  SFVMK_PROXY_REQ_STATE_COMPLETING,
   SFVMK_PROXY_REQ_STATE_RESPONDING,
 } sfvmk_proxyRequestState_t;
 

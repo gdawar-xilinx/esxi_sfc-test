@@ -1015,6 +1015,7 @@ sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
   if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
                         pProxyState->authState);
+    status = VMK_ESHUTDOWN;
     goto done;
   }
 
@@ -1201,6 +1202,7 @@ sfvmk_proxyAuthHandleResponse(sfvmk_adapter_t *pAdapter,
   if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
                         pProxyState->authState);
+    status = VMK_ESHUTDOWN;
     goto done;
   }
 

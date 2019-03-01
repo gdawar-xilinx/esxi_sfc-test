@@ -956,6 +956,175 @@ sfvmk_sriovSetVfVlanRange(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
 }
 
+/*! \brief  Function to handle the Rx mode response from VMKernel
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+static VMK_ReturnStatus
+sfvmk_proxyHandleResponseRxMode(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  sfvmk_pendingProxyReq_t *pPpr = NULL;
+  vmk_uint32 privilegeMask;
+  vmk_Bool authorize;
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_uint32 result;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+  if (!pVf) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid VF %u info", vfIdx);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
+  pPpr = &pVf->pendingProxyReq;
+  if ((pPpr->cfg.cfgChanged & VMK_CFG_RXMODE_CHANGED) == 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Rx mode change not requested [0x%x]",
+                        pPpr->cfg.cfgChanged);
+    status = VMK_OK;
+    goto done;
+  }
+  pPpr->cfg.cfgChanged &= ~VMK_CFG_RXMODE_CHANGED;
+
+  /* Only guest VLAN addition is valid with Rx mode change */
+  if ((pPpr->cfg.cfgChanged & ~VMK_CFG_GUEST_VLAN_ADD) != 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "cfgChanged 0x%x invalid for Rx mode change",
+                        pPpr->cfg.cfgChanged);
+    status = VMK_BAD_PARAM;
+    goto done;
+  }
+
+  /* Check if all required Rx mode privileges are granted */
+  privilegeMask = sfvmk_rxModeToPrivMask(pVf->rxMode);
+  authorize = !(~privilegeMask & pPpr->reqdPrivileges &
+                SFVMK_EF10_RX_MODE_PRIVILEGE_MASK);
+
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "reqPriv 0x%x privMask 0x%x authorize %u",
+                      pPpr->reqdPrivileges, privilegeMask, authorize);
+
+  /* If Rx mode is authorized, but other config change is pending
+   * (e.g. VLAN membership), wait for it. Otherwise, reply now.
+   */
+  if (authorize) {
+    if (pPpr->cfg.cfgChanged != 0) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "other config change pending[0x%x]",
+                          pPpr->cfg.cfgChanged);
+      status = VMK_OK;
+      goto done;
+    }
+
+    /* The request is authorized by all handlers, so we
+     * should add all non Rx mode required privileges.
+     */
+    privilegeMask |= pPpr->reqdPrivileges & ~SFVMK_EF10_RX_MODE_PRIVILEGE_MASK;
+  }
+
+  /* Authorize request with a new privilege mask.
+   * It will be declined by FW if a new mask is insufficient.
+   */
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                      "VF %u authorize rx_mode 0x%x privilegeMask 0x%x "
+                      "vs required 0x%x",
+                      vfIdx, pVf->rxMode, privilegeMask, pPpr->reqdPrivileges);
+
+  result = authorize ? MC_CMD_PROXY_COMPLETE_IN_AUTHORIZED :
+                       MC_CMD_PROXY_COMPLETE_IN_DECLINED;
+  status = sfvmk_proxyAuthHandleResponse(pAdapter->pPrimary,
+                                         pAdapter->pPrimary->pProxyState,
+                                         pPpr->uhandle, result,
+                                         privilegeMask);
+  if (status) {
+    /* May fail because of MC reboot or the request already
+     * declined because of timeout.
+     */
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "VF %u uhandle=0x%lx Rx mode handle response failed: %s",
+                        vfIdx, pPpr->uhandle, vmk_StatusToString(status));
+    goto done;
+  }
+
+  pPpr->cfg.cfgChanged = 0;
+  status = VMK_OK;
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
+/*! \brief  SET_RX_MODE net passthrough operation handler
+**
+** \param[in]  pAdapter   pointer to sfvmk_adapter_t
+** \param[in]  vfIdx      VF index
+** \param[in]  rxMode     rxMode to be set
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovSetVfRxMode(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                       vmk_VFRXMode rxMode)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  vmk_VFRXMode revokeRxMode;
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  revokeRxMode  = pVf->rxMode & ~rxMode;
+  pVf->rxMode = rxMode;
+
+  status = sfvmk_proxyHandleResponseRxMode(pAdapter, vfIdx);
+  if (status == VMK_ESHUTDOWN) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MC reboot, VF driver will reapply");
+    status = VMK_OK;
+  } else if (status) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "VF %u set Rx mode failed: %s, reset VF",
+                        vfIdx, vmk_StatusToString(status));
+    status = sfvmk_sriovResetVf(pAdapter, vfIdx);
+  } else if (revokeRxMode) {
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "Revoke VF %u Rx mode %x, reset VF to apply",
+                          vfIdx, revokeRxMode);
+      status = sfvmk_sriovResetVf(pAdapter, vfIdx);
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
+/*! \brief  SET_ANTISPOOF net passthrough operation handler
+**
+** \param[in]  pAdapter    pointer to sfvmk_adapter_t
+** \param[in]  vfIdx       VF index
+** \param[in]  spoofChk    Passed VMK_TRUE to enable anti spoof check
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovSetVfSpoofChk(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                         vmk_Bool spoofChk)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  status = efx_proxy_auth_set_privilege_mask(pAdapter->pNic, vfIdx,
+                MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX,
+                spoofChk ? 0 : MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX);
+
+ if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "efx_proxy_auth_set_privilege_mask failed status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -1029,6 +1198,41 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
 
       sfvmk_sriovSetVfVlanRange(pAdapter, pVfArgs->vf, isAddVlanRange,
                                 pVfArgs->first, pVfArgs->last);
+      break;
+    }
+
+    case VMK_NETPTOP_VF_SET_RX_MODE:
+    {
+      vmk_NetPTOPVFSetRxModeArgs *pVfArgs = pArgs;
+      vmk_uint32 rxMode;
+
+      rxMode = ((pVfArgs->unicast ? VMK_VF_RXMODE_UNICAST : 0) |
+                (pVfArgs->multicast ? VMK_VF_RXMODE_MULTICAST : 0) |
+                (pVfArgs->broadcast ? VMK_VF_RXMODE_BROADCAST : 0) |
+                (pVfArgs->allmulti ? VMK_VF_RXMODE_ALLMULTI : 0) |
+                (pVfArgs->promiscuous ? VMK_VF_RXMODE_PROMISC : 0));
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u set Rx mode 0x%x "
+                          "(unicast=%u,multicast=%u,broadcast=%u,"
+                          "allmulti=%u,promiscuous=%u)",
+                          pVfArgs->vf, rxMode, pVfArgs->unicast,
+                          pVfArgs->multicast, pVfArgs->broadcast,
+                          pVfArgs->allmulti, pVfArgs->promiscuous);
+
+      status = sfvmk_sriovSetVfRxMode(pAdapter, pVfArgs->vf, rxMode);
+      break;
+    }
+
+    case VMK_NETPTOP_VF_SET_ANTISPOOF:
+    {
+      vmk_NetPTOPVFSetAntispoofArgs *pVfArgs = pArgs;
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u %s anti-spoof",
+                          pVfArgs->vf, pVfArgs->enable ? "enable" : "disable");
+
+      status = sfvmk_sriovSetVfSpoofChk(pAdapter, pVfArgs->vf, pVfArgs->enable);
       break;
     }
 

@@ -1125,6 +1125,88 @@ sfvmk_sriovSetVfSpoofChk(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
   return status;
 }
 
+/*! \brief  Function to handle the set MTU response from VMKernel
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  mtu      MTU value to be applied
+**
+** \return: VMK_TRUE if mtu was set, VMK_FALSE otherwise
+*/
+vmk_Bool
+sfvmk_proxyHandleResponseSetMtu(sfvmk_adapter_t *pAdapter,
+                                vmk_uint32 vfIdx,
+                                vmk_uint32 mtu)
+{
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  sfvmk_pendingProxyReq_t *pPpr = &pVf->pendingProxyReq;
+  vmk_Bool mtuSet = VMK_FALSE;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+
+  if ((pPpr->cfg.cfgChanged & VMK_CFG_MTU_CHANGED) == 0) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "MTU mode change not requested [0x%x]",
+                        pPpr->cfg.cfgChanged);
+    goto done;
+  }
+
+  pPpr->cfg.cfgChanged = 0;
+  if (mtu == pPpr->cfg.mtu) {
+    /* Complete request from PF driver since it may require
+     * tweaking to set maximum MTU across PF and VFs
+     */
+    sfvmk_proxyCompleteSetMtu(pAdapter, pPpr->uhandle, &mtuSet);
+  } else {
+    sfvmk_proxyAuthHandleResponse(pAdapter, pAdapter->pPrimary->pProxyState,
+                                  pPpr->uhandle,
+                                  MC_CMD_PROXY_COMPLETE_IN_DECLINED, 0);
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return mtuSet;
+}
+
+/*! \brief  SET_MTU net passthrough operation handler
+**
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  vfIdx    VF index
+** \param[in]  mtu      MTU value to be applied
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_sriovSetVfMtu(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
+                     vmk_uint32 mtu)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_vfInfo_t *pVf = pAdapter->pVfInfo + vfIdx;
+  vmk_uint32 oldMtu = pVf->macMtu;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
+  pVf->macMtu = mtu;
+
+  if (sfvmk_proxyHandleResponseSetMtu(pAdapter, vfIdx, mtu)) {
+    status = VMK_OK;
+    goto done;
+  }
+
+  /* If handle response has not done the change, hypervisor
+   * settings should be applied regardless any errors in handle
+   * response.
+   */
+  status = efx_mac_pdu_set(pAdapter->pNic, sfvmk_calcMacMtuPf(pAdapter));
+  if (status) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_pdu_set failed status: %s",
+                        vmk_StatusToString(status));
+    pVf->macMtu = oldMtu;
+  }
+
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
+  return status;
+}
+
 /*! \brief  VMKernel invoked callback function to configure VF properties.
 **
 ** \param[in]  pAdapter pointer to sfvmk_adapter_t
@@ -1233,6 +1315,18 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           pVfArgs->vf, pVfArgs->enable ? "enable" : "disable");
 
       status = sfvmk_sriovSetVfSpoofChk(pAdapter, pVfArgs->vf, pVfArgs->enable);
+      break;
+    }
+
+    case VMK_NETPTOP_VF_SET_MTU:
+    {
+      vmk_NetPTOPVFSetMtuArgs *pVfArgs = pArgs;
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                          "(PT) VF %u set MTU %u",
+                          pVfArgs->vf, pVfArgs->mtu);
+
+      status = sfvmk_sriovSetVfMtu(pAdapter, pVfArgs->vf, pVfArgs->mtu);
       break;
     }
 

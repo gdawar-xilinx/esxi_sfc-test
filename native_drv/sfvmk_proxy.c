@@ -841,7 +841,7 @@ done:
 ** \return: Maximum MAC MTU across PF and all VFs
 **
 */
-static vmk_uint32
+vmk_uint32
 sfvmk_calcMacMtuPf(sfvmk_adapter_t *pAdapter)
 {
   vmk_uint32 macMtu = EFX_MAC_PDU(pAdapter->uplink.sharedData.mtu);

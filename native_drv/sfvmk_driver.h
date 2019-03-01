@@ -1204,6 +1204,12 @@ sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
                                void *pCbContext);
 vmk_uint32
 sfvmk_rxModeToPrivMask(vmk_VFRXMode rxMode);
+VMK_ReturnStatus
+sfvmk_proxyCompleteSetMtu(sfvmk_adapter_t *pAdapter,
+                          vmk_uint64 uhandle,
+                          vmk_Bool *pMtuSet);
+vmk_uint32
+sfvmk_calcMacMtuPf(sfvmk_adapter_t *pAdapter);
 #endif
 
 char *

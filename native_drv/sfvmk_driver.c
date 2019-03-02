@@ -1670,3 +1670,4 @@ sfvmk_driverUnregister(void)
   vmk_DriverUnregister(sfvmk_modInfo.driverID);
 }
 
+

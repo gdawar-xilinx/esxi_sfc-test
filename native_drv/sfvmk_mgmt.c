@@ -1528,3 +1528,103 @@ end:
   vmk_SemaUnlock(&sfvmk_modInfo.lock);
   return VMK_OK;
 }
+
+/*! \brief  A Mgmt callback to get or set PCI function privileges
+ **
+ ** \param[in]      pCookies       Pointer to cookie
+ ** \param[in]      pEnvelope      Pointer to vmk_MgmtEnvelope
+ ** \param[out]     pDevIface      Pointer to device interface structure
+ ** \param[out]     pPrivilegeInfo Pointer to privileges info structure
+ **
+ ** \return VMK_OK [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_privilege_t
+ **     VMK_NOT_FOUND:       In case of dev not found
+ **     VMK_BAD_PARAM:       Unknown command option, invalid PCI address or
+ **                          Null Pointer passed in parameter
+ **     VMK_NOT_SUPPORTED:   Driver doesn't support SR-IOV and hence this API.
+ **                          Use the driver with SFVMK_SUPPORT_SRIOV defined.
+ **     VMK_FAILURE:         Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtFnPrivilegeCallback(vmk_MgmtCookies     *pCookies,
+                              vmk_MgmtEnvelope    *pEnvelope,
+                              sfvmk_mgmtDevInfo_t *pDevIface,
+                              sfvmk_privilege_t   *pPrivilegeInfo)
+{
+  vmk_PCIDeviceAddr pciSBDF = {0,};
+  vmk_uint32 seg = 0;
+  vmk_uint32 bus = 0;
+  vmk_uint32 dev = 0;
+  vmk_uint32 fn = 0;
+  vmk_uint32 numAssigned = 0;
+
+  vmk_SemaLock(&sfvmk_modInfo.lock);
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+#ifndef SFVMK_SUPPORT_SRIOV
+  SFVMK_ERROR("SR-IOV not supported on this driver release");
+  pDevIface->status = VMK_NOT_SUPPORTED;
+  goto end;
+#endif
+
+  pDevIface->status = VMK_FAILURE;
+
+  if (!pPrivilegeInfo) {
+    SFVMK_ERROR("pPrivilegeInfo: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  numAssigned = vmk_Sscanf(pPrivilegeInfo->pciSBDF.string,
+                           "%04x:%02x:%02x.%x", &seg, &bus, &dev, &fn);
+  if (numAssigned != 4) {
+    SFVMK_ERROR("Parsing input PCI address [%s] failed, parsed %u members",
+                pPrivilegeInfo->pciSBDF.string, numAssigned);
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  pciSBDF.seg = seg;
+  pciSBDF.bus = bus;
+  pciSBDF.dev = dev;
+  pciSBDF.fn = fn;
+
+  SFVMK_DEBUG(SFVMK_DEBUG_MGMT, SFVMK_LOG_LEVEL_DBG,
+              "Look up PCI address %04x:%02x:%02x.%x", pciSBDF.seg,
+              pciSBDF.bus, pciSBDF.dev, pciSBDF.fn);
+
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pPrivilegeInfo->type == SFVMK_MGMT_DEV_OPS_GET) {
+    pDevIface->status = sfvmk_getPrivilegeMask(&pciSBDF,
+                                               &pPrivilegeInfo->privMask);
+  } else if (pPrivilegeInfo->type == SFVMK_MGMT_DEV_OPS_SET) {
+    pDevIface->status = sfvmk_modifyPrivilegeMask(&pciSBDF,
+                                                  pPrivilegeInfo->privMask,
+                                                  pPrivilegeInfo->privRemoveMask);
+  } else {
+    SFVMK_ERROR("Invalid operation [%u] on function privileges",
+                pPrivilegeInfo->type);
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+#endif
+
+  if (pDevIface->status != VMK_OK) {
+    SFVMK_ERROR("Operation [%u] on function privileges failed: %s",
+                pPrivilegeInfo->type,
+                vmk_StatusToString(pDevIface->status));
+    goto end;
+  }
+
+  pDevIface->status = VMK_OK;
+end:
+  vmk_SemaUnlock(&sfvmk_modInfo.lock);
+  return VMK_OK;
+}
+

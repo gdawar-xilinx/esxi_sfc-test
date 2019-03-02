@@ -29,6 +29,13 @@
 #include "efx_mcdi.h"
 #include "efx_regs_mcdi.h"
 
+typedef struct sfvmk_functionInfo_s {
+  vmk_uint32        pf;
+  vmk_uint32        vf;
+  sfvmk_adapter_t   *pAdapter;
+  vmk_PCIDeviceAddr deviceAddr;
+} sfvmk_functionInfo_t;
+
 /*! \brief  Configure the proxy auth module
 **
 ** \param[in]  pAdapter            pointer to sfvmk_adapter_t
@@ -1604,4 +1611,173 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return status;
 }
+
+/*! \brief Iterator used to iterate through the adapter list and find the
+ **        Virtual function with the given PCI address
+ **
+ ** \param[in]     htbl   Hash handle.
+ ** \param[in]     key    Hash key.
+ ** \param[in]     value  Hash entry value stored at key
+ ** \param[in]     data   Pointer to sfvmk_functionInfo_t
+ **
+ ** \return: Key iterator commands.
+ **
+ */
+static vmk_HashKeyIteratorCmd
+sfvmk_functionLookupHashIter(vmk_HashTable htbl,
+                             vmk_HashKey key, vmk_HashValue value,
+                             vmk_AddrCookie data)
+{
+  sfvmk_functionInfo_t *pFnInfo = data.ptr;
+  vmk_PCIDeviceAddr *pDeviceAddr = &pFnInfo->deviceAddr;
+  sfvmk_adapter_t *pIterAdapter = (sfvmk_adapter_t *)value;
+  vmk_HashKeyIteratorCmd returnCode;
+  sfvmk_vfInfo_t *pVf = NULL;
+  vmk_uint32 i = 0;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_PROXY);
+
+  if (!pDeviceAddr || !pIterAdapter) {
+    SFVMK_ERROR("Invalid device addr (%p) or adapter list (%p)",
+                pDeviceAddr, pIterAdapter);
+    returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
+    goto done;
+  }
+
+  SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+              "Lookup PCI address: %04x:%02x:%02x.%x",
+              pDeviceAddr->seg, pDeviceAddr->bus,
+              pDeviceAddr->dev, pDeviceAddr->fn);
+
+  for (i = 0; i < pIterAdapter->numVfsEnabled; i++) {
+    pVf = pIterAdapter->pVfInfo + i;
+    SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                "Comparing VF address: %04x:%02x:%02x.%x",
+                pVf->vfPciDevAddr.seg, pVf->vfPciDevAddr.bus,
+                pVf->vfPciDevAddr.dev, pVf->vfPciDevAddr.fn);
+
+    if (memcmp(pDeviceAddr, &pVf->vfPciDevAddr,
+               sizeof(vmk_PCIDeviceAddr)) == 0) {
+      pFnInfo->pf = pIterAdapter->pfIndex;
+      pFnInfo->vf = i;
+      pFnInfo->pAdapter = pIterAdapter;
+      SFVMK_ADAPTER_DEBUG(pIterAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                          "PF: %u, VF: %u found", pFnInfo->pf, pFnInfo->vf);
+      returnCode = VMK_HASH_KEY_ITER_CMD_STOP;
+      goto done;
+    }
+  }
+
+  SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+              "Desired VF not found under PF %04x:%02x:%02x.%x",
+              pIterAdapter->pciDeviceAddr.seg, pIterAdapter->pciDeviceAddr.bus,
+              pIterAdapter->pciDeviceAddr.dev, pIterAdapter->pciDeviceAddr.fn);
+
+  returnCode = VMK_HASH_KEY_ITER_CMD_CONTINUE;
+
+done:
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_PROXY);
+  return returnCode;
+}
+
+/*! \brief  Retrieve the privilege mask for the device with provided PCI address
+**
+** \param[in]   pPciAddr     pointer to PCI SBDF address of the device
+** \param[out]  pMask        pointer to privilege mask to be returned
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_getPrivilegeMask(vmk_PCIDeviceAddr *pPciAddr,
+                       vmk_uint32 *pMask)
+{
+  VMK_ReturnStatus  status = VMK_FAILURE;
+  sfvmk_functionInfo_t fnInfo;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER);
+
+  vmk_Memset(&fnInfo, 0, sizeof(fnInfo));
+  vmk_Memcpy(&fnInfo.deviceAddr, pPciAddr, sizeof(vmk_PCIDeviceAddr));
+  status = vmk_HashKeyIterate(sfvmk_modInfo.vmkdevHashTable,
+                              sfvmk_functionLookupHashIter, &fnInfo);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Iterator failed with error code %s",
+                vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (fnInfo.pAdapter == NULL) {
+    SFVMK_ERROR("PCI address not found");
+    status = VMK_NOT_FOUND;
+    goto done;
+  }
+
+  status = efx_proxy_auth_privilege_mask_get(fnInfo.pAdapter->pNic,
+                                             fnInfo.pf, fnInfo.vf,
+                                             pMask);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(fnInfo.pAdapter,
+                        "efx_proxy_auth_privilege_mask_get failed: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER);
+  return status;
+}
+
+/*! \brief  Retrieve the privilege mask for the device with provided PCI address
+**
+** \param[in]  pPciAddr                 pointer to PCI SBDF address of the device
+** \param[in]  add_privileges_mask      privilege mask to be added
+** \param[in]  remove_privileges_mask   privilege mask to be removed
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_modifyPrivilegeMask(vmk_PCIDeviceAddr *pPciAddr,
+                          vmk_uint32 add_privileges_mask,
+                          vmk_uint32 remove_privileges_mask)
+{
+  VMK_ReturnStatus  status = VMK_FAILURE;
+  sfvmk_functionInfo_t fnInfo;
+
+  SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER);
+
+  vmk_Memcpy(&fnInfo.deviceAddr, pPciAddr, sizeof(vmk_PCIDeviceAddr));
+  status = vmk_HashKeyIterate(sfvmk_modInfo.vmkdevHashTable,
+                              sfvmk_functionLookupHashIter, &fnInfo);
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Iterator failed with error code %s",
+                vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (fnInfo.pAdapter == NULL) {
+    SFVMK_ERROR("PCI address not found");
+    status = VMK_NOT_FOUND;
+    goto done;
+  }
+
+  SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+              "PF: %u, VF: %u, add: 0x%x rem: 0x%x", fnInfo.pf, fnInfo.vf,
+              add_privileges_mask, remove_privileges_mask);
+
+  status = efx_proxy_auth_privilege_modify(fnInfo.pAdapter->pNic,
+                                           fnInfo.pf, fnInfo.vf,
+                                           add_privileges_mask,
+                                           remove_privileges_mask);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(fnInfo.pAdapter,
+                        "efx_proxy_auth_privilege_modify failed status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+done:
+  SFVMK_DEBUG_FUNC_EXIT(SFVMK_DEBUG_DRIVER);
+  return status;
+}
 #endif
+

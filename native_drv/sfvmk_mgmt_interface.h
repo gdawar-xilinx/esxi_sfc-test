@@ -58,6 +58,7 @@
  ** SFVMK_CB_FEC_MODE_REQUEST:         Get/Set FEC mode settings
  ** SFVMK_CB_IMG_UPDATE_V2:            Perform Image Update version 2
  ** SFVMK_CB_SENSOR_INFO_GET:          Get hardware sensor information
+ ** SFVMK_CB_PRIVILEGE_REQUEST:        Get/Set PCI function privileges
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -77,6 +78,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_FEC_MODE_REQUEST,
   SFVMK_CB_IMG_UPDATE_V2,
   SFVMK_CB_SENSOR_INFO_GET,
+  SFVMK_CB_PRIVILEGE_REQUEST,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -669,6 +671,26 @@ typedef struct sfvmk_hwSensor_s{
   vmk_uint32            size;
 } __attribute__((__packed__)) sfvmk_hwSensor_t;
 
+/*! \brief struct sfvmk_privilege_s to get/ set
+ ** function privilege information
+ **
+ ** type[in]            Command type (Get/Set)
+ **
+ ** pciSBDF[in]         Input PCI address string
+ **
+ ** privMask[inout]     OUT in Get operation and
+ **                     IN (add privileges) for Set operation
+ **
+ ** privRemoveMask[in]  privileges to be revoked in Set operation
+ **
+ */
+typedef struct sfvmk_privilege_s {
+  sfvmk_mgmtDevOps_t   type;
+  vmk_Name             pciSBDF;
+  vmk_uint32           privMask;
+  vmk_uint32           privRemoveMask;
+} __attribute__((__packed__))  sfvmk_privilege_t;
+
 #ifdef VMKERNEL
 /*!
  ** These are the definitions of prototypes as viewed from kernel-facing code.
@@ -776,6 +798,11 @@ VMK_ReturnStatus sfvmk_mgmtHWSensorInfoCallback(vmk_MgmtCookies *pCookies,
                                                 sfvmk_mgmtDevInfo_t *pDevIface,
                                                 sfvmk_hwSensor_t *pUserSensorBuffer);
 
+VMK_ReturnStatus sfvmk_mgmtFnPrivilegeCallback(vmk_MgmtCookies     *pCookies,
+                                               vmk_MgmtEnvelope    *pEnvelope,
+                                               sfvmk_mgmtDevInfo_t *pDevIface,
+                                               sfvmk_privilege_t   *pPrivilegeInfo);
+
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -798,6 +825,7 @@ VMK_ReturnStatus sfvmk_mgmtHWSensorInfoCallback(vmk_MgmtCookies *pCookies,
 #define sfvmk_mgmtInterfaceListCallback NULL
 #define sfvmk_mgmtFecModeCallback NULL
 #define sfvmk_mgmtHWSensorInfoCallback NULL
+#define sfvmk_mgmtFnPrivilegeCallback NULL
 #endif
 
 #endif

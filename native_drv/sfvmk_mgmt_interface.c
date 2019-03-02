@@ -277,6 +277,21 @@ const vmk_MgmtCallbackInfo sfvmk_mgmtCallbacks[] = {
       .parmSizes[1] =  sizeof(sfvmk_hwSensor_t),
 
       .callbackId = SFVMK_CB_SENSOR_INFO_GET
+  },
+
+  {
+      .location = VMK_MGMT_CALLBACK_KERNEL,
+      .callback = sfvmk_mgmtFnPrivilegeCallback,
+      .synchronous = 1,
+      .numParms = 2,
+
+      .parmTypes[0] =  VMK_MGMT_PARMTYPE_OUT,
+      .parmSizes[0] =  sizeof(sfvmk_mgmtDevInfo_t),
+
+      .parmTypes[1] =  VMK_MGMT_PARMTYPE_INOUT,
+      .parmSizes[1] =  sizeof(sfvmk_privilege_t),
+
+      .callbackId = SFVMK_CB_PRIVILEGE_REQUEST
   }
 
 };

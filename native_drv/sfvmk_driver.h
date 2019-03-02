@@ -1211,6 +1211,15 @@ sfvmk_proxyCompleteSetMtu(sfvmk_adapter_t *pAdapter,
                           vmk_Bool *pMtuSet);
 vmk_uint32
 sfvmk_calcMacMtuPf(sfvmk_adapter_t *pAdapter);
+
+VMK_ReturnStatus
+sfvmk_getPrivilegeMask(vmk_PCIDeviceAddr *pPciAddr,
+                       vmk_uint32 *pMask);
+
+VMK_ReturnStatus
+sfvmk_modifyPrivilegeMask(vmk_PCIDeviceAddr *pPciAddr,
+                          vmk_uint32 add_privileges_mask,
+                          vmk_uint32 remove_privileges_mask);
 #endif
 
 char *

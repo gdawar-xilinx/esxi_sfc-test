@@ -271,6 +271,7 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  sfvmk_MutexLock(pPrimary->secondaryListLock);
   if ((pPrimary->pProxyState == NULL) && pAdapter->numVfsEnabled) {
     reqSize = MAX(MC_CMD_VADAPTOR_SET_MAC_IN_LEN,
                   MAX(MC_CMD_FILTER_OP_EXT_IN_LEN,
@@ -310,6 +311,9 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
   status = VMK_OK;
 
 done:
+  if (pPrimary)
+    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return status;
 }
@@ -344,6 +348,7 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  sfvmk_MutexLock(pPrimary->secondaryListLock);
   pProxyState = pPrimary->pProxyState;
 
   if (pProxyState == NULL) {
@@ -429,6 +434,9 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   pPrimary->pProxyState = NULL;
 
 done:
+  if (pPrimary)
+    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
 }
 
@@ -611,6 +619,7 @@ sfvmk_findPfAdapter(sfvmk_adapter_t *pAdapter, vmk_uint32 pf)
     goto done;
   }
 
+  sfvmk_MutexLock(pAdapter->secondaryListLock);
   VMK_LIST_FORALL(&pAdapter->secondaryList, pLink) {
     pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
@@ -622,6 +631,7 @@ sfvmk_findPfAdapter(sfvmk_adapter_t *pAdapter, vmk_uint32 pf)
       break;
     }
   }
+  sfvmk_MutexUnlock(pAdapter->secondaryListLock);
 
 done:
   if (found == VMK_FALSE)

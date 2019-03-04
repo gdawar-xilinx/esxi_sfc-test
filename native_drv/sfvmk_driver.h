@@ -779,6 +779,8 @@ typedef struct sfvmk_adapter_s {
   struct sfvmk_adapter_s*    pPrimary;
   /* Linked list for secondary ports */
   vmk_ListLinks              secondaryList;
+  /* Lock to synchronize access to secondary NIC list */
+  sfvmk_Lock                 secondaryListLock;
   /* Linked list entry reference */
   vmk_ListLinks              adapterLink;
   /* Serial number of this adapter */

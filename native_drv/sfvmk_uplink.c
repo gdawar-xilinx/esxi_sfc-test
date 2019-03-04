@@ -2542,10 +2542,13 @@ failed_set_drv_limits:
   /* Do not clean-up proxy auth module if some other port is using it */
   pPrimary = pAdapter->pPrimary;
   totalVfs = pPrimary->proxiedVfs;
+
+  sfvmk_MutexLock(pPrimary->secondaryListLock);
   VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
     pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
     totalVfs += pOther->proxiedVfs;
   }
+  sfvmk_MutexUnlock(pPrimary->secondaryListLock);
 
   if (totalVfs - pAdapter->proxiedVfs == 0)
     sfvmk_proxyAuthFini(pAdapter);

@@ -254,6 +254,13 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
   vmk_ListInit(&pAdapter->secondaryList);
   vmk_ListInitElement(&pAdapter->adapterLink);
 
+  status = sfvmk_mutexInit("secondaryListLock", &pAdapter->secondaryListLock);
+  if(status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mutexInit failed status %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
   /* Description of max_vfs module parameter must be updated
    * if following static assert fails */
   EFX_STATIC_ASSERT(SFVMK_MAX_VFS_PER_PF == 63);
@@ -268,7 +275,7 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIFindExtCapability failed status %s",
                         vmk_StatusToString(status));
-    goto done;
+    goto pci_find_ext_cap_failed;
   }
 
   capOffset += SFVMK_TOTAL_VFS_OFFSET;
@@ -393,6 +400,8 @@ mem_alloc_failed:
     pAdapter->numVfsEnabled = 0;
   }
 
+pci_find_ext_cap_failed:
+  sfvmk_mutexDestroy(pAdapter->secondaryListLock);
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
   return status;
@@ -449,6 +458,7 @@ sfvmk_sriovFini(sfvmk_adapter_t *pAdapter)
     pAdapter->numVfsEnabled = 0;
   }
 
+  sfvmk_mutexDestroy(pAdapter->secondaryListLock);
   status = VMK_OK;
 
 done:

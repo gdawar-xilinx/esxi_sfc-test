@@ -1664,7 +1664,7 @@ sfvmk_detachDevice(vmk_Device dev)
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->evbState != SFVMK_EVB_STATE_STOPPED) {
+  if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED) {
     sfvmk_proxyAuthFini(pAdapter);
 
     status = sfvmk_evbSwitchFini(pAdapter);

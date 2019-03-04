@@ -66,7 +66,12 @@
 #define SFVMK_NETPOLL_TX_BUDGET       128
 
 /* Wait time for StartIO on MC Reboot */
+#ifdef SFVMK_SUPPORT_SRIOV
+/* Allow extra time for proxy auth reinitialization */
+#define SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC    10000
+#else
 #define SFVMK_STARTIO_ON_MC_REBOOT_TIME_OUT_MSEC    300
+#endif
 
 /* Wait time for MC Reboot to complete. Value set higher
  * than max MCDI timeout value for worst case scenarios

@@ -2656,7 +2656,7 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
     if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
                           vmk_StatusToString(status));
-      goto done;
+      /* Do not return error to allow uplinkResetHelper proceed with startIO */
     }
   }
 #endif

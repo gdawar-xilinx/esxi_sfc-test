@@ -449,120 +449,6 @@ sfvmk_disassociateRssNetPoll(sfvmk_adapter_t *pAdapter)
   }
 }
 
-#ifdef SFVMK_SUPPORT_SRIOV
-
-/*! \brief  If this is the first adapter in card, add it to the primary list.
-**          If not, check if there is an adapter in primary list which belongs
-**          to same card as this adapter and add it to its secondary list.
-**
- ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-**
-** \return: void
-**
-*/
-static void
-sfvmk_addAdapterToList(sfvmk_adapter_t *pAdapter)
-{
-  sfvmk_adapter_t *pOther = NULL;
-  vmk_ListLinks   *pLink = NULL;
-  vmk_ListLinks   *pNext = NULL;
-
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-
-  if (pAdapter->pPrimary == pAdapter) {
-    vmk_ListInsert(&pAdapter->adapterLink,
-                   vmk_ListAtRear(&sfvmk_modInfo.primaryList));
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Added %s to primary list",
-                        pAdapter->pciDeviceName.string);
-
-    /* Scan entries from un-associated list and look for secondary adapters */
-    VMK_LIST_FORALL_SAFE(&sfvmk_modInfo.unassociatedList, pLink, pNext) {
-      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                          "Un-associated list entry %s", pOther->pciDeviceName.string);
-      if(sfvmk_sameController(pAdapter, pOther)) {
-        vmk_ListRemove(&pOther->adapterLink);
-        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                            "Moving %s to secondary list of %s",
-                            pOther->pciDeviceName.string, pAdapter->pciDeviceName.string);
-        vmk_ListInsert(&pOther->adapterLink,
-                       vmk_ListAtRear(&pAdapter->secondaryList));
-        pOther->pPrimary = pAdapter;
-        goto done;
-      }
-    }
-  } else {
-    /* Adding secondary function; look for primary */
-    VMK_LIST_FORALL(&sfvmk_modInfo.primaryList, pLink) {
-      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                          "Primary list entry %s", pOther->pciDeviceName.string);
-      if(sfvmk_sameController(pAdapter, pOther)) {
-        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                            "Adding %s to secondary list of %s",
-                            pAdapter->pciDeviceName.string, pOther->pciDeviceName.string);
-        vmk_ListInsert(&pAdapter->adapterLink,
-                       vmk_ListAtRear(&pOther->secondaryList));
-        pAdapter->pPrimary = pOther;
-        goto done;
-      }
-    }
-
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Adding %s to un-associated list",
-                        pAdapter->pciDeviceName.string);
-    vmk_ListInsert(&pAdapter->adapterLink,
-                   vmk_ListAtRear(&sfvmk_modInfo.unassociatedList));
-  }
-
-done:
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
-}
-
-/*! \brief  If this is the first adapter in card, remove it from the primary
-**          list. Also, remove all entries from its secondary list. Nothing
-**          done here for secondary adapters as they are removed along with
-**          primary adapter. This function assumes that all adapters will be
-**          removed together at the time of module unload.
-**
- ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-**
-** \return: void
-**
-*/
-static void
-sfvmk_removeAdapterFromList(sfvmk_adapter_t *pAdapter)
-{
-  sfvmk_adapter_t *pOther = NULL;
-  vmk_ListLinks   *pLink = NULL;
-  vmk_ListLinks   *pNext = NULL;
-
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
-
-  if (pAdapter->pPrimary == pAdapter) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                        "Removing primary %s : %p",
-                        pAdapter->pciDeviceName.string,
-                        &pAdapter->adapterLink);
-    vmk_ListRemove(&pAdapter->adapterLink);
-
-    VMK_LIST_FORALL_SAFE(&pAdapter->secondaryList, pLink, pNext) {
-      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                          "Removing secondary %s : %p",
-                          pOther->pciDeviceName.string,
-                          &pOther->adapterLink);
-      vmk_ListRemove(&pOther->adapterLink);
-      pOther->pPrimary = NULL;
-    }
-    pAdapter->pPrimary = NULL;
-  }
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
-}
-#endif
-
 /*! \brief  Uplink callback function to associate uplink device with driver and
 **          driver register its cap with uplink device.
 **
@@ -629,10 +515,6 @@ sfvmk_uplinkAssociate(vmk_AddrCookie cookie, vmk_Uplink uplinkHandle)
     }
   }
 
-#ifdef SFVMK_SUPPORT_SRIOV
-  sfvmk_addAdapterToList(pAdapter);
-#endif
-
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -697,10 +579,6 @@ sfvmk_uplinkDisassociate(vmk_AddrCookie cookie)
 
   pAdapter->uplink.handle = NULL;
 
-
-#ifdef SFVMK_SUPPORT_SRIOV
-  sfvmk_removeAdapterFromList(pAdapter);
-#endif
   status = VMK_OK;
 
 done:
@@ -2518,6 +2396,12 @@ static VMK_ReturnStatus
 sfvmk_startIO(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
+#ifdef SFVMK_SUPPORT_SRIOV
+  sfvmk_adapter_t *pPrimary = NULL;
+  sfvmk_adapter_t *pOther = NULL;
+  vmk_ListLinks *pLink = NULL;
+  vmk_uint32 totalVfs = 0;
+#endif
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -2539,16 +2423,14 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
                           vmk_StatusToString(status));
       goto done;
     }
-    pAdapter->evbState = SFVMK_EVB_STATE_STARTED;
-    status = VMK_OK;
-  }
 
-  status = sfvmk_proxyAuthInit(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,
-                        "sfvmk_proxyAuthInit failed status: %s",
-                        vmk_StatusToString(status));
-    goto proxy_auth_init_failed;
+    status = sfvmk_proxyAuthInit(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "sfvmk_proxyAuthInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto proxy_auth_init_failed;
+    }
   }
 #endif
 
@@ -2657,7 +2539,18 @@ failed_intr_start:
 failed_nic_init:
 failed_set_drv_limits:
 #ifdef SFVMK_SUPPORT_SRIOV
-  sfvmk_proxyAuthFini(pAdapter);
+  /* Do not clean-up proxy auth module if some other port is using it */
+  pPrimary = pAdapter->pPrimary;
+  totalVfs = pPrimary->proxiedVfs;
+  VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
+    pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
+    totalVfs += pOther->proxiedVfs;
+  }
+
+  if (totalVfs - pAdapter->proxiedVfs == 0)
+    sfvmk_proxyAuthFini(pAdapter);
+  pAdapter->proxiedVfs = 0;
+
 proxy_auth_init_failed:
   sfvmk_evbSwitchFini(pAdapter);
 #endif
@@ -2752,17 +2645,16 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   efx_nic_fini(pAdapter->pNic);
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  sfvmk_proxyAuthFini(pAdapter);
-
   /* clean-up EVB switch */
   if (pAdapter->evbState == SFVMK_EVB_STATE_STOPPING) {
+    sfvmk_proxyAuthFini(pAdapter);
+
     status = sfvmk_evbSwitchFini(pAdapter);
     if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
                           vmk_StatusToString(status));
       goto done;
     }
-    pAdapter->evbState = SFVMK_EVB_STATE_STOPPED;
   }
 #endif
 
@@ -4685,22 +4577,12 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
 
   sfvmk_mcdiReset(pAdapter);
 
-#ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->numVfsEnabled)
-    efx_proxy_auth_fini(pAdapter->pNic);
-#endif
-
   status = efx_nic_reset(pAdapter->pNic);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",
                         vmk_StatusToString(status));
     goto end;
   }
-
-#ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->numVfsEnabled)
-    efx_proxy_auth_init(pAdapter->pNic);
-#endif
 
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);

@@ -576,6 +576,7 @@ typedef struct sfvmk_vfInfo_s {
 typedef enum sfvmk_proxyAuthState_e {
   SFVMK_PROXY_AUTH_STATE_STARTING = 0,
   SFVMK_PROXY_AUTH_STATE_READY,
+  SFVMK_PROXY_AUTH_STATE_STOPPING,
 } sfvmk_proxyAuthState_t;
 
 typedef struct sfvmk_proxyReqState_s {
@@ -615,6 +616,8 @@ typedef struct sfvmk_proxyAdminState_s {
   vmk_uint32                handledPrivileges;
   /* Helper world for processing proxy requests */
   vmk_Helper                proxyHelper;
+  /* Total number of helper worlds currently running for proxy requests */
+  vmk_atomic64               numWorlds;
 } sfvmk_proxyAdminState_t;
 
 typedef enum sfvmk_proxyRequestState_e {
@@ -770,6 +773,8 @@ typedef struct sfvmk_adapter_s {
 
   /* Number of VFs enabled */
   vmk_uint32                 numVfsEnabled;
+  /* Number of VFs using proxy module */
+  vmk_uint32                 proxiedVfs;
   /* Pointer to primary adapter (port number 0) */
   struct sfvmk_adapter_s*    pPrimary;
   /* Linked list for secondary ports */
@@ -786,8 +791,6 @@ typedef struct sfvmk_adapter_s {
   efx_vport_config_t         *pVportConfig;
   /* Pointer to proxy admin structure */
   sfvmk_proxyAdminState_t    *pProxyState;
-  /* Number of VFs currently active for proxy auth */
-  vmk_uint32                 proxiedVfs;
   /* PF index */
   vmk_uint32                 pfIndex;
   /* EVB state */

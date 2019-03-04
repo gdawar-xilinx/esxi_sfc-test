@@ -1282,6 +1282,15 @@ sfvmk_attachDevice(vmk_Device dev)
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                         "Primary adapter set");
   }
+
+  if (pAdapter->numVfsEnabled) {
+    status = efx_proxy_auth_init(pAdapter->pNic);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_proxy_auth_init failed: %s",
+                          vmk_StatusToString(status));
+      goto failed_proxy_auth_init;
+    }
+  }
 #endif
 
   efx_nic_fini(pAdapter->pNic);
@@ -1293,6 +1302,7 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 #ifdef SFVMK_SUPPORT_SRIOV
+failed_proxy_auth_init:
 failed_get_serial_number:
 #endif
 failed_create_helper:
@@ -1550,6 +1560,10 @@ sfvmk_detachDevice(vmk_Device dev)
     goto done;
   }
 
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->numVfsEnabled)
+    efx_proxy_auth_fini(pAdapter->pNic);
+#endif
   /* Tear down common code subsystems. */
   if (pAdapter->pNic != NULL) {
     efx_nvram_fini(pAdapter->pNic);

@@ -256,20 +256,7 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  if (pPrimary->pProxyState) {
-    status = VMK_OK;
-    goto done;
-  }
-
-  if (pAdapter->numVfsEnabled ||
-      ((pAdapter == pPrimary) && pPrimary->numVfsEnabled)) {
-    status = efx_proxy_auth_init(pPrimary->pNic);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "efx_proxy_auth_init failed: %s",
-                          vmk_StatusToString(status));
-      goto done;
-    }
-
+  if ((pPrimary->pProxyState == NULL) && pAdapter->numVfsEnabled) {
     reqSize = MAX(MC_CMD_VADAPTOR_SET_MAC_IN_LEN,
                   MAX(MC_CMD_FILTER_OP_EXT_IN_LEN,
                       MC_CMD_SET_MAC_EXT_IN_LEN));
@@ -370,8 +357,6 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   }
 
   efx_proxy_auth_destroy(pPrimary->pNic, pProxyState->handledPrivileges);
-
-  efx_proxy_auth_fini(pPrimary->pNic);
 
   sfvmk_destroyHelper(pPrimary, pProxyState->proxyHelper);
 

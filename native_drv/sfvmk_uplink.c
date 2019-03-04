@@ -4672,12 +4672,22 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
 
   sfvmk_mcdiReset(pAdapter);
 
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->numVfsEnabled)
+    efx_proxy_auth_fini(pAdapter->pNic);
+#endif
+
   status = efx_nic_reset(pAdapter->pNic);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",
                         vmk_StatusToString(status));
     goto end;
   }
+
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->numVfsEnabled)
+    efx_proxy_auth_init(pAdapter->pNic);
+#endif
 
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);

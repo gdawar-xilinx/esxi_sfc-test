@@ -2532,11 +2532,15 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
 
 #ifdef SFVMK_SUPPORT_SRIOV
   /* Setup EVB switching */
-  status = sfvmk_evbSwitchInit(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchInit failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
+  if (pAdapter->evbState != SFVMK_EVB_STATE_STARTED) {
+    status = sfvmk_evbSwitchInit(pAdapter);
+    if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+    pAdapter->evbState = SFVMK_EVB_STATE_STARTED;
+    status = VMK_OK;
   }
 
   status = sfvmk_proxyAuthInit(pAdapter);
@@ -2751,11 +2755,14 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   sfvmk_proxyAuthFini(pAdapter);
 
   /* clean-up EVB switch */
-  status = sfvmk_evbSwitchFini(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
-                        vmk_StatusToString(status));
-    goto done;
+  if (pAdapter->evbState == SFVMK_EVB_STATE_STOPPING) {
+    status = sfvmk_evbSwitchFini(pAdapter);
+    if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+    pAdapter->evbState = SFVMK_EVB_STATE_STOPPED;
   }
 #endif
 
@@ -4663,6 +4670,12 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   sfvmk_MutexLock(pAdapter->lock);
+
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED)
+    pAdapter->evbState = SFVMK_EVB_STATE_STOPPING;
+#endif
+
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceIO failed with error %s",

@@ -644,6 +644,12 @@ typedef struct sfvmk_proxyMcState_s {
   vmk_uint32 grantedPrivileges;
 } __attribute__ (( packed )) sfvmk_proxyMcState_t;
 
+typedef enum sfvmk_evbState_e {
+  SFVMK_EVB_STATE_UNINITIALIZED = 0,
+  SFVMK_EVB_STATE_STARTED,
+  SFVMK_EVB_STATE_STOPPING,
+  SFVMK_EVB_STATE_STOPPED
+} sfvmk_evbState_t;
 #endif
 
 /* Adapter structure */
@@ -784,6 +790,8 @@ typedef struct sfvmk_adapter_s {
   vmk_uint32                 proxiedVfs;
   /* PF index */
   vmk_uint32                 pfIndex;
+  /* EVB state */
+  sfvmk_evbState_t           evbState;
 #endif
 } sfvmk_adapter_t;
 

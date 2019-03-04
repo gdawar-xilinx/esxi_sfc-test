@@ -137,7 +137,7 @@ sfvmk_evbSwitchInit(sfvmk_adapter_t *pAdapter)
   if (!pAdapter->numVfsEnabled) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                         "No VFs enabled");
-    status = VMK_OK;
+    status = VMK_BAD_PARAM;
     goto done;
   }
 
@@ -205,7 +205,7 @@ sfvmk_evbSwitchFini(sfvmk_adapter_t *pAdapter)
   if (!pAdapter->numVfsEnabled) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                         "No VFs enabled");
-    status = VMK_OK;
+    status = VMK_BAD_PARAM;
     goto done;
   }
 
@@ -1556,7 +1556,8 @@ sfvmk_registerVFs(sfvmk_adapter_t *pAdapter)
 
   if (!pAdapter->numVfsEnabled) {
     SFVMK_ADAPTER_ERROR(pAdapter, "VFs not enabled on this adapter");
-    status = VMK_BAD_PARAM;
+    /* Don't treat it as an error */
+    status = VMK_OK;
     goto done;
   }
 

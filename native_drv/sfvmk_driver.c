@@ -1563,7 +1563,19 @@ sfvmk_detachDevice(vmk_Device dev)
 #ifdef SFVMK_SUPPORT_SRIOV
   if (pAdapter->numVfsEnabled)
     efx_proxy_auth_fini(pAdapter->pNic);
+
+  if (pAdapter->evbState != SFVMK_EVB_STATE_STOPPED) {
+    status = sfvmk_evbSwitchFini(pAdapter);
+    if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",
+                          vmk_StatusToString(status));
+      goto done;
+    }
+    pAdapter->evbState = SFVMK_EVB_STATE_STOPPED;
+    status = VMK_OK;
+  }
 #endif
+
   /* Tear down common code subsystems. */
   if (pAdapter->pNic != NULL) {
     efx_nvram_fini(pAdapter->pNic);

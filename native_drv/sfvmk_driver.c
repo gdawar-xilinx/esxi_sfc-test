@@ -1664,9 +1664,14 @@ sfvmk_detachDevice(vmk_Device dev)
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED) {
-    sfvmk_proxyAuthFini(pAdapter);
+  /*
+   * Invoke sfvmk_proxyAuthFini unconditionally as proxy state
+   * is allocated on the primary adapter and detach is invoked
+   * on the primary adapter first.
+   */
+  sfvmk_proxyAuthFini(pAdapter);
 
+  if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED) {
     status = sfvmk_evbSwitchFini(pAdapter);
     if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchFini failed status: %s",

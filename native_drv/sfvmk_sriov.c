@@ -1285,9 +1285,19 @@ sfvmk_sriovGetVfStats(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
    * up to 10ms for it to finish (typically takes <500us)
    */
   for (count = 0; count < 10; ++count) {
+    sfvmk_MutexLock(pAdapter->lock);
+    if (pAdapter->port.state != SFVMK_PORT_STATE_STARTED) {
+      /* Exit gracefully if port state is down */
+      sfvmk_MutexUnlock(pAdapter->lock);
+      status = VMK_NOT_READY;
+      goto free_stats_memory;
+    }
+
     /* Try to update the cached counters */
     status = efx_mac_stats_update(pAdapter->pNic, pStats,
                                   vfStats, NULL);
+    sfvmk_MutexUnlock(pAdapter->lock);
+
     vmk_CPUMemFenceRead();
 
     if (status == VMK_OK)

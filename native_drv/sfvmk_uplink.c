@@ -29,8 +29,19 @@
 /* Default mtu size*/
 #define SFVMK_DEFAULT_MTU 1500
 
-/* Number of supported offline diagnostics (PHY,MEM & REG) test */
-#define SFVMK_SELF_TEST_COUNT       3
+/* This is a workaround to take care of bug 84849. Enabling only phy test. */
+#ifdef SFVMK_WORKAROUND_84849
+  /* Number of supported offline diagnostics (PHY) test */
+  #define SFVMK_SELF_TEST_COUNT       1
+  #define SFVMK_SELFTEST_ALL          SFVMK_SELFTEST_PHY
+#else
+  /* Number of supported offline diagnostics (PHY,MEM & REG) test */
+  #define SFVMK_SELF_TEST_COUNT       3
+  #define SFVMK_SELFTEST_ALL          (SFVMK_SELFTEST_PHY | \
+                                       SFVMK_SELFTEST_REG | \
+                                       SFVMK_SELFTEST_MEM)
+#endif
+
 #define SFVMK_SELF_TEST_RESULT_LEN 32
 
 /* Parser can only receive the first 256 bytes of data for a packet,
@@ -45,10 +56,6 @@ typedef enum sfvmk_selfTest_e {
   SFVMK_SELFTEST_REG = 1 << 1,
   SFVMK_SELFTEST_MEM = 1 << 2
 } sfvmk_selfTest_t;
-
-#define SFVMK_SELFTEST_ALL (SFVMK_SELFTEST_PHY | \
-                            SFVMK_SELFTEST_REG | \
-                            SFVMK_SELFTEST_MEM)
 
 /* Wait time for NIC to come up with full functional mode on Reset */
 #define SFVMK_STARTIO_ON_RESET_TIME_OUT_USEC    (100 * VMK_USEC_PER_MSEC)
@@ -5198,6 +5205,7 @@ static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
   if (result == EFX_BIST_RESULT_PASSED)
     testPass |= SFVMK_SELFTEST_PHY;
 
+#ifndef SFVMK_WORKAROUND_84849
   /* Enter bist offline mode. This is a fw mode which puts the NIC
    * into a state where memory BIST tests can be run
    * A reboot is required to exit this mode. */
@@ -5255,6 +5263,7 @@ static VMK_ReturnStatus sfvmk_selfTestRun(vmk_AddrCookie cookie,
 
     status = VMK_OK;
   }
+#endif
 
   /* Callback fails if none of the test could be executed
    * Result is pass if all tests are passed */

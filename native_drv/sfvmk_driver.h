@@ -30,6 +30,12 @@
 #include "sfvmk_mgmt_interface.h"
 #include "efx.h"
 
+/* Enabling workarounds */
+/* This is a workaround to take care of bug 84849. Diagnostic in offline
+ * mode has an issue which cause crash. This workaround disable offline test.
+ */
+#define SFVMK_WORKAROUND_84849
+
 /* Default number of descriptors required for RXQs */
 #define SFVMK_NUM_RXQ_DESC 512
 

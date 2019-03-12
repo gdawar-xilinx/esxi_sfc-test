@@ -542,6 +542,14 @@ typedef struct sfvmk_pktOps_s {
 #ifdef SFVMK_SUPPORT_SRIOV
 #define SFVMK_MAX_VLANS              4096
 #define SFVMK_WORKAROUND_54586       1
+#if SFVMK_WORKAROUND_54586
+/*
+ * Do not request multicast privilege together with all-multicast.
+ * Just all-multicast is sufficient for multicast filter if
+ * SFVMK_WORKAROUND_54586 is enabled.
+ */
+#define SFVMK_WORKAROUND_79967	    1
+#endif
 #define SFVMK_EF10_RX_MODE_PRIVILEGE_MASK \
                                  (MC_CMD_PRIVILEGE_MASK_IN_GRP_UNICAST |\
                                   MC_CMD_PRIVILEGE_MASK_IN_GRP_MULTICAST |\

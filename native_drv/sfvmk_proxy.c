@@ -851,14 +851,13 @@ sfvmk_proxyFilterOp(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
                       "Requested rx mode:0x%x, vf rx mode: 0x%x",
                       requestedRxMode, pVf->rxMode);
 
-  /* ESXi 5.5 and 6.0 do not grant multicast but grant
-   * all-multicast. We still would like to use exact multicast
-   * filters in this case to avoid the high packet replication
-   * cost. So, request all-multicast as well.
-   */
+  /* ESXi 5.5 and 6.0 do not grant multicast but grant all-multicast */
   if (SFVMK_WORKAROUND_54586 &&
-      (requestedRxMode & VMK_VF_RXMODE_MULTICAST))
+      (requestedRxMode & VMK_VF_RXMODE_MULTICAST)) {
     requestedRxMode |= VMK_VF_RXMODE_ALLMULTI;
+    if (SFVMK_WORKAROUND_79967)
+      requestedRxMode &= ~VMK_VF_RXMODE_MULTICAST;
+  }
 
   pPpr->reqdPrivileges |=
     sfvmk_rxModeToPrivMask(requestedRxMode);

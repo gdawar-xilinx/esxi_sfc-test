@@ -57,3 +57,4 @@ imported/ef10_evb.c
 imported/efx_evb.c
 imported/ef10_proxy.c
 imported/efx_proxy.c
+imported/ef10_firmware_ids.h

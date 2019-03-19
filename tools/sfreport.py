@@ -10,6 +10,7 @@ import subprocess
 import re
 import sys
 import optparse
+import traceback
 from threading import Timer
 from collections import defaultdict
 
@@ -1580,40 +1581,143 @@ if __name__ == "__main__":
                OUT_FILE.write('<a href="#CIM Logs">-> CIM Logs</a><br>')
             OUT_FILE.write('<a href="#PCI Configuration">-> PCI Configuration\
                             </a><br>')
-
-        system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        sw_versions(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
+        try:
+            system_summary(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: system_summary failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            sw_versions(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                     SF_VER, CLI_VIB)
+        except:
+            OUT_FILE.write("WARNING: sw_versions failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
         if CLI_VIB:
-            vpd_information(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
-            get_sensor_info(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
-        driver_binding(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
+            try:
+                vpd_information(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            except:
+                OUT_FILE.write("WARNING: vpd_information failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                get_sensor_info(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            except:
+                OUT_FILE.write("WARNING: get_sensor_info failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+        try:
+            driver_binding(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: driver_binding failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            sfvmk_parameter_info(OUT_FILE, SERVER_NAME, SFVMK_ADAPTERS, CURRENT_MODE,
                              CLI_VIB)
-        ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE, CLI_VIB)
-        network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
-        sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
-        file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        lacp_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        get_geneve_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        get_vxlan_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
-        interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: sfvmk_parameter_info failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            ethernet_settings(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE, CLI_VIB)
+        except:
+            OUT_FILE.write("WARNING: ethernet_settings failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            network_configuration(OUT_FILE, SERVER_NAME, CURRENT_MODE, ESX_VER)
+        except:
+            OUT_FILE.write("WARNING: network_configuration failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            sf_pci_devices(OUT_FILE, SFVMK_TLPS, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: sf_pci_devices failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            file_properties(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: file_properties failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            arp_cache(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: arp_cache failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            virtual_machine_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: virtual_machine_info failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            vswitch_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: vswitch_details failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            lacp_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: lacp_details failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            portgroup_details(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: portgroup_details failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            get_geneve_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: get_geneve_info failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            get_vxlan_info(OUT_FILE, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: get_vxlan_info failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        try:
+            interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
+        except:
+            OUT_FILE.write("WARNING: interface_statistics failed due to following reasons:<br>")
+            OUT_FILE.write("Traceback:%s"%traceback.format_exc())
         if CLI_VIB:
-            hw_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            try:
+                hw_statistics(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS)
+            except:
+                OUT_FILE.write("WARNING: hw_statistics failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
         # run esxi specific functions under this check.
         if CURRENT_MODE == "esxi":
-            net_queue_status(OUT_FILE, SFVMK_ADAPTERS)
-            sf_module_file(OUT_FILE)
-            sf_kernel_modules(OUT_FILE)
-            numa_information(OUT_FILE)
-            vmkernel_logs(OUT_FILE)
+            try:
+                net_queue_status(OUT_FILE, SFVMK_ADAPTERS)
+            except:
+                OUT_FILE.write("WARNING: net_queue_status failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                sf_module_file(OUT_FILE)
+            except:
+                OUT_FILE.write("WARNING: sf_module_file failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                sf_kernel_modules(OUT_FILE)
+            except:
+                OUT_FILE.write("WARNING: sf_kernel_modules failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                numa_information(OUT_FILE)
+            except:
+                OUT_FILE.write("WARNING: numa_information failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                vmkernel_logs(OUT_FILE)
+            except:
+                OUT_FILE.write("WARNING: vmkernel_logs failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
             if CIM_VIB_LIST:
-               cim_logs(OUT_FILE)
-            pci_configuration_space(OUT_FILE)
+               try:
+                   cim_logs(OUT_FILE)
+               except:
+                   OUT_FILE.write("WARNING: cim_logs failed due to following reasons:<br>")
+                   OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+            try:
+                pci_configuration_space(OUT_FILE)
+            except:
+                OUT_FILE.write("WARNING: pci_configuration_space failed due to following reasons:<br>")
+                OUT_FILE.write("Traceback:%s" % traceback.format_exc())
         print('Generated output file: '+HTML_FILE)
     else:
         print("No SolarFlare Adapters were found")

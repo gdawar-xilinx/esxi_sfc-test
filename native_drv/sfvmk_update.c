@@ -67,6 +67,10 @@ static VMK_ReturnStatus sfvmk_getImageType(sfvmk_imageReflash_t type, efx_nvram_
       *pNvramType = EFX_NVRAM_MUM_FIRMWARE;
       break;
 
+    case REFLASH_TARGET_BUNDLE:
+      *pNvramType = EFX_NVRAM_BUNDLE;
+      break;
+
     default:
       SFVMK_ERROR("Unsupported Firmware : %d", type);
       status = VMK_NOT_SUPPORTED;
@@ -188,6 +192,12 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
       pUpdateBuffer = pImgBuffer + sizeof(efx_image_header_t);
       break;
 
+    case EFX_IMAGE_FORMAT_SIGNED_PACKAGE:
+      pImgHeader = imageInfo.eii_headerp;
+      pUpdateBuffer = imageInfo.eii_imagep;
+      updateSize = imageInfo.eii_image_size;
+      break;
+
     default:
       SFVMK_ADAPTER_ERROR(pAdapter, "Image type not identified");
       goto fail1;
@@ -263,7 +273,9 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     goto fail3;
   }
 
-  if ((type == EFX_NVRAM_MC_FIRMWARE) || (type == EFX_NVRAM_MUM_FIRMWARE)) {
+  if ((type == EFX_NVRAM_MC_FIRMWARE) ||
+      (type == EFX_NVRAM_MUM_FIRMWARE) ||
+      (type == EFX_NVRAM_BUNDLE)) {
     status = efx_mcdi_reboot(pNic);
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "MC Reboot Failed with err %s",

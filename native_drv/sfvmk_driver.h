@@ -1147,6 +1147,7 @@ typedef enum sfvmk_imageReflash_e {
   REFLASH_TARGET_CPLD = 10,
   REFLASH_TARGET_MUMFW = 11,
   REFLASH_TARGET_UEFIROM = 12,
+  REFLASH_TARGET_BUNDLE = 13,
 } sfvmk_imageReflash_t;
 
 VMK_ReturnStatus

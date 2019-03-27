@@ -270,11 +270,12 @@ typedef struct sfvmk_linkSpeed_s {
 } __attribute__((__packed__)) sfvmk_linkSpeed_t;
 
 /* Types of different versions */
-#define SFVMK_GET_DRV_VERSION  0x00000001
-#define SFVMK_GET_FW_VERSION   0x00000002
-#define SFVMK_GET_ROM_VERSION  0x00000004
-#define SFVMK_GET_UEFI_VERSION 0x00000008
-#define SFVMK_GET_SUC_VERSION  0x00000010
+#define SFVMK_GET_DRV_VERSION     0x00000001
+#define SFVMK_GET_FW_VERSION      0x00000002
+#define SFVMK_GET_ROM_VERSION     0x00000004
+#define SFVMK_GET_UEFI_VERSION    0x00000008
+#define SFVMK_GET_SUC_VERSION     0x00000010
+#define SFVMK_GET_BUNDLE_VERSION  0x00000020
 
 /*! \brief struct sfvmk_versionInfo_s Retrieve various
  **        Driver/FW version info
@@ -474,6 +475,8 @@ typedef enum sfvmk_nvramType_e {
   SFVMK_NVRAM_UEFIROM,
   SFVMK_NVRAM_DYNAMIC_CFG,
   SFVMK_NVRAM_MUM,
+  SFVMK_NVRAM_BUNDLE,
+  SFVMK_NVRAM_BUNDLE_METADATA,
   SFVMK_NVRAM_INVALID,
   SFVMK_NVRAM_NTYPE
 } sfvmk_nvramType_t;

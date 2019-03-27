@@ -944,7 +944,7 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
   vmk_uint8         *pNvramBuf = NULL;
   efx_nic_t         *pNic = NULL;
   efx_nvram_type_t  type;
-  size_t            partSize = 0;
+  efx_nvram_info_t  nvInfo;
   VMK_ReturnStatus  status = VMK_FAILURE;
 
   vmk_SemaLock(&sfvmk_modInfo.lock);
@@ -977,6 +977,20 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
 
   pNic = pAdapter->pNic;
   type = nvramTypes[pCmd->type];
+  if ((type == EFX_NVRAM_INVALID) || (type >= EFX_NVRAM_NTYPES)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid NVRAM type");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  vmk_Memset(&nvInfo, 0, sizeof(nvInfo));
+  status = efx_nvram_info(pNic, type, &nvInfo);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM get partition info failed with error %s",
+                        vmk_StatusToString(status));
+    pDevIface->status = status;
+    goto end;
+  }
 
   if (pCmd->op == SFVMK_NVRAM_OP_READ ||
       pCmd->op == SFVMK_NVRAM_OP_WRITEALL) {
@@ -986,23 +1000,26 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
       goto end;
     }
 
-    status = efx_nvram_size(pNic, type, (size_t *)&partSize);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM get partition size failed with error %s",
-                          vmk_StatusToString(status));
-      pDevIface->status = status;
-      goto end;
-    }
-
-    if (pCmd->size <= 0 || pCmd->size > partSize) {
+    if (pCmd->size == 0 || pCmd->size > nvInfo.eni_partn_size) {
       SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is invalid");
-      pDevIface->status = VMK_NO_SPACE;
+      pDevIface->status = VMK_BAD_PARAM;
       goto end;
     }
 
-    if ((pCmd->op == SFVMK_NVRAM_OP_WRITEALL) && (pCmd->size != partSize)) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "User write buffer size is invalid");
-      pDevIface->status = VMK_NO_SPACE;
+    if ((pCmd->op == SFVMK_NVRAM_OP_WRITEALL) &&
+        ((nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY) ||
+         (pCmd->size != nvInfo.eni_partn_size))) {
+      if (nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "Read-only partition,"
+                                      " write operation is not permitted");
+        pDevIface->status = VMK_READ_ONLY;
+      }
+
+      if (pCmd->size != nvInfo.eni_partn_size) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "User write buffer size is invalid");
+        pDevIface->status = VMK_BAD_PARAM;
+      }
+
       goto end;
     }
 
@@ -1026,7 +1043,7 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
 
   switch (pCmd->op) {
     case SFVMK_NVRAM_OP_SIZE:
-      status = efx_nvram_size(pNic, type, (size_t *)&pCmd->size);
+      pCmd->size = nvInfo.eni_partn_size;
       break;
 
     case SFVMK_NVRAM_OP_GET_VER:

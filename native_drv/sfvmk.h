@@ -199,6 +199,8 @@ typedef enum sfvmk_logLevel_e {
 #define SFVMK_DEBUG_FUNC_EXIT(mask,  ...)                                    \
   SFVMK_DEBUG_FUNC(mask, "Exiting ", __VA_ARGS__)
 
+#define SFVMK_MAX(a, b) (a > b ? a : b)
+
 /* Mem Allocation */
 static inline void *
 sfvmk_MemAlloc(vmk_uint32 size)

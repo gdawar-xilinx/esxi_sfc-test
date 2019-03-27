@@ -61,7 +61,10 @@
 #define SFMK_MAX_HWF_PER_UPF          2
 
 #define SFVMK_MAX_ADAPTER             16
-#define SFVMK_MAX_FW_IMAGE_SIZE       1843200 /* 1.8 MB */
+#define SFVMK_MAX_FW_SIGNED_IMAGE     1843200 /* 1.8 MB */
+#define SFVMK_BUNDLE_IMAGE            2000000 /* 2 MB */
+#define SFVMK_ALLOC_FW_IMAGE_SIZE     SFVMK_MAX((SFVMK_MAX_FW_SIGNED_IMAGE * 2), \
+                                                 SFVMK_BUNDLE_IMAGE)
 
 /* Max number of NetQ supported */
 #define SFVMK_MAX_NETQ_COUNT          15

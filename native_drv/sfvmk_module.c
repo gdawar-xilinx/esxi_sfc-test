@@ -189,7 +189,7 @@ sfvmk_calcHeapSize(void)
   allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_MAX_FILTER;
 
   /* Allocaion done for both Signed and Unsigned Image type*/
-  allocDesc[index].size = SFVMK_MAX_FW_IMAGE_SIZE + SFVMK_MAX_FW_IMAGE_SIZE;
+  allocDesc[index].size = SFVMK_ALLOC_FW_IMAGE_SIZE;
   allocDesc[index].alignment = 0;
   allocDesc[index++].count = 1;
 

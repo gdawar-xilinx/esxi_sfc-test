@@ -86,6 +86,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
   vmk_uint8             *pUpdateBuffer = NULL;
   vmk_uint8             *pSignedImgBuffer = NULL;
   vmk_Bool              nvramLocked = VMK_FALSE;
+  efx_nvram_info_t      nvInfo;
   size_t                nvramSize;
   vmk_uint32            updateSize = 0;
   efx_nvram_type_t      type;
@@ -143,10 +144,20 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     goto fail1;
   }
 
-  if ((status = efx_nvram_size(pNic, type, &nvramSize)) != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Getting NVRAM Size failed with error: %s", vmk_StatusToString(status));
+  vmk_Memset(&nvInfo, 0, sizeof(nvInfo));
+  if ((status = efx_nvram_info(pNic, type, &nvInfo)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM get partition info failed with error %s",
+                        vmk_StatusToString(status));
     goto fail1;
   }
+
+  if (nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM partition is read only");
+    status = VMK_READ_ONLY;
+    goto fail1;
+  }
+
+  nvramSize = nvInfo.eni_partn_size;
 
   switch (imageInfo.eii_format) {
     case EFX_IMAGE_FORMAT_SIGNED:

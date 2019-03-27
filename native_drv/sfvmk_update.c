@@ -209,6 +209,7 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
               vmk_StatusToString(status));
     goto fail1;
   }
+
   nvramLocked = VMK_TRUE;
 
   pBuffer = vmk_HeapAlloc(sfvmk_modInfo.heapID, chunkSize);
@@ -258,13 +259,14 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     }
   }
 
+  nvramLocked = VMK_FALSE;
+
   status = efx_nvram_rw_finish(pNic, type, NULL);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM RW Finish Failed with err %s",
               vmk_StatusToString(status));
     goto fail3;
   }
-  nvramLocked = VMK_FALSE;
 
   status = efx_nvram_set_version(pNic, type, &pImgHeader->eih_code_version_a);
   if (status != VMK_OK) {

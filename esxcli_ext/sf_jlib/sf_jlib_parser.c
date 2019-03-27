@@ -58,6 +58,7 @@ static sf_fwinfo_list_t *bootrom_list = NULL;
 static sf_fwinfo_list_t *controller_list = NULL;
 static sf_fwinfo_list_t *uefirom_list = NULL;
 static sf_fwinfo_list_t *sucfw_list = NULL;
+static sf_fwinfo_list_t *bundle_list = NULL;
 
 static void process_value(json_value *value, int *rc, sf_fwinfo_list_t **fw_object, char *arg_name);
 
@@ -125,6 +126,8 @@ static void process_object(json_value* value, int *rc, sf_fwinfo_list_t **fw_obj
       process_value(value->u.object.values[x].value, rc, &uefirom_list, NULL);
     else if (!strcmp("sucfw", value->u.object.values[x].name))
       process_value(value->u.object.values[x].value, rc, &sucfw_list, NULL);
+    else if (!strcmp("bundle", value->u.object.values[x].name))
+      process_value(value->u.object.values[x].value, rc, &bundle_list, NULL);
     else if (!strcmp("files", value->u.object.values[x].name))
       process_value(value->u.object.values[x].value, rc, fw_object, NULL);
     else
@@ -290,9 +293,11 @@ int sf_jlib_init(char *filename)
     return -EINVAL;
   }
 
-  if ((controller_list == NULL) ||
-      (bootrom_list    == NULL) ||
-      (uefirom_list    == NULL)) {
+  if ((controller_list == NULL) &&
+      (bootrom_list    == NULL) &&
+      (uefirom_list    == NULL) &&
+      (sucfw_list      == NULL) &&
+      (bundle_list     == NULL)) {
     SF_JLIB_ERROR("Unable to initialize all list heads\n");
     return -EINVAL;
   }
@@ -306,6 +311,7 @@ void sf_jlib_exit(void)
   clean_list_nodes(bootrom_list);
   clean_list_nodes(uefirom_list);
   clean_list_nodes(sucfw_list);
+  clean_list_nodes(bundle_list);
 
   json_value_free(js_value);
 }
@@ -323,6 +329,8 @@ int sf_jlib_find_image(sf_image_type_t imt,
     fw_object = bootrom_list;
   else if (imt == sucfw)
     fw_object = sucfw_list;
+  else if (imt == bundle)
+    fw_object = bundle_list;
   else {
      SF_JLIB_ERROR("Invalid Firmware Type\n");
      return -EPERM;
@@ -344,6 +352,8 @@ void print_subtype(sf_image_type_t imt)
     fw_object = bootrom_list;
   else if (imt == sucfw)
     fw_object = sucfw_list;
+  else if (imt == bundle)
+    fw_object = bundle_list;
   else {
      SF_JLIB_ERROR("Invalid Firmware Type\n");
      return;
@@ -413,11 +423,13 @@ int main(int argc, char** argv)
     printf("\n");
     printf("*********** SUCFW ***********\n");
     print_list(sucfw_list);
+    printf("*********** BUNDLE ***********\n");
+    print_list(bundle_list);
   } else if (user_action == 2) {
     memset(path, 0, 64);
     memset(ver, 0, 16);
 
-    printf("Firmware image type: 0 (BootROM) 1 (Controller) 2 (UefiRom) 3 (SucFw)\n");
+    printf("Firmware image type: 0 (BootROM) 1 (Controller) 2 (UefiRom) 3 (SucFw) 4 (Bundle)\n");
     scanf("%d", &type);
     printf("Firmware image subtype, available subtype are: \n");
     print_subtype(type);

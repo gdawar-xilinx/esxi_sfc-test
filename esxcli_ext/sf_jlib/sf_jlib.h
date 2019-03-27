@@ -35,6 +35,7 @@ typedef enum sf_image_type_e {
   controller,
   uefirom,
   sucfw,
+  bundle,
   max_images
 } sf_image_type_t;
 

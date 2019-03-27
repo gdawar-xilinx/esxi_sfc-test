@@ -45,6 +45,7 @@ const char * supportedFWTypes[] = {
   "bootrom",
   "uefirom",
   "suc",
+  "bundle"
 };
 
 const char * fwTypeName[] = {
@@ -52,13 +53,15 @@ const char * fwTypeName[] = {
   "BOOTROM version:    ",
   "UEFIROM version:    ",
   "SUC version:        ",
+  "BUNDLE version:     "
 };
 
 const vmk_uint32 fwVersionGetCmdType[] = {
   SFVMK_GET_FW_VERSION,
   SFVMK_GET_ROM_VERSION,
   SFVMK_GET_UEFI_VERSION,
-  SFVMK_GET_SUC_VERSION
+  SFVMK_GET_SUC_VERSION,
+  SFVMK_GET_BUNDLE_VERSION
 };
 
 static sfvmk_nvramType_t sfvmk_getNvramType(sfvmk_firmwareType_t fwType);
@@ -84,6 +87,7 @@ sfvmk_doWaitAfterUpdate(sfvmk_firmwareType_t fwType)
 {
   if (fwType == SFVMK_FIRMWARE_MC ||
       fwType == SFVMK_FIRMWARE_SUC ||
+      fwType == SFVMK_FIRMWARE_BUNDLE ||
       fwType == SFVMK_FIRMWARE_ANY)
     return VMK_TRUE;
 
@@ -136,6 +140,10 @@ sfvmk_getNvramType(sfvmk_firmwareType_t fwType)
       type = SFVMK_NVRAM_MUM;
       break;
 
+    case SFVMK_FIRMWARE_BUNDLE:
+      type = SFVMK_NVRAM_BUNDLE;
+      break;
+
     case SFVMK_FIRMWARE_ANY:
       type = SFVMK_NVRAM_INVALID;
       break;
@@ -164,6 +172,9 @@ sfvmk_getJLIBImgType(sfvmk_firmwareType_t fwType)
       break;
     case SFVMK_FIRMWARE_SUC:
       imageType = sucfw;
+      break;
+    case SFVMK_FIRMWARE_BUNDLE:
+      imageType = bundle;
       break;
     default:
       imageType = max_images;
@@ -500,6 +511,9 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
              supportedFWTypes[i]);
       continue;
     }
+
+    if (pMsNode->readOnly & fwTypeIter)
+      continue;
 
     memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
     memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);

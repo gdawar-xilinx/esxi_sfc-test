@@ -45,11 +45,13 @@ typedef enum sfvmk_firmwareType_e {
   SFVMK_FIRMWARE_BOOTROM = (1 << 1),
   SFVMK_FIRMWARE_UEFI    = (1 << 2),
   SFVMK_FIRMWARE_SUC     = (1 << 3),
-#define SFVMK_MAX_FWTYPE_SUPPORTED     4
+  SFVMK_FIRMWARE_BUNDLE  = (1 << 4),
+#define SFVMK_MAX_FWTYPE_SUPPORTED     5
   SFVMK_FIRMWARE_ALL     = (SFVMK_FIRMWARE_MC |      \
                             SFVMK_FIRMWARE_BOOTROM | \
                             SFVMK_FIRMWARE_UEFI | \
-                            SFVMK_FIRMWARE_SUC),
+                            SFVMK_FIRMWARE_SUC | \
+                            SFVMK_FIRMWARE_BUNDLE),
   SFVMK_FIRMWARE_INVALID = 0xffff
 } sfvmk_firmwareType_t;
 

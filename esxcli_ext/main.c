@@ -263,6 +263,8 @@ main(int argc, char **argv)
           fwType = SFVMK_FIRMWARE_UEFI;
         else if (!strcmp(fwTypeName, "suc"))
           fwType = SFVMK_FIRMWARE_SUC;
+        else if (!strcmp(fwTypeName, "bundle"))
+          fwType = SFVMK_FIRMWARE_BUNDLE;
         else {
           printf("ERROR: Invalid firmware type '%s'\n", fwTypeName);
           goto end;

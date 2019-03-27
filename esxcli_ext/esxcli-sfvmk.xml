@@ -133,7 +133,7 @@
                <description>Firmware image file name. File name is mandatory with -n|--nic-name option.</description>
             </parameter>
             <parameter name="type" type="string" required="false" shortname="t">
-               <description>Firmware image type (controller/ bootrom/ uefirom/ suc). For -d|--default, it specifies the firmware image type to be updated. For -f|--file-name, firmware type is matched before update.</description>
+               <description>Firmware image type (controller/ bootrom/ uefirom/ suc/ bundle). For -d|--default, it specifies the firmware image type to be updated. For -f|--file-name, firmware type is matched before update.</description>
             </parameter>
            <parameter name="default" type="flag" required="false" shortname="d">
             <description>Update all firmware on all Solarflare NIC from a default location of Solarflare firmware family. Can also be used with -n|--nic-name option to update all firmware on a particular NIC</description>

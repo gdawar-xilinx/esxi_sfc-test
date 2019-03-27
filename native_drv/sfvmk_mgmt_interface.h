@@ -59,6 +59,7 @@
  ** SFVMK_CB_IMG_UPDATE_V2:            Perform Image Update version 2
  ** SFVMK_CB_SENSOR_INFO_GET:          Get hardware sensor information
  ** SFVMK_CB_PRIVILEGE_REQUEST:        Get/Set PCI function privileges
+ ** SFVMK_CB_NVRAM_REQUEST_V2:         NVRAM operations callback version 2
  **
  */
 typedef enum sfvmk_mgmtCbTypes_e {
@@ -79,6 +80,7 @@ typedef enum sfvmk_mgmtCbTypes_e {
   SFVMK_CB_IMG_UPDATE_V2,
   SFVMK_CB_SENSOR_INFO_GET,
   SFVMK_CB_PRIVILEGE_REQUEST,
+  SFVMK_CB_NVRAM_REQUEST_V2,
   SFVMK_CB_MAX
 } sfvmk_mgmtCbTypes_t;
 
@@ -507,6 +509,52 @@ typedef	struct sfvmk_nvramCmd_s {
   vmk_Bool          erasePart;
 } __attribute__((__packed__)) sfvmk_nvramCmd_t;
 
+/* This is an OUT flag, tells whether a partition type
+ * is read-only or not. This flag is set for all NV operations */
+#define SFVMK_NVRAM_PART_READONLY_FLAG  (1 << 0)
+
+/* This flag is an IN flag for SFVMK_NVRAM_OP_WRITEALL operation.
+ * If set, instructs the driver to erase a partition before
+ * writing contents */
+#define SFVMK_NVRAM_PART_ERASE_FLAG     (1 << 1)
+
+/*! \brief struct sfvmk_nvramCmdV2_s for performing NVRAM operations.
+ **         Added Version 2 to maintain compatibility with applications
+ **         which use sfvmk_nvramCmd_t. The Version 2 has extra flags
+ **         and reserved field for future use.
+ **
+ ** op[in]          Operation type, same as in sfvmk_nvramCmd_t
+ **
+ ** type[in]        Type of NVRAM, should be one of sfvmk_nvramType_t enum.
+ **
+ ** offset[in]      Location of NVRAM where to start read
+ **
+ ** size[in,out]    Size of buffer
+ **
+ ** subtype[out]    NVRAM subtype, part of get NVRAM version
+ **
+ ** version[in,out] Version info
+ **
+ ** data[in,out]    NVRAM data for read/write
+ **
+ ** flags[in,out]   This is used in both IN or out direction and
+ **                 tells extra information about a partition type.
+ **
+ ** reserved        Reserved for future use
+ **
+ */
+typedef	struct sfvmk_nvramCmdV2_s {
+  vmk_uint32        op;
+  sfvmk_nvramType_t type;
+  vmk_uint32        offset;
+  vmk_uint32        size;
+  vmk_uint32        subtype;
+  vmk_uint16        version[4];
+  vmk_uint64        data;
+  vmk_Bool          flags;
+  vmk_uint64        reserved;
+} __attribute__((__packed__)) sfvmk_nvramCmdV2_t;
+
 /*! \brief struct sfvmk_imgUpdate_s to update
  **       firmware image
  **
@@ -803,6 +851,10 @@ VMK_ReturnStatus sfvmk_mgmtFnPrivilegeCallback(vmk_MgmtCookies     *pCookies,
                                                sfvmk_mgmtDevInfo_t *pDevIface,
                                                sfvmk_privilege_t   *pPrivilegeInfo);
 
+VMK_ReturnStatus sfvmk_mgmtNVRAMV2Callback(vmk_MgmtCookies *pCookies,
+                                           vmk_MgmtEnvelope *pEnvelope,
+                                           sfvmk_mgmtDevInfo_t *pDevIface,
+                                           sfvmk_nvramCmdV2_t *pNvrCmdV2);
 #else /* VMKERNEL */
 /*!
  ** This section is where callback definitions, as visible to user-space, go.
@@ -826,6 +878,7 @@ VMK_ReturnStatus sfvmk_mgmtFnPrivilegeCallback(vmk_MgmtCookies     *pCookies,
 #define sfvmk_mgmtFecModeCallback NULL
 #define sfvmk_mgmtHWSensorInfoCallback NULL
 #define sfvmk_mgmtFnPrivilegeCallback NULL
+#define sfvmk_mgmtNVRAMV2Callback NULL
 #endif
 
 #endif

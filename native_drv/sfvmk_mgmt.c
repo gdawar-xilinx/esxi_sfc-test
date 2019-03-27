@@ -940,6 +940,61 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
                         sfvmk_mgmtDevInfo_t *pDevIface,
                         sfvmk_nvramCmd_t    *pCmd)
 {
+  sfvmk_nvramCmdV2_t nvInfoV2 = {0};
+
+  if (!pDevIface) {
+    SFVMK_ERROR("pDevIface: NULL pointer passed as input");
+    goto end;
+  }
+
+  if (!pCmd) {
+    SFVMK_ERROR("pCmd: NULL pointer passed as input");
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
+  }
+
+  nvInfoV2.op = pCmd->op;
+  nvInfoV2.type = pCmd->type;
+  nvInfoV2.offset = pCmd->offset;
+  nvInfoV2.size = pCmd->size;
+  vmk_Memcpy(nvInfoV2.version, pCmd->version, sizeof(pCmd->version));
+  nvInfoV2.data = pCmd->data;
+  if (pCmd->erasePart)
+    nvInfoV2.flags |= SFVMK_NVRAM_PART_ERASE_FLAG;
+
+  sfvmk_mgmtNVRAMV2Callback(pCookies, pEnvelope, pDevIface, &nvInfoV2);
+
+  pCmd->size = nvInfoV2.size;
+  pCmd->subtype = nvInfoV2.subtype;
+  vmk_Memcpy(pCmd->version, nvInfoV2.version, sizeof(pCmd->version));
+
+end:
+  return VMK_OK;
+}
+
+/*! \brief  A Mgmt callback routine to post NVRAM request version 2
+ **
+ ** \param[in]      pCookies   Pointer to cookie
+ ** \param[in]      pEnvelope  Pointer to vmk_MgmtEnvelope
+ ** \param[in,out]  pDevIface  Pointer to device interface structure
+ ** \param[in,out]  pNvCmdV2   Pointer to NVRAM command struct version 2
+ **
+ ** \return: VMK_OK  [success]
+ **     Below error values are filled in the status field of
+ **     sfvmk_mgmtDevInfo_t.
+ **     VMK_NOT_FOUND:      In case of dev not found
+ **     VMK_NOT_SUPPORTED:  Operation not supported
+ **     VMK_BAD_PARAM:      Unknown option or NULL input param
+ **     VMK_NO_MEMORY:      Memory Allocation failed
+ **     VMK_FAILURE:        Any other error
+ **
+ */
+VMK_ReturnStatus
+sfvmk_mgmtNVRAMV2Callback(vmk_MgmtCookies     *pCookies,
+                          vmk_MgmtEnvelope    *pEnvelope,
+                          sfvmk_mgmtDevInfo_t *pDevIface,
+                          sfvmk_nvramCmdV2_t  *pNvCmdV2)
+{
   sfvmk_adapter_t   *pAdapter = NULL;
   vmk_uint8         *pNvramBuf = NULL;
   efx_nic_t         *pNic = NULL;
@@ -956,13 +1011,13 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
 
   pDevIface->status = VMK_FAILURE;
 
-  if (!pCmd) {
+  if (!pNvCmdV2) {
     SFVMK_ERROR("pCmd: NULL pointer passed as input");
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
 
-  if (pCmd->type >= SFVMK_NVRAM_INVALID) {
+  if (pNvCmdV2->type >= SFVMK_NVRAM_INVALID) {
     pDevIface->status = VMK_BAD_PARAM;
     goto end;
   }
@@ -976,7 +1031,7 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
   }
 
   pNic = pAdapter->pNic;
-  type = nvramTypes[pCmd->type];
+  type = nvramTypes[pNvCmdV2->type];
   if ((type == EFX_NVRAM_INVALID) || (type >= EFX_NVRAM_NTYPES)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Invalid NVRAM type");
     pDevIface->status = VMK_BAD_PARAM;
@@ -992,30 +1047,33 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
     goto end;
   }
 
-  if (pCmd->op == SFVMK_NVRAM_OP_READ ||
-      pCmd->op == SFVMK_NVRAM_OP_WRITEALL) {
-    if (!pCmd->data) {
+  if (nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY)
+     pNvCmdV2->flags |= SFVMK_NVRAM_PART_READONLY_FLAG;
+
+  if (pNvCmdV2->op == SFVMK_NVRAM_OP_READ ||
+      pNvCmdV2->op == SFVMK_NVRAM_OP_WRITEALL) {
+    if (!pNvCmdV2->data) {
       SFVMK_ERROR("Nvram data: NULL pointer passed as input");
       pDevIface->status = VMK_BAD_PARAM;
       goto end;
     }
 
-    if (pCmd->size == 0 || pCmd->size > nvInfo.eni_partn_size) {
+    if (pNvCmdV2->size < 0 || pNvCmdV2->size > nvInfo.eni_partn_size) {
       SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is invalid");
       pDevIface->status = VMK_BAD_PARAM;
       goto end;
     }
 
-    if ((pCmd->op == SFVMK_NVRAM_OP_WRITEALL) &&
+    if ((pNvCmdV2->op == SFVMK_NVRAM_OP_WRITEALL) &&
         ((nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY) ||
-         (pCmd->size != nvInfo.eni_partn_size))) {
+         (pNvCmdV2->size != nvInfo.eni_partn_size))) {
       if (nvInfo.eni_flags & EFX_NVRAM_FLAG_READ_ONLY) {
         SFVMK_ADAPTER_ERROR(pAdapter, "Read-only partition,"
                                       " write operation is not permitted");
         pDevIface->status = VMK_READ_ONLY;
       }
 
-      if (pCmd->size != nvInfo.eni_partn_size) {
+      if (pNvCmdV2->size != nvInfo.eni_partn_size) {
         SFVMK_ADAPTER_ERROR(pAdapter, "User write buffer size is invalid");
         pDevIface->status = VMK_BAD_PARAM;
       }
@@ -1023,57 +1081,59 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
       goto end;
     }
 
-    pNvramBuf = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, pCmd->size);
+    pNvramBuf = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, pNvCmdV2->size);
     if (pNvramBuf == NULL) {
       SFVMK_ADAPTER_ERROR(pAdapter, "pNvramBuf memory allocation failed");
       pDevIface->status = VMK_NO_MEMORY;
       goto end;
     }
 
-    vmk_Memset(pNvramBuf, 0, pCmd->size);
+    vmk_Memset(pNvramBuf, 0, pNvCmdV2->size);
   }
 
   if (type == EFX_NVRAM_MC_GOLDEN &&
-      (pCmd->op == SFVMK_NVRAM_OP_ERASE ||
-       pCmd->op == SFVMK_NVRAM_OP_WRITEALL ||
-       pCmd->op == SFVMK_NVRAM_OP_SET_VER)) {
+      (pNvCmdV2->op == SFVMK_NVRAM_OP_ERASE ||
+       pNvCmdV2->op == SFVMK_NVRAM_OP_WRITEALL ||
+       pNvCmdV2->op == SFVMK_NVRAM_OP_SET_VER)) {
     pDevIface->status = VMK_NOT_SUPPORTED;
     goto freemem;
   }
 
-  switch (pCmd->op) {
+  switch (pNvCmdV2->op) {
     case SFVMK_NVRAM_OP_SIZE:
-      pCmd->size = nvInfo.eni_partn_size;
+      pNvCmdV2->size = nvInfo.eni_partn_size;
       break;
 
     case SFVMK_NVRAM_OP_GET_VER:
       status = efx_nvram_get_version(pNic, type,
-                                     &pCmd->subtype, &pCmd->version[0]);
+                                     &pNvCmdV2->subtype, &pNvCmdV2->version[0]);
       break;
 
     case SFVMK_NVRAM_OP_SET_VER:
-      status = efx_nvram_set_version(pNic, type, &pCmd->version[0]);
+      status = efx_nvram_set_version(pNic, type, &pNvCmdV2->version[0]);
       break;
 
     case SFVMK_NVRAM_OP_READ:
       if ((status = sfvmk_nvramRead(pAdapter, type, pNvramBuf,
-                                    &pCmd->size, pCmd->offset)) != VMK_OK) {
+                                    &pNvCmdV2->size, pNvCmdV2->offset)) != VMK_OK) {
         break;
       }
 
-      status = vmk_CopyToUser((vmk_VA)pCmd->data, (vmk_VA)pNvramBuf, pCmd->size);
+      status = vmk_CopyToUser((vmk_VA)pNvCmdV2->data, (vmk_VA)pNvramBuf, pNvCmdV2->size);
 
       break;
 
     case SFVMK_NVRAM_OP_WRITEALL:
       if ((status = vmk_CopyFromUser((vmk_VA)pNvramBuf,
-                                     (vmk_VA)pCmd->data,
-                                     pCmd->size)) != VMK_OK) {
+                                     (vmk_VA)pNvCmdV2->data,
+                                     pNvCmdV2->size)) != VMK_OK) {
         break;
       }
 
-      status = sfvmk_nvramWriteAll(pAdapter, type, pNvramBuf,
-                                   &pCmd->size, pCmd->erasePart);
+      status = sfvmk_nvramWriteAll(pAdapter, type,
+                                   pNvramBuf, &pNvCmdV2->size,
+                                   (pNvCmdV2->flags & SFVMK_NVRAM_PART_ERASE_FLAG) ?
+                                   VMK_TRUE : VMK_FALSE);
       break;
 
     /* TODO: Will add support for this in future */
@@ -1085,7 +1145,7 @@ sfvmk_mgmtNVRAMCallback(vmk_MgmtCookies     *pCookies,
 
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Operation = %u failed with error %s",
-                        pCmd->op, vmk_StatusToString(status));
+                        pNvCmdV2->op, vmk_StatusToString(status));
     pDevIface->status = status;
     goto freemem;
   }

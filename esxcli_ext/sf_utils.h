@@ -70,5 +70,7 @@ VMK_ReturnStatus sfvmk_postFecReq(const char *pIfaceName, sfvmk_fecMode_t *pFecM
 
 VMK_ReturnStatus sfvmk_getFWPartSubtype(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pSubtype);
 
+VMK_ReturnStatus sfvmk_getFWPartFlag(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pFlag);
+
 VMK_ReturnStatus sfvmk_readFileContent(char *pFileName, char **ppBuf, int *pFileSize, char errMsg[]);
 #endif

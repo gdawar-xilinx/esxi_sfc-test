@@ -112,14 +112,6 @@ sfvmk_getFWVersion(const char *pIfaceName, sfvmk_versionInfo_t *pVerInfo)
   if (status != VMK_OK)
     return VMK_NO_CONNECT;
 
-  if (mgmtParm.status != VMK_OK) {
-    /* Return error but ignore printing error mesasge in case of SuC firmware type */
-    if (pVerInfo->type == SFVMK_GET_SUC_VERSION) {
-      strcpy(pVerInfo->version.string, "N/A");
-      mgmtParm.status = VMK_NOT_SUPPORTED;
-    }
-  }
-
   return mgmtParm.status;
 }
 
@@ -255,13 +247,33 @@ end:
 }
 
 /*
+ * Post NVRAM request to driver.
+ */
+static VMK_ReturnStatus
+sfvmk_postNVRequest(sfvmk_mgmtDevInfo_t *pMgmtParm, sfvmk_nvramCmdV2_t *pNvram)
+{
+  VMK_ReturnStatus status;
+
+  if (!pMgmtParm || !pNvram)
+    return VMK_BAD_PARAM;
+
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_NVRAM_REQUEST_V2, pMgmtParm,
+                                      pNvram);
+  if (status != VMK_OK)
+    return VMK_NO_CONNECT;
+
+  return VMK_OK;
+}
+
+/*
  * Take NVRAM partition type as an input and return subtype.
  */
 VMK_ReturnStatus
 sfvmk_getFWPartSubtype(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pSubtype)
 {
   sfvmk_mgmtDevInfo_t mgmtParm;
-  sfvmk_nvramCmd_t nvram;
+  sfvmk_nvramCmdV2_t nvram;
   VMK_ReturnStatus status;
 
   if (!pSubtype || !pIfaceName)
@@ -274,14 +286,42 @@ sfvmk_getFWPartSubtype(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint3
 
   nvram.type = type;
   nvram.op = SFVMK_NVRAM_OP_GET_VER;
-  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
-                                      SFVMK_CB_NVRAM_REQUEST, &mgmtParm,
-                                      &nvram);
-  if (status != VMK_OK)
-    return VMK_NO_CONNECT;
+
+  if ((status = sfvmk_postNVRequest(&mgmtParm, &nvram)) != VMK_OK)
+    return status;
 
   if (mgmtParm.status == VMK_OK)
     *pSubtype = nvram.subtype;
+
+  return mgmtParm.status;
+}
+
+/*
+ * Take NVRAM partition type as an input and return flag.
+ */
+VMK_ReturnStatus
+sfvmk_getFWPartFlag(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pFlag)
+{
+  sfvmk_mgmtDevInfo_t mgmtParm;
+  sfvmk_nvramCmdV2_t nvram;
+  VMK_ReturnStatus status;
+
+  if (!pFlag || !pIfaceName)
+    return VMK_BAD_PARAM;
+
+  memset(&mgmtParm, 0, sizeof(mgmtParm));
+  strcpy(mgmtParm.deviceName, pIfaceName);
+
+  memset(&nvram, 0, sizeof(nvram));
+
+  nvram.type = type;
+  nvram.op = SFVMK_NVRAM_OP_SIZE;
+
+  if ((status = sfvmk_postNVRequest(&mgmtParm, &nvram)) != VMK_OK)
+    return status;
+
+  if ((mgmtParm.status == VMK_OK) && (nvram.size > 0))
+    *pFlag = nvram.flags;
 
   return mgmtParm.status;
 }

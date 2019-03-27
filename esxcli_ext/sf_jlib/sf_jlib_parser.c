@@ -82,10 +82,8 @@ int process_fw_list(sf_fwinfo_list_t *head,
   sf_fwinfo_list_t *last;
   int copyLen = 0;
 
-  if (head == NULL) {
-    SF_JLIB_ERROR("List head is null\n");
+  if (head == NULL)
     return -EPERM;
-  }
 
   last = head;
   while (last) {

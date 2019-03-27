@@ -40,15 +40,10 @@ typedef struct sfvmk_ifaceNode_s {
 typedef struct sfvmk_masterDevNode_s {
   struct sfvmk_masterDevNode_s *pNext;
   sfvmk_ifaceNode_t *pMsIfaceNode;
-  vmk_Name mcVer;
-  vmk_uint32 mcSubtype;
-  vmk_Bool sucSupported;
-  vmk_Name sucVer;
-  vmk_uint32 sucSubtype;
-  vmk_Name bootromVer;
-  vmk_uint32 bootromSubtype;
-  vmk_Name uefiromVer;
-  vmk_uint32 uefiromSubtype;
+  vmk_Name fwVer[SFVMK_MAX_FWTYPE_SUPPORTED];
+  vmk_uint32 boardSubtype[SFVMK_MAX_FWTYPE_SUPPORTED];
+  vmk_uint32 readOnly;
+  vmk_uint32 notSupported;
   vmk_uint8 nicModel[256];
 } sfvmk_masterDevNode_t;
 

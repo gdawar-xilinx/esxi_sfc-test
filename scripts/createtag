@@ -88,13 +88,14 @@ checkRequiredArgs() {
 
     [ "${v5_branch}" != "" ] || \
         fail "Please check -- arguments Must specify --v5_branch"
-    [ "${fwfamily}" != "" ] || \
-        fail "Please check -- arguments Must specify --fwfamily"
     if [ "${v5_tag}" == "" ]; then
         echo
         echo "*** v5 tag is not provided, continue without v5 tag ***"
         read -p "Press Ctrl+C to exit or press enter to proceed ..."
         echo "Thanks, proceeding ..."
+    else
+        [ "${fwfamily}" != "" ] || \
+           fail "Please check -- arguments Must specify --fwfamily"
     fi
 }
 

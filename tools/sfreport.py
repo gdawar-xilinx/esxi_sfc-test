@@ -16,7 +16,7 @@ from collections import defaultdict
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
-SFREPORT_VERSION = "2.3.0.0004"
+SFREPORT_VERSION = "2.3.0.0006"
 
 def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """

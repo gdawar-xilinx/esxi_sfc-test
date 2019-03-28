@@ -320,7 +320,12 @@ sfvmk_getFWPartFlag(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *
   if ((status = sfvmk_postNVRequest(&mgmtParm, &nvram)) != VMK_OK)
     return status;
 
-  if ((mgmtParm.status == VMK_OK) && (nvram.size > 0))
+  /* This is get around for the JIRA ticket - EFX-16, This JIRA ticket tracks
+   * common code change to return not supported error code. The get around
+   * is valid till the bug fix tracked by this JIRA ticket. */
+  if ((mgmtParm.status != VMK_OK) || (nvram.size == 0))
+    mgmtParm.status = VMK_NOT_SUPPORTED;
+  else
     *pFlag = nvram.flags;
 
   return mgmtParm.status;

@@ -26,7 +26,7 @@
 # UWTOOL_VERSION gets appended, the total length exceeds the maximum of 35
 # characters allowed in a VIB name.
 UWTOOL = sfvmkcli
-UWTOOL_VERSION = 2.3.0.0006
+UWTOOL_VERSION = 2.3.0.0007
 
 NDDK_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKVER)
 

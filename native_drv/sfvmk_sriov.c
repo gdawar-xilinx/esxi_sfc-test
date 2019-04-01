@@ -1376,6 +1376,10 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                           "(PT) VF %u quiesce", pVfArgs->vf);
       status = sfvmk_sriovQuiesceVf(pAdapter, pVfArgs->vf);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
       break;
     }
 
@@ -1389,6 +1393,10 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           sfvmk_printMac(pVfArgs->mac, mac));
 
       status = sfvmk_sriovSetVfMac(pAdapter, pVfArgs->vf, pVfArgs->mac);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
       break;
     }
 
@@ -1406,6 +1414,11 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                                       pVfArgs->vid, pVfArgs->prio);
       else
         status = sfvmk_sriovSetVfVlan(pAdapter, pVfArgs->vf, 0, 0);
+
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
 
       break;
     }
@@ -1447,6 +1460,10 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           pVfArgs->allmulti, pVfArgs->promiscuous);
 
       status = sfvmk_sriovSetVfRxMode(pAdapter, pVfArgs->vf, rxMode);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
       break;
     }
 
@@ -1459,6 +1476,10 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           pVfArgs->vf, pVfArgs->enable ? "enable" : "disable");
 
       status = sfvmk_sriovSetVfSpoofChk(pAdapter, pVfArgs->vf, pVfArgs->enable);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
       break;
     }
 
@@ -1471,6 +1492,10 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                           pVfArgs->vf, pVfArgs->mtu);
 
       status = sfvmk_sriovSetVfMtu(pAdapter, pVfArgs->vf, pVfArgs->mtu);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
       break;
     }
 
@@ -1490,19 +1515,21 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
                                      pVfArgs->numRxQueues ?
                                      pVfArgs->rqStats : NULL);
 
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
-                          "(PT) VF %u get queue stats n_txq=%u n_rxq=%u: %s",
-                          pVfArgs->vf, pVfArgs->numTxQueues, pVfArgs->numRxQueues,
-                          vmk_StatusToString(status));
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s",
+                            op, vmk_StatusToString(status));
+      }
+      else
+        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
+                            "(PT) VF %u get queue stats n_txq=%u n_rxq=%u",
+                            pVfArgs->vf, pVfArgs->numTxQueues,
+                            pVfArgs->numRxQueues);
       break;
     }
 
     default:
       SFVMK_ADAPTER_ERROR(pAdapter, "PTOP %d unhandled", op);
   }
-
-  SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vfConfigOps PTOP: 0x%x status: %s", op,
-                      vmk_StatusToString(status));
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
   return status;

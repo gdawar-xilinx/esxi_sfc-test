@@ -1395,6 +1395,24 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 
   sfvmk_addAdapterToList(pAdapter);
+
+  /* Setup EVB switching */
+  if (pAdapter->evbState != SFVMK_EVB_STATE_STARTED) {
+    status = sfvmk_evbSwitchInit(pAdapter);
+    if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_evb_switch_init;
+    }
+
+    status = sfvmk_proxyAuthInit(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "sfvmk_proxyAuthInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_proxy_auth_init;
+    }
+  }
 #endif
 
   efx_nic_fini(pAdapter->pNic);
@@ -1406,6 +1424,9 @@ sfvmk_attachDevice(vmk_Device dev)
   goto done;
 
 #ifdef SFVMK_SUPPORT_SRIOV
+failed_proxy_auth_init:
+  sfvmk_evbSwitchFini(pAdapter);
+failed_evb_switch_init:
 failed_get_serial_number:
 #endif
 failed_create_helper:

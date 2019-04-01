@@ -660,8 +660,6 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
   vmk_SpinlockLock(pAdapter->ppTxq[qid]->lock);
 
   if (pAdapter->ppTxq[qid]->state != SFVMK_TXQ_STATE_STARTED) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ state[%d] not yet started",
-                        pAdapter->ppTxq[qid]->state);
     pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_INVALID_QUEUE_STATE]++;
     vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
     goto release_all_pkts;

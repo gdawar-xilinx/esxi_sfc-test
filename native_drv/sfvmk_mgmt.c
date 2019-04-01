@@ -1242,8 +1242,8 @@ sfvmk_mgmtHWQStatsCallback(vmk_MgmtCookies      *pCookies,
 
   if (pHwQueueStats->size < SFVMK_STATS_BUFFER_SZ) {
     SFVMK_ADAPTER_ERROR(pAdapter, "User buffer size is not sufficient");
-    pDevIface->status = VMK_NO_SPACE;
-    goto freemem;
+    pDevIface->status = VMK_BAD_PARAM;
+    goto end;
   }
 
   pStatsBuffer = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, SFVMK_STATS_BUFFER_SZ);

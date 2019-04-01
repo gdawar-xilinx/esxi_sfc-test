@@ -1664,7 +1664,7 @@ sfvmk_mgmtFnPrivilegeCallback(vmk_MgmtCookies     *pCookies,
   }
 
   numAssigned = vmk_Sscanf(pPrivilegeInfo->pciSBDF.string,
-                           "%u:%u:%u.%u", &seg, &bus, &dev, &fn);
+                           "%04x:%02x:%02x.%x", &seg, &bus, &dev, &fn);
   if (numAssigned != 4) {
     SFVMK_ERROR("Parsing input PCI address [%s] failed, parsed %u members",
                 pPrivilegeInfo->pciSBDF.string, numAssigned);

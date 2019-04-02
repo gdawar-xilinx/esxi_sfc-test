@@ -1466,7 +1466,7 @@ if __name__ == "__main__":
         SERVER_NAME = "--server " + SERVER_NAME
     GET_NIC_CMD = 'esxcli ' + SERVER_NAME + ' network nic list |grep sfvmk'
     SF_ADAPTERS = execute(GET_NIC_CMD, CURRENT_MODE)
-    if SF_ADAPTERS == 1:
+    if SF_ADAPTERS == 1 or SF_ADAPTERS == None:
         print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare "
               "NIC is NOT visible\n")
         sys.exit()

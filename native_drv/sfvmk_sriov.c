@@ -358,6 +358,7 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
 
     /* Fill in the PF details at index 0 */
     pVportConfig->evc_function = 0xffff;
+    pVportConfig->evc_vid = EFX_VF_VID_DEFAULT;
 
     /* Fill in the VF details starting at index 1 */
     for (i = 1; i <= pAdapter->numVfsEnabled; i++) {

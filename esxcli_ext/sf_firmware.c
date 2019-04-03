@@ -396,7 +396,7 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
   sfvmk_imgUpdateV2_t imgUpdateV2;
   const char *pMsPortName;
   char *pBuf;
-  vmk_uint32 fwIndex;
+  vmk_uint32 fwIndex = 0;
   int fileSize;
   VMK_ReturnStatus status = VMK_FAILURE;
 
@@ -420,8 +420,10 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
   if (status != VMK_OK)
     return status;
 
-  fwIndex = sfvmk_fwtypeToIndex(fwType);
-  assert(fwIndex < SFVMK_MAX_FWTYPE_SUPPORTED);
+  if (fwType != SFVMK_FIRMWARE_ANY) {
+    fwIndex = sfvmk_fwtypeToIndex(fwType);
+    assert(fwIndex < SFVMK_MAX_FWTYPE_SUPPORTED);
+  }
 
   if (pFwVerMatchStr) {
     if (sfvmk_matchFWVersion(pMsNode, pFwVerMatchStr, fwIndex) == VMK_TRUE) {
@@ -562,9 +564,12 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
   pMsNode = pfwCtx->pMasters;
 
   if (pfwCtx->fwFileSet) {
-    if ((fwIndex = sfvmk_fwtypeToIndex(pfwCtx->fwType)) == SFVMK_MAX_FWTYPE_SUPPORTED) {
-      sprintf(pfwCtx->errorMsg, "Invalid firmware index");
-      return VMK_BAD_PARAM;
+    if (pfwCtx->fwType != SFVMK_FIRMWARE_ANY) {
+      fwIndex = sfvmk_fwtypeToIndex(pfwCtx->fwType);
+      if (fwIndex == SFVMK_MAX_FWTYPE_SUPPORTED) {
+        sprintf(pfwCtx->errorMsg, "Invalid firmware index");
+        return VMK_BAD_PARAM;
+      }
     }
 
     if (pMsNode->notSupported & pfwCtx->fwType) {

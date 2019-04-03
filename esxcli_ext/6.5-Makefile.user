@@ -76,7 +76,7 @@ DEV_TARGET_CONTEXT = uw
 # This controls which class of compiler options to use.  Allowed
 # values are "beta" (for debugging) and "release".  The default is
 # the type of the ESX build that produced this devkit.
-DEV_OBJDIR = beta
+DEV_OBJDIR = release
 
 ################
 # Typically, it won't be necessary to modify this setting, but the

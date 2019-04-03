@@ -41,6 +41,7 @@ typedef enum sf_image_type_e {
 
 int sf_jlib_find_image(sf_image_type_t imt, int subtype,
                        char *ver, char *path);
+int sf_jlib_get_fwfamily_ver(int fw_subtype, char *fw_family);
 int sf_jlib_init(char *filename);
 void sf_jlib_exit(void);
 

@@ -50,6 +50,7 @@ typedef struct sf_fwinfo_list_s {
   char fw_version[SF_JLIB_MAX_VER_STRING_LENGTH];
   char fw_filename[SF_JLIB_MAX_VER_STRING_LENGTH];
   char fw_filepath[SF_JLIB_MAX_FILE_PATH_LENGTH];
+  char fw_family[SF_JLIB_MAX_VER_STRING_LENGTH];
 } sf_fwinfo_list_t;
 
 static json_value *js_value = NULL;
@@ -78,7 +79,8 @@ static void clean_list_nodes(sf_fwinfo_list_t *head)
 }
 
 int process_fw_list(sf_fwinfo_list_t *head,
-                    int fw_subtype, char *ver, char *path)
+                    int fw_subtype, char *ver,
+                    char *fw_family, char *path)
 {
   sf_fwinfo_list_t *last;
   int copyLen = 0;
@@ -86,16 +88,35 @@ int process_fw_list(sf_fwinfo_list_t *head,
   if (head == NULL)
     return -EPERM;
 
+  if ((ver == NULL) && (fw_family == NULL) && (path == NULL))
+    return 0;
+
   last = head;
   while (last) {
     if (last->fw_subtype == fw_subtype) {
-      copyLen = strcspn(last->fw_version, "-");
+      if (ver) {
+        /* Drop '-internal' from a firmware version string */
+        copyLen = strcspn(last->fw_version, "-");
 
-      if (copyLen == 0)
-        copyLen = SF_JLIB_MAX_VER_STRING_LENGTH;
+        if (copyLen == 0)
+          copyLen = (SF_JLIB_MAX_VER_STRING_LENGTH - 1);
 
-      strncpy(ver, &last->fw_version[1], (copyLen - 1));
-      strcpy(path, last->fw_filepath);
+        strncpy(ver, &last->fw_version[1], copyLen);
+      }
+
+      if (path)
+        strcpy(path, last->fw_filepath);
+
+      if (fw_family) {
+        /* Drop '-internal' from a firmware family string */
+        copyLen = strcspn(last->fw_family, "-");
+
+        if (copyLen == 0)
+          copyLen = (SF_JLIB_MAX_VER_STRING_LENGTH - 1);
+
+        strncpy(fw_family, last->fw_family, copyLen);
+      }
+
       return 0;
     }
 
@@ -214,6 +235,8 @@ static void process_value(json_value* value, int *rc, sf_fwinfo_list_t **fw_obje
         strcpy(node->fw_filename, value->u.string.ptr);
       else if (!strcmp(arg_name, "path"))
         strcpy(node->fw_filepath, value->u.string.ptr);
+      else if (!strcmp(arg_name, "firmwareFamily"))
+        strcpy(node->fw_family, value->u.string.ptr);
       else {
         /* Unrecognised option */
         SF_JLIB_ERROR("Unrecognized option\n");
@@ -336,7 +359,15 @@ int sf_jlib_find_image(sf_image_type_t imt,
      return -EPERM;
   }
 
-  return process_fw_list(fw_object, fw_subtype, ver, path);
+  return process_fw_list(fw_object, fw_subtype, ver, NULL, path);
+}
+
+int sf_jlib_get_fwfamily_ver(int fw_subtype, char *fw_family)
+{
+  if (!fw_family)
+    return -EINVAL;
+
+  return process_fw_list(controller_list, fw_subtype, NULL, fw_family, NULL);
 }
 
 #ifdef SF_JLIB_TEST_ALONE

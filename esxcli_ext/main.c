@@ -569,6 +569,12 @@ sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm)
                                SFVMK_VPD_FAMILY_KEYWORD_VD)) != VMK_OK)
     goto end;
 
+  printf("[V0] Version: ");
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName,
+                               SFVMK_VPD_READONLY_TAG,
+                               SFVMK_VPD_FAMILY_KEYWORD_V0)) != VMK_OK)
+    goto end;
+
 end:
   if (status != VMK_OK)
     printf("ERROR: VPD get failed with error 0x%x\n", status);

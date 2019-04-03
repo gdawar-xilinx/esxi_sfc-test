@@ -45,6 +45,7 @@ typedef struct sfvmk_masterDevNode_s {
   vmk_uint32 readOnly;
   vmk_uint32 notSupported;
   vmk_uint8 nicModel[256];
+  vmk_Bool vpdUpdateNeeded;
 } sfvmk_masterDevNode_t;
 
 typedef struct sfvmk_firmwareCtx_s {

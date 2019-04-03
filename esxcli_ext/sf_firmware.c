@@ -388,6 +388,77 @@ sfvmk_printFwInfo(sfvmk_firmwareCtx_t *pfwCtx)
 }
 
 static VMK_ReturnStatus
+sfvmk_updateVPDTag(sfvmk_masterDevNode_t *pMsNode)
+{
+  vmk_Name *pIfaceName;
+  char verString[SF_JLIB_MAX_VER_STRING_LENGTH];
+  vmk_uint8 vpdData[SFVMK_VPD_MAX_PAYLOAD];
+  vmk_uint32 fwIndex = SFVMK_MAX_FWTYPE_SUPPORTED;
+  vmk_uint32 vpdWriteableLen = 0;
+  vmk_uint32 i;
+  int subtype;
+  int ret;
+  VMK_ReturnStatus status;
+
+  assert(pMsNode);
+  assert(pMsNode->pMsIfaceNode);
+
+  memset(verString, 0, SF_JLIB_MAX_VER_STRING_LENGTH);
+  memset(vpdData, 0, SFVMK_VPD_MAX_PAYLOAD);
+
+  /* Clear VPD if bundle partition is supported */
+  if (!(pMsNode->notSupported & SFVMK_FIRMWARE_BUNDLE)) {
+    /* Setting the maximum length to 255. This is get around
+     * till Bug86414 get fixed. */
+    vpdWriteableLen = SFVMK_VPD_MAX_PAYLOAD - 1;
+  } else {
+    fwIndex = sfvmk_fwtypeToIndex(SFVMK_FIRMWARE_MC);
+    assert(fwIndex < SFVMK_MAX_FWTYPE_SUPPORTED);
+
+    subtype = sfvmk_getImgSubtype(pMsNode, fwIndex);
+
+    if ((ret = sf_jlib_get_fwfamily_ver(subtype, verString)) < 0)
+      return VMK_FAILURE;
+
+    vpdWriteableLen = strlen(verString);
+
+    /* Remove 'v' or 'V' prefix from the version string */
+    if (verString[0] == 'v' || verString[0] == 'V')
+      memcpy(vpdData, &verString[1], (vpdWriteableLen - 1));
+    else
+      memcpy(vpdData, verString, vpdWriteableLen);
+
+    i = vpdWriteableLen = strlen(vpdData);
+    while (vpdData[i] != '.') {
+      vpdData[i] = '\0';
+      i--;
+    }
+
+    vpdData[i] = '\0';
+    vpdWriteableLen = i;
+  }
+
+  pIfaceName = &pMsNode->pMsIfaceNode->ifaceName;
+
+  /* Update VPD Keyword VD, V0 */
+  status = sfvmk_setVpdByTag(pIfaceName->string, vpdData,
+                             vpdWriteableLen,
+                             SFVMK_VPD_READONLY_TAG,
+                             SFVMK_VPD_FAMILY_KEYWORD_V0);
+  if (status != VMK_OK)
+    return status;
+
+  status = sfvmk_setVpdByTag(pIfaceName->string, vpdData,
+                             vpdWriteableLen,
+                             SFVMK_VPD_READONLY_TAG,
+                             SFVMK_VPD_FAMILY_KEYWORD_VD);
+  if (status != VMK_OK)
+    return status;
+
+  return VMK_OK;
+}
+
+static VMK_ReturnStatus
 sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
                      sfvmk_firmwareType_t fwType,
                      char *pFileName, char *pFwVerMatchStr, char errMsg[])
@@ -455,6 +526,11 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
     else
       sprintf(errMsg, "Firmware update failed, error 0x%x", status);
   } else {
+    /* At least one image updated is need to set
+     * this flag true. This is needed for vpd update */
+    if (!pMsNode->vpdUpdateNeeded)
+      pMsNode->vpdUpdateNeeded = VMK_TRUE;
+
     if (sfvmk_doWaitAfterUpdate(fwType) == VMK_TRUE)
       sleep(30);
 
@@ -498,6 +574,7 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
   int subtype;
   VMK_ReturnStatus status = VMK_FAILURE;
   int i, ret;
+  vmk_Bool updatePassed = VMK_TRUE;
 
   assert(pMsNode);
 
@@ -542,7 +619,16 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
        * for next NV partition. */
       printf("ERROR: %s\n", errMsg);
       memset(errMsg, 0, SFVMK_MAX_FW_RDWR_ERR_LENGTH);
+      if (updatePassed)
+        updatePassed = VMK_FALSE;
     }
+  }
+
+  if (pMsNode->vpdUpdateNeeded &&
+      updatePassed             &&
+      (fwType == SFVMK_FIRMWARE_ALL)) {
+    if ((status = sfvmk_updateVPDTag(pMsNode)) != VMK_OK)
+      printf("ERROR: VPD update failed, error 0x%x\n", status);
   }
 
   return VMK_OK;

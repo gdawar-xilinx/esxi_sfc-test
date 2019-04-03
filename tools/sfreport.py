@@ -1017,7 +1017,7 @@ def get_geneve_info(output_file, server, mode):
     output_file.write('<h1 id="GENEVE"style="font-size:26px;">\
                           GENEVE: <br></H1>')
     # get GENEVE vib info:
-    geneve_vib = execute("esxcli " + server + " software vib list |grep nsx")
+    geneve_vib = execute("esxcli " + server + " software vib list |grep nsx-aggservice")
     if geneve_vib == 1:
         return 0
     elif geneve_vib == None:
@@ -1078,7 +1078,7 @@ def get_vxlan_info(output_file, server, mode):
     # Verify if any vxlan vibs are installed, only then proceed
     vxlan_vib = execute("esxcli " + server + " software vib list "
                         "|grep -E '(esx-vxlan|nsxv)'")
-    if vxlan_vib == 1:
+    If vxlan_vib == 1 or vxlan_vib == None:
         output_file.write("INFO: No VXLAN VIBs installed")
         return 0
     output_file.write('<h1"style="font-size:18px;"><b>VXLAN VIBs:</b><br></H1>')

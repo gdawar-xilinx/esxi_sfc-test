@@ -14,6 +14,9 @@ import traceback
 from threading import Timer
 from collections import defaultdict
 
+global TXT_FILE
+global out
+
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
 SFREPORT_VERSION = "2.3.0.0010"
@@ -31,7 +34,10 @@ def terminate(process, timeout, cmd, mode):
 
 def execute(cmd, mode='esxi'):
     """ function to execute the command on the cmdline using subprocess """
+    global TXT_FILE, out
     timeout_sec = 5
+    if not "date" in cmd:
+       TXT_FILE.write("\ncmd:"+cmd)
     process = subprocess.Popen((cmd), stdout=subprocess.PIPE, \
                                stderr=subprocess.PIPE,\
                                shell=True)
@@ -44,9 +50,13 @@ def execute(cmd, mode='esxi'):
     if err:
         print("ERROR:", err)
         print("Error while running command:", cmd)
+        if not "date" in cmd:
+          TXT_FILE.write('\n' + err)
         return 1
     elif out:
         out = (out).decode('ascii')
+        if not "date" in cmd:
+           TXT_FILE.write('\n' + out)
         return out
 
 def file_header(output_file, time, mode, sf_ver):
@@ -1435,6 +1445,12 @@ if __name__ == "__main__":
     CLI_VER = None
     SF_VER = {}
     CLI_VIB = False
+    CURRENT_TIME = (execute('date +"%Y-%m-%d-%H-%M-%S"'))
+    if CURRENT_TIME == 1:
+        print("Error: Couldn't retrieve current time on the system")
+        sys.exit()
+    TXT = "sfout_" + CURRENT_TIME.strip('\n') + ".txt"
+    TXT_FILE = open(TXT, 'w')
     OS_TYPE = execute("uname -o", CURRENT_MODE)
     if OS_TYPE == 1:
         print ("Error: Couldn't retrieve OS version")
@@ -1527,10 +1543,7 @@ if __name__ == "__main__":
         print("Solarflare Adapters detected..")
         print("Please be patient.\n"
               "Solarflare system report generation is in progress....")
-        CURRENT_TIME = (execute('date +"%Y-%m-%d-%H-%M-%S"'))
-        if CURRENT_TIME == 1:
-            print("Error: Couldn't retrieve current time on the system")
-            sys.exit()
+
         HTML_FILE = 'sfreport-' + CURRENT_TIME.strip('\n') + '.html'
         OUT_FILE = open(HTML_FILE, 'w')
         # Call the feature specific funtions.
@@ -1718,7 +1731,14 @@ if __name__ == "__main__":
             except:
                 OUT_FILE.write("WARNING: pci_configuration_space failed due to following reasons:<br>")
                 OUT_FILE.write("Traceback:%s" % traceback.format_exc())
-        print('Generated output file: '+HTML_FILE)
+        tarball = "sfreport_" + CURRENT_TIME.strip('\n') + ".tgz"
+        tar_cmd = "tar cvf %s %s %s " %(tarball,HTML_FILE, TXT)
+        try:
+            tar_out = execute(tar_cmd, CURRENT_MODE)
+            print('Generated output file: '+tarball)
+        except e:
+            print("WARNING! Unable to create tarball")
+            print("Please share following files:%s & %s" %(HTML_FILE, TXT))
     else:
         print("No SolarFlare Adapters were found")
         sys.exit()

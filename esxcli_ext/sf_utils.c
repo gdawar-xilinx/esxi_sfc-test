@@ -64,6 +64,41 @@ sfvmk_getVpdByTag(const char *pIfaceName, sfvmk_vpdInfo_t *pVpdInfo,
 }
 
 /*
+ * Write VPD information based on the VPD tag and keyword.
+ */
+VMK_ReturnStatus
+sfvmk_setVpdByTag(const char *pIfaceName,
+                 vmk_uint8 vpdData[], vmk_uint8 vpdDataLen,
+                 vmk_uint8 tag, vmk_uint16 keyword)
+{
+  sfvmk_mgmtDevInfo_t mgmtParm;
+  sfvmk_vpdInfo_t vpdInfo;
+  int status;
+
+  if (!pIfaceName)
+    return VMK_BAD_PARAM;
+
+  if ((vpdDataLen == 0) || (vpdDataLen > SFVMK_VPD_MAX_PAYLOAD))
+    return VMK_BAD_PARAM;
+
+  memset(&mgmtParm, 0, sizeof(mgmtParm));
+  strcpy(mgmtParm.deviceName, pIfaceName);
+
+  memset(&vpdInfo, 0, sizeof(vpdInfo));
+  vpdInfo.vpdOp = SFVMK_MGMT_DEV_OPS_SET;
+  vpdInfo.vpdTag = tag;
+  vpdInfo.vpdKeyword = keyword;
+  vpdInfo.vpdLen = vpdDataLen;
+  memcpy(vpdInfo.vpdPayload, vpdData, vpdDataLen);
+  status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
+                                      SFVMK_CB_VPD_REQUEST, &mgmtParm, &vpdInfo);
+  if (status != VMK_OK)
+    return VMK_NO_CONNECT;
+
+  return mgmtParm.status;
+}
+
+/*
  * Get PCI address of a vmnic.
  */
 VMK_ReturnStatus

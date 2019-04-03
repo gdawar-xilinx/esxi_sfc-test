@@ -85,4 +85,7 @@ VMK_ReturnStatus sfvmk_getFWPartSubtype(const char *pIfaceName, sfvmk_nvramType_
 VMK_ReturnStatus sfvmk_getFWPartFlag(const char *pIfaceName, sfvmk_nvramType_t type, vmk_uint32 *pFlag);
 
 VMK_ReturnStatus sfvmk_readFileContent(char *pFileName, char **ppBuf, int *pFileSize, char errMsg[]);
+
+VMK_ReturnStatus sfvmk_setVpdByTag(const char *pIfaceName, vmk_uint8 vpdData[],
+                                   vmk_uint8 vpdDataLen, vmk_uint8 tag, vmk_uint16 keyword);
 #endif

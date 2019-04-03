@@ -542,23 +542,31 @@ sfvmk_vpdGet(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm)
   }
 
   printf("Product Name: ");
-  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x02, 0x0)) != VMK_OK)
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, SFVMK_VPD_ID_TAG, 0x0)) != VMK_OK)
     goto end;
 
   printf("[PN] Part number: ");
-  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('P' | 'N' << 8))) != VMK_OK)
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName,
+                               SFVMK_VPD_READONLY_TAG,
+                               SFVMK_VPD_FAMILY_KEYWORD_PN)) != VMK_OK)
     goto end;
 
   printf("[SN] Serial number: ");
-  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('S' | 'N' << 8))) != VMK_OK)
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName,
+                               SFVMK_VPD_READONLY_TAG,
+                               SFVMK_VPD_FAMILY_KEYWORD_SN)) != VMK_OK)
     goto end;
 
   printf("[EC] Engineering changes: ");
-  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('E' | 'C' << 8))) != VMK_OK)
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName,
+                               SFVMK_VPD_READONLY_TAG,
+                               SFVMK_VPD_FAMILY_KEYWORD_EC)) != VMK_OK)
     goto end;
 
   printf("[VD] Version: ");
-  if ((status = sfvmk_printVpd(pMgmtParm->deviceName, 0x10, ('V' | 'D' << 8))) != VMK_OK)
+  if ((status = sfvmk_printVpd(pMgmtParm->deviceName,
+                               SFVMK_VPD_READONLY_TAG,
+                               SFVMK_VPD_FAMILY_KEYWORD_VD)) != VMK_OK)
     goto end;
 
 end:

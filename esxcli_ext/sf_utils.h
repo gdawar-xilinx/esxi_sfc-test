@@ -39,6 +39,16 @@
 #define SFVMK_DEFAULT_FIRMWARE_LOC "/opt/sfc/"
 #define SFVMK_FIRMWARE_METADATA_FILE "firmware/FirmwareMetadata.json"
 
+#define SFVMK_VPD_ID_TAG                0x02
+#define SFVMK_VPD_READONLY_TAG          0x10
+
+#define SFVMK_VPD_KEYWORD(a, b)         ((a) | ((b) << 8))
+
+#define SFVMK_VPD_FAMILY_KEYWORD_VD     SFVMK_VPD_KEYWORD('V', 'D')
+#define SFVMK_VPD_FAMILY_KEYWORD_PN     SFVMK_VPD_KEYWORD('P', 'N')
+#define SFVMK_VPD_FAMILY_KEYWORD_SN     SFVMK_VPD_KEYWORD('S', 'N')
+#define SFVMK_VPD_FAMILY_KEYWORD_EC     SFVMK_VPD_KEYWORD('E', 'C')
+
 typedef enum sfvmk_firmwareType_e {
   SFVMK_FIRMWARE_ANY     =  0,
   SFVMK_FIRMWARE_MC      = (1 << 0),

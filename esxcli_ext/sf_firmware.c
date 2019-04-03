@@ -594,6 +594,13 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     if (pMsNode->readOnly & fwTypeIter)
       continue;
 
+    /* This condition is a workaround till read-only
+     * flag is not enabled in firmware. The bugzilla entry
+     * for this workaround is Bug 86419 */
+    if (!(pMsNode->notSupported & SFVMK_FIRMWARE_BUNDLE) &&
+         (fwTypeIter != SFVMK_FIRMWARE_BUNDLE))
+      continue;
+
     memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
     memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);
     memset(fwImgVer, 0, SF_JLIB_MAX_VER_STRING_LENGTH);

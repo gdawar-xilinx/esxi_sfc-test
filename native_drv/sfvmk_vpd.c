@@ -141,7 +141,7 @@ sfvmk_vpdSetInfo(sfvmk_adapter_t *pAdapter, vmk_uint8 *pVpdData,
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pVpdData);
 
-  if (vpdLen > (sizeof(vpd.evv_value))) {
+  if (vpdLen >= (sizeof(vpd.evv_value))) {
     SFVMK_ADAPTER_ERROR(pAdapter, "Set VPD: Invalid buffer size");
     status = VMK_FAILURE;
     goto end;

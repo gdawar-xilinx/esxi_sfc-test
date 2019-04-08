@@ -99,6 +99,9 @@ typedef enum sfvmk_mgmtCbTypes_e {
 /* Length of VPD data */
 #define SFVMK_VPD_MAX_PAYLOAD  0x100
 
+/* Maximum writeable Length of VPD data */
+#define SFVMK_VPD_WRITE_MAX_PAYLOAD  255
+
 /* Max limit of Solarflare NIC */
 #define SFVMK_MAX_INTERFACE    16
 

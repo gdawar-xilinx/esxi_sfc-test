@@ -392,7 +392,7 @@ sfvmk_updateVPDTag(sfvmk_masterDevNode_t *pMsNode)
 {
   vmk_Name *pIfaceName;
   char verString[SF_JLIB_MAX_VER_STRING_LENGTH];
-  vmk_uint8 vpdData[SFVMK_VPD_MAX_PAYLOAD];
+ vmk_uint8 vpdData[SFVMK_VPD_MAX_PAYLOAD];
   vmk_uint32 fwIndex = SFVMK_MAX_FWTYPE_SUPPORTED;
   vmk_uint32 vpdWriteableLen = 0;
   vmk_uint32 i;
@@ -408,9 +408,7 @@ sfvmk_updateVPDTag(sfvmk_masterDevNode_t *pMsNode)
 
   /* Clear VPD if bundle partition is supported */
   if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE)) {
-    /* Setting the maximum length to 255. This is get around
-     * till Bug86414 get fixed. */
-    vpdWriteableLen = SFVMK_VPD_MAX_PAYLOAD - 1;
+    vpdWriteableLen = SFVMK_VPD_WRITE_MAX_PAYLOAD;
   } else {
     fwIndex = sfvmk_fwtypeToIndex(SFVMK_FIRMWARE_MC);
     assert(fwIndex < SFVMK_MAX_FWTYPE_SUPPORTED);

@@ -78,7 +78,7 @@ sfvmk_setVpdByTag(const char *pIfaceName,
   if (!pIfaceName)
     return VMK_BAD_PARAM;
 
-  if ((vpdDataLen == 0) || (vpdDataLen > SFVMK_VPD_MAX_PAYLOAD))
+  if ((vpdDataLen == 0) || (vpdDataLen > SFVMK_VPD_WRITE_MAX_PAYLOAD))
     return VMK_BAD_PARAM;
 
   memset(&mgmtParm, 0, sizeof(mgmtParm));

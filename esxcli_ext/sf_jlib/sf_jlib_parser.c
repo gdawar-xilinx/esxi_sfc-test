@@ -99,9 +99,9 @@ int process_fw_list(sf_fwinfo_list_t *head,
         copyLen = strcspn(last->fw_version, "-");
 
         if (copyLen == 0)
-          copyLen = (SF_JLIB_MAX_VER_STRING_LENGTH - 1);
+          copyLen = SF_JLIB_MAX_VER_STRING_LENGTH;
 
-        strncpy(ver, &last->fw_version[1], copyLen);
+        strncpy(ver, &last->fw_version[1], (copyLen - 1));
       }
 
       if (path)
@@ -112,9 +112,9 @@ int process_fw_list(sf_fwinfo_list_t *head,
         copyLen = strcspn(last->fw_family, "-");
 
         if (copyLen == 0)
-          copyLen = (SF_JLIB_MAX_VER_STRING_LENGTH - 1);
+          copyLen = SF_JLIB_MAX_VER_STRING_LENGTH;
 
-        strncpy(fw_family, last->fw_family, copyLen);
+        strncpy(fw_family, last->fw_family, (copyLen - 1));
       }
 
       return 0;

@@ -663,13 +663,34 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
         sprintf(pfwCtx->errorMsg, "Invalid firmware index");
         return VMK_BAD_PARAM;
       }
-    }
 
-    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, pfwCtx->fwType)) {
-      printf("%s - %s\n%s firmware not supported on this board\n",
-             pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
-             supportedFWTypes[fwIndex]);
-      return VMK_OK;
+      if (SFVMK_PARTITION_READONLY(pMsNode, pfwCtx->fwType)) {
+        sprintf(pfwCtx->errorMsg,
+                "%s - %s\n%s firmware partition is read-only on this board",
+                pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
+                supportedFWTypes[fwIndex]);
+        return VMK_BAD_PARAM;
+      }
+
+      /* This condition is a workaround till read-only
+       * flag is not enabled in firmware. The bugzilla entry
+       * for this workaround is Bug 86419 */
+      if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE) &&
+          (pfwCtx->fwType != SFVMK_FIRMWARE_BUNDLE)) {
+        sprintf(pfwCtx->errorMsg,
+                "%s - %s\n%s firmware partition is read-only on this board",
+                pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
+                supportedFWTypes[fwIndex]);
+        return VMK_BAD_PARAM;
+      }
+
+      if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, pfwCtx->fwType)) {
+        sprintf(pfwCtx->errorMsg,
+                "%s - %s\n%s firmware not supported on this board",
+                pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
+                supportedFWTypes[fwIndex]);
+        return VMK_BAD_PARAM;
+      }
     }
 
     /* No need for sprintf here. errMsg is filled within sfvmk_updateFromFile */

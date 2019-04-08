@@ -205,7 +205,7 @@ sfvmk_matchFWVersion(sfvmk_masterDevNode_t *pMsNode,
 
   assert(fwIndex < SFVMK_MAX_FWTYPE_SUPPORTED);
 
-  if (pMsNode->notSupported & FW_INDEX_TO_TYPE(fwIndex))
+  if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, FW_INDEX_TO_TYPE(fwIndex)))
     return foundMatch;
 
   pFwVerStr = pMsNode->fwVer[fwIndex].string;
@@ -235,7 +235,7 @@ sfvmk_getAllFWSubtype(sfvmk_masterDevNode_t *pMsNode)
   for (i = 0; i < SFVMK_MAX_FWTYPE_SUPPORTED; i++) {
     fwTypeIter = FW_INDEX_TO_TYPE(i);
 
-    if (pMsNode->notSupported & fwTypeIter)
+    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, fwTypeIter))
       continue;
 
     type = sfvmk_getNvramType(fwTypeIter);
@@ -299,7 +299,7 @@ sfvmk_getAllFWVer(sfvmk_masterDevNode_t *pMsNode)
   for (i = 0; i < SFVMK_MAX_FWTYPE_SUPPORTED; i++) {
     fwTypeIter = FW_INDEX_TO_TYPE(i);
 
-    if (pMsNode->notSupported & fwTypeIter) {
+    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, fwTypeIter)) {
       strcpy(pMsNode->fwVer[i].string, "N/A");
       continue;
     }
@@ -329,7 +329,7 @@ sfvmk_printFirmwareVer(sfvmk_masterDevNode_t *pMsNode, sfvmk_firmwareType_t fwTy
   for (i = 0; i < SFVMK_MAX_FWTYPE_SUPPORTED; i++) {
     fwTypeIter = FW_INDEX_TO_TYPE(i);
 
-    if (pMsNode->notSupported & fwTypeIter)
+    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, fwTypeIter))
       continue;
 
     if (fwType & fwTypeIter) {
@@ -407,7 +407,7 @@ sfvmk_updateVPDTag(sfvmk_masterDevNode_t *pMsNode)
   memset(vpdData, 0, SFVMK_VPD_MAX_PAYLOAD);
 
   /* Clear VPD if bundle partition is supported */
-  if (!(pMsNode->notSupported & SFVMK_FIRMWARE_BUNDLE)) {
+  if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE)) {
     /* Setting the maximum length to 255. This is get around
      * till Bug86414 get fixed. */
     vpdWriteableLen = SFVMK_VPD_MAX_PAYLOAD - 1;
@@ -584,20 +584,20 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
     if (!(fwType & fwTypeIter))
       continue;
 
-    if (pMsNode->notSupported & fwTypeIter) {
+    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, fwTypeIter)) {
       printf("%s - %s\n%s firmware not supported on this board\n",
              pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
              supportedFWTypes[i]);
       continue;
     }
 
-    if (pMsNode->readOnly & fwTypeIter)
+    if (SFVMK_PARTITION_READONLY(pMsNode, fwTypeIter))
       continue;
 
     /* This condition is a workaround till read-only
      * flag is not enabled in firmware. The bugzilla entry
      * for this workaround is Bug 86419 */
-    if (!(pMsNode->notSupported & SFVMK_FIRMWARE_BUNDLE) &&
+    if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE) &&
          (fwTypeIter != SFVMK_FIRMWARE_BUNDLE))
       continue;
 
@@ -665,7 +665,7 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
       }
     }
 
-    if (pMsNode->notSupported & pfwCtx->fwType) {
+    if (SFVMK_PARTITION_NOT_SUPPORTED(pMsNode, pfwCtx->fwType)) {
       printf("%s - %s\n%s firmware not supported on this board\n",
              pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
              supportedFWTypes[fwIndex]);

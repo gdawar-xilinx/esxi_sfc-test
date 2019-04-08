@@ -62,6 +62,15 @@ typedef struct sfvmk_firmwareCtx_s {
   vmk_Bool fwFileSet;
 } sfvmk_firmwareCtx_t;
 
+/* Check if a NVRAM partition type is not supported */
+#define SFVMK_PARTITION_NOT_SUPPORTED(_O, _T)  (_O->notSupported & _T)
+
+/* Check if a NVRAM partition type is supported */
+#define SFVMK_PARTITION_SUPPORTED(_O, _T)      (!(SFVMK_PARTITION_NOT_SUPPORTED(_O, _T)))
+
+/* Check if a NVRAM partition type is read-only or not */
+#define SFVMK_PARTITION_READONLY(_O, _T)       (_O->readOnly & _T)
+
 VMK_ReturnStatus sfvmk_runFirmwareOps(int opType, sfvmk_firmwareCtx_t *pfwCtx);
 
 #endif

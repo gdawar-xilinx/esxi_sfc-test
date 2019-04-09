@@ -1188,6 +1188,15 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_nic_create;
   }
 
+  /* Register driver version with FW */
+  status = efx_nic_set_drv_version(pAdapter->pNic,
+                                   SFVMK_DRIVER_VERSION_STRING,
+                                   sizeof(SFVMK_DRIVER_VERSION_STRING) - 1);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_set_drv_version failed status: %s",
+		        vmk_StatusToString(status));
+  }
+
   /* Initialize MCDI to talk to the management controller. */
   status = sfvmk_mcdiInit(pAdapter);
   if (status != VMK_OK) {

@@ -1088,7 +1088,7 @@ def get_vxlan_info(output_file, server, mode):
     # Verify if any vxlan vibs are installed, only then proceed
     vxlan_vib = execute("esxcli " + server + " software vib list "
                         "|grep -E '(esx-vxlan|nsxv)'")
-    If vxlan_vib == 1 or vxlan_vib == None:
+    if vxlan_vib == 1 or vxlan_vib == None:
         output_file.write("INFO: No VXLAN VIBs installed")
         return 0
     output_file.write('<h1"style="font-size:18px;"><b>VXLAN VIBs:</b><br></H1>')

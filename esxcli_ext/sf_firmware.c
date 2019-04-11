@@ -600,21 +600,6 @@ sfvmk_updateFromDefault(sfvmk_masterDevNode_t *pMsNode,
       continue;
     }
 
-    /* This condition is a workaround till read-only
-     * flag is not enabled in firmware. The bugzilla entry
-     * for this workaround is Bug 86419 */
-    if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE) &&
-         (fwTypeIter != SFVMK_FIRMWARE_BUNDLE)) {
-      if (fwType != SFVMK_FIRMWARE_ALL) {
-        printf("ERROR: %s - %s\n%s"
-               " firmware partition is read-only on this board\n",
-               pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
-               supportedFWTypes[i]);
-      }
-
-      continue;
-    }
-
     memset(fwFilePath, 0, SFVMK_MAX_DIR_PATH_LENGTH);
     memset(fwFileName, 0, SFVMK_MAX_FILENAME_LENGTH);
     memset(fwImgVer, 0, SF_JLIB_MAX_VER_STRING_LENGTH);
@@ -679,18 +664,6 @@ sfvmk_updateFirmware(sfvmk_firmwareCtx_t *pfwCtx)
       }
 
       if (SFVMK_PARTITION_READONLY(pMsNode, pfwCtx->fwType)) {
-        sprintf(pfwCtx->errorMsg,
-                "%s - %s\n%s firmware partition is read-only on this board",
-                pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,
-                supportedFWTypes[fwIndex]);
-        return VMK_BAD_PARAM;
-      }
-
-      /* This condition is a workaround till read-only
-       * flag is not enabled in firmware. The bugzilla entry
-       * for this workaround is Bug 86419 */
-      if (SFVMK_PARTITION_SUPPORTED(pMsNode, SFVMK_FIRMWARE_BUNDLE) &&
-          (pfwCtx->fwType != SFVMK_FIRMWARE_BUNDLE)) {
         sprintf(pfwCtx->errorMsg,
                 "%s - %s\n%s firmware partition is read-only on this board",
                 pMsNode->pMsIfaceNode->ifaceName.string, pMsNode->nicModel,

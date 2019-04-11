@@ -180,7 +180,8 @@ def read_image_hdr(destfilepath, image_type):
     fd.close()
     return result
 
-def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename, destfilepath):
+def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename,
+                destfilepath, fw_family_ver):
     """ Function creates a json object """
     basedirlen = len(outdir_handle.base_output_dir) - 1
     temppath = destfilepath[basedirlen:]
@@ -191,6 +192,7 @@ def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename, 
                                                 temppath)
     if name.find("mcfw") > -1:
         json_handle.create_json_object(jsonobj, "mcfw")
+        jsonobj['firmwarefamily'] = fw_family_ver
     elif name.find("sucfw") > -1:
         json_handle.create_json_object(jsonobj, "sucfw")
     elif name.find("uefi") > -1:
@@ -244,7 +246,8 @@ def get_dat_file(name, ivydir, outdir, image_type, username, machinename, passwo
             fail("Fail to generate uefirom dat Image. Exiting")
     return newfilename
 
-def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinename, password):
+def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinename,
+                     password, fw_family_ver):
     """ Gets MCFW and UEFIROM files from version specified in ivy.xml
         and copies them to output directory. Also creates a Json object
         of the image metadata """
@@ -272,7 +275,8 @@ def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinenam
         destfilepath = os.path.join(outdir, newfilename)
         if json_handle.create_json_file == 1:
             create_json(name, rev, outdir_handle, json_handle,
-                                       image_type, newfilename, destfilepath)
+                                       image_type, newfilename,
+                                       destfilepath, fw_family_ver)
     except KeyError:
         fail("Fail to get Image details. Exiting")
     except OSError:
@@ -359,7 +363,8 @@ def get_bootrom_file(name, rev, outdir_handle, json_handle,
                                                "\"" + datfilename + "\"" + " },")
                     if json_handle.create_json_file == 1:
                         create_json(name, rev, outdir_handle, json_handle,
-                                                   image_type, datfilename, bootromfile)
+                                                   image_type, datfilename,
+                                                   bootromfile, None)
                     os.remove(destfilepath)
                     os.remove(destinifilepath)
                 else:
@@ -446,6 +451,7 @@ def main():
             parser.print_help()
             fail("Please provide correct value for -v ")
         ivydir = ImageOutputDir.ivy_base_dir + ivy_family_dir
+        fw_family_version = input_ivy_dir
         input_ivy_dir = ivydir + input_ivy_dir + "/"
         outdir_handle.ivy_file = input_ivy_dir + outdir_handle.ivy_file
         if os.name != 'nt':
@@ -487,7 +493,8 @@ def main():
                                              json_handle,
                                              username,
                                              machinename,
-                                             password)
+                                             password,
+                                             fw_family_version)
                     elif((dependency.get('name')).find('gpxe') > -1):
                         get_bootrom_file(dependency.get('name'),
                                          dependency.get('rev'),

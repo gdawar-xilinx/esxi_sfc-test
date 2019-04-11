@@ -35,6 +35,8 @@ _check_image.check_reflash_image.argtypes = (ctypes.c_void_p, ctypes.c_uint32,
                                                               ctypes.POINTER(ctypes.c_uint32))
 _check_image.check_reflash_image.restypes = (ctypes.c_int)
 
+rc_elements = {}
+
 class ImageOutputDir(object):
     """ Class stores the details of firmware variants """
     ivy_base_dir = "/project/ivy/solarflare/"
@@ -207,6 +209,8 @@ def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename,
         json_handle.create_json_object(jsonobj, "sucfw")
     elif name.find("uefi") > -1:
         json_handle.create_json_object(jsonobj, "uefirom")
+    elif name.find("bundle") > -1:
+        json_handle.create_json_object(jsonobj, "bundle")
     else:
         json_handle.create_json_object(jsonobj, "bootrom")
 
@@ -219,6 +223,9 @@ def get_dat_file(name, ivydir, outdir, image_type, username, machinename, passwo
         elif(name.find('sucfw') > -1):
            subtype_index = name.find('-')
            filename = "sucfw.dat"
+        elif(name.find('bundle') > -1):
+           subtype_index = name.find('-')
+           filename = "bundle.dat"
         else:
            subtype_index = name.find('_')
            filename = "SfcNicDriver.dat"
@@ -252,6 +259,8 @@ def get_dat_file(name, ivydir, outdir, image_type, username, machinename, passwo
             fail("Fail to generate mcfw dat Image. Exiting")
         elif name.find("sucfw") > -1:
             fail("Fail to generate sucfw dat Image. Exiting")
+        elif name.find("bundle") > -1:
+            fail("Fail to generate bundle dat Image. Exiting")
         else:
             fail("Fail to generate uefirom dat Image. Exiting")
     return newfilename
@@ -268,7 +277,7 @@ def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
                                                + machinename + ":" + ivy_file
                                                + ' ' + curr_dir)
         if ret_val != 0:
-            fail("Unable to get release _collection ivy_xml file. Exiting.")
+            fail("Unable to get release_collection ivy_xml file. Exiting.")
 
         ivy_xml_file = curr_dir + '/ivy.xml'
         tree = xmlparser.parse(ivy_xml_file)
@@ -277,13 +286,43 @@ def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
             if child.tag == "dependencies":
                 for dependency in child.getchildren():
                     if((dependency.get('name')).find('firmwarefamily') > -1):
-                        return dependency.get('rev')
+                        rc_elements['firmwarefamily'] = dependency.get('rev')
+                    if((dependency.get('name')).find('bundle') > -1):
+                        bundle_name = dependency.get('name')
+                        rc_elements[bundle_name] = dependency.get('rev')
         fail("Unable to determine firmware family in ivy.xml file")
 
     except KeyError:
         fail("Image variant not determined. Exiting.")
     except OSError:
         fail("OS Environment error. Exiting.")
+
+def get_bundle_file(name, rev, outdir_handle, json_handle, username,
+                          machinename, password):
+    """ Gets bundle file from version specified in rev
+        and copies them to output directory. Also creates a Json object
+        of the image metadata """
+    try:
+        ivydir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/bins/'
+        image_type = (ctypes.c_uint32 * 2)()
+        if name.find("bundle") > -1:
+            outdir = outdir_handle.bundle_dir
+            newfilename = get_dat_file(name, ivydir, outdir, image_type,
+                                                   username, machinename, password)
+            print "{ FIRMWARE_BUNDLE, " + str(image_type[1]) + ", " + \
+                                           "\"" + newfilename + "\"" + " },"
+        else:
+            fail("Not able to get the bundle dat file")
+
+        destfilepath = os.path.join(outdir, newfilename)
+        if json_handle.create_json_file == 1:
+            create_json(name, rev, outdir_handle, json_handle,
+                                       image_type, newfilename,
+                                       destfilepath, None)
+    except KeyError:
+        fail("Fail to get Image details. Exiting")
+    except OSError:
+        fail("Fail to generate bundle dat Image. Exiting")
 
 def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinename,
                      password, fw_family_ver):
@@ -495,8 +534,8 @@ def main():
         input_ivy_dir = ivydir + input_ivy_dir + "/"
         ivy_file = input_ivy_dir + outdir_handle.ivy_file
         #read release_collection ivy file
-        fw_family_version = get_fw_family_ver(curr_dir, ivy_file, password,
-                                                        username, machinename)
+        get_fw_family_ver(curr_dir, ivy_file, password, username, machinename)
+        fw_family_version = rc_elements.get('firmwarefamily')
         fwdir = ImageOutputDir.ivy_base_dir + fw_family_dir
         input_ivy_dir = fwdir + fw_family_version + "/"
         outdir_handle.ivy_file = input_ivy_dir + outdir_handle.ivy_file
@@ -549,6 +588,16 @@ def main():
                                          username,
                                          machinename,
                                          password)
+        for bundle_name, version in rc_elements.items():
+            if bundle_name.find("bundle") > -1:
+                get_bundle_file(bundle_name,
+                                version,
+                                outdir_handle,
+                                json_handle,
+                                username,
+                                machinename,
+                                password)
+
         os.remove(ivy_xml_file)
         os.remove(encodefilepath)
         if json_handle.create_json_file == 1:

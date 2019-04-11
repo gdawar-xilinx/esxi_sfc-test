@@ -246,6 +246,35 @@ def get_dat_file(name, ivydir, outdir, image_type, username, machinename, passwo
             fail("Fail to generate uefirom dat Image. Exiting")
     return newfilename
 
+def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
+    """ Get firmware family version and bundle dat files"""
+    try:
+        if os.name != 'nt':
+            ret_val = os.system('scp -q ' + username + '@' + machinename
+                                          + ":" + ivy_file + ' ' + curr_dir)
+        else:
+            password = getpass.getpass()
+            ret_val = os.system('pscp -q -pw ' + password + ' ' + username + '@'
+                                               + machinename + ":" + ivy_file
+                                               + ' ' + curr_dir)
+        if ret_val != 0:
+            fail("Unable to get release _collection ivy_xml file. Exiting.")
+
+        ivy_xml_file = curr_dir + '/ivy.xml'
+        tree = xmlparser.parse(ivy_xml_file)
+        root_node = tree.getroot()
+        for child in root_node:
+            if child.tag == "dependencies":
+                for dependency in child.getchildren():
+                    if((dependency.get('name')).find('firmwarefamily') > -1):
+                        return dependency.get('rev')
+        fail("Unable to determine firmware family in ivy.xml file")
+
+    except KeyError:
+        fail("Image variant not determined. Exiting.")
+    except OSError:
+        fail("OS Environment error. Exiting.")
+
 def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinename,
                      password, fw_family_ver):
     """ Gets MCFW and UEFIROM files from version specified in ivy.xml
@@ -408,7 +437,7 @@ def main():
         parser = optparse.OptionParser(usage=
                                        """Usage: %prog [options]
                                           output_directory
-                                          firmware_family_version
+                                          release collection version
                                           username
                                           machinename""",
                                        version="%prog 1.1")
@@ -423,7 +452,8 @@ def main():
             fail("Exiting")
         if options.v5_tag is None:
             options.v5_tag = 'default'
-        ivy_family_dir = "firmwarefamily/default/"
+        ivy_rc_dir = "fw_release_collection/default/"
+        fw_family_dir = "firmwarefamily/default/"
         encode_file_dir = '/hg/incoming/v5/rawfile/' + options.v5_tag
         encode_file_path = encode_file_dir + '/scripts/'
         encode_file_mc = 'http://source.uk.solarflarecom.com'
@@ -450,9 +480,15 @@ def main():
         else:
             parser.print_help()
             fail("Please provide correct value for -v ")
-        ivydir = ImageOutputDir.ivy_base_dir + ivy_family_dir
+        ivydir = ImageOutputDir.ivy_base_dir + ivy_rc_dir
         fw_family_version = input_ivy_dir
         input_ivy_dir = ivydir + input_ivy_dir + "/"
+        ivy_file = input_ivy_dir + outdir_handle.ivy_file
+        #read release_collection ivy file
+        fw_family_version = get_fw_family_ver(curr_dir, ivy_file, password,
+                                                        username, machinename)
+        fwdir = ImageOutputDir.ivy_base_dir + fw_family_dir
+        input_ivy_dir = fwdir + fw_family_version + "/"
         outdir_handle.ivy_file = input_ivy_dir + outdir_handle.ivy_file
         if os.name != 'nt':
             ret_val = os.system('scp -q ' + username + '@' + machinename

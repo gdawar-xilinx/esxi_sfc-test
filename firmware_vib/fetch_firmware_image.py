@@ -290,7 +290,6 @@ def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
                     if((dependency.get('name')).find('bundle') > -1):
                         bundle_name = dependency.get('name')
                         rc_elements[bundle_name] = dependency.get('rev')
-        fail("Unable to determine firmware family in ivy.xml file")
 
     except KeyError:
         fail("Image variant not determined. Exiting.")

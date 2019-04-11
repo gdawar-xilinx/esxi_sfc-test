@@ -49,6 +49,7 @@ class ImageOutputDir(object):
         self.sucfw_dir = None
         self.uefi_dir = None
         self.boot_dir = None
+        self.bundle_dir = None
 
     def check_output_dir(self):
         """ Checks if the output directory exists. Prompts user for overwriting
@@ -93,6 +94,10 @@ class ImageOutputDir(object):
             self.boot_dir = os.path.join(self.output_dir, "bootrom")
             if not os.path.exists(self.boot_dir):
                 os.mkdir(self.boot_dir)
+
+            self.bundle_dir = os.path.join(self.output_dir, "bundle")
+            if not os.path.exists(self.bundle_dir):
+                os.mkdir(self.bundle_dir)
         except OSError:
             print("Fail to create output sub directory")
             raise
@@ -106,6 +111,7 @@ class JsonParsing(object):
     bootrom_list = []
     uefirom_list = []
     sucfw_list = []
+    bundle_list = []
 
     def __init__(self, file_name, flag):
         self.create_json_file = flag
@@ -147,6 +153,8 @@ class JsonParsing(object):
             self.uefirom_list.append(json_obj)
         elif firmware_type == 'sucfw':
             self.sucfw_list.append(json_obj)
+        elif firmware_type == 'bundle':
+            self.bundle_list.append(json_obj)
 
     def writejsonfile(self):
         """ Creates the final JSON file """
@@ -155,10 +163,12 @@ class JsonParsing(object):
             boot_file_dict = {'files' : self.bootrom_list}
             uefi_file_dict = {'files' : self.uefirom_list}
             sucfw_file_dict = {'files' : self.sucfw_list}
+            bundle_file_dict = {'files' : self.bundle_list}
             json_file_dict = {'controller' : mcfw_file_dict,
                               'bootROM' : boot_file_dict,
                               'uefiROM' : uefi_file_dict,
-                              'sucfw' : sucfw_file_dict}
+                              'sucfw' : sucfw_file_dict,
+                              'bundle' : bundle_file_dict}
             with open(self.json_file_name, 'a') as filehandle:
                 json.dump(json_file_dict, filehandle)
         except:

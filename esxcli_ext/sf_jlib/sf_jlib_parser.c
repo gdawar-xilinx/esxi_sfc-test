@@ -235,7 +235,7 @@ static void process_value(json_value* value, int *rc, sf_fwinfo_list_t **fw_obje
         strcpy(node->fw_filename, value->u.string.ptr);
       else if (!strcmp(arg_name, "path"))
         strcpy(node->fw_filepath, value->u.string.ptr);
-      else if (!strcmp(arg_name, "firmwareFamily"))
+      else if (!strcmp(arg_name, "firmwarefamily"))
         strcpy(node->fw_family, value->u.string.ptr);
       else {
         /* Unrecognised option */

@@ -4592,6 +4592,14 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     goto end;
   }
 
+  status = efx_nic_set_workaround_bug26807(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "efx_nic_set_workaround_bug26807 failed with error %s",
+                        vmk_StatusToString(status));
+    goto end;
+  }
+
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);
     if (status == VMK_OK) {

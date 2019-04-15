@@ -1783,6 +1783,7 @@ sfvmk_modifyPrivilegeMask(vmk_PCIDeviceAddr *pPciAddr,
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER);
 
+  vmk_Memset(&fnInfo, 0, sizeof(fnInfo));
   vmk_Memcpy(&fnInfo.deviceAddr, pPciAddr, sizeof(vmk_PCIDeviceAddr));
   status = vmk_HashKeyIterate(sfvmk_modInfo.vmkdevHashTable,
                               sfvmk_functionLookupHashIter, &fnInfo);

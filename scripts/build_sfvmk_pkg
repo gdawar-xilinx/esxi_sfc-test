@@ -249,6 +249,12 @@ if [ $fw_status == "yes" ] ;then
          echo "Aborting!.."
          exit
       fi
+      scp root@$fw_vm:"/root/firmware_vib/firmware/FirmwareMetadata.json" $fw_pkg_dir
+      if [ $? -ne 0 ] ;then
+         echo "ERROR: SCP failed"
+         echo "Aborting!.."
+         exit
+      fi
   fi
   cmd="rm -rf /root/firmware_vib"
   ssh -l root ${fw_vm} "${cmd}"

@@ -343,7 +343,15 @@ static vmk_UplinkEncapOffloadOps sfvmk_vxlanOffloadOps = {
 static vmk_UplinkGeneveOffloadParams sfvmk_geneveOffloadOps = {
   .portUpdate      = sfvmk_genevePortUpdate,
   .maxHeaderOffset = SFVMK_GENEVE_MAX_HEADER_OFFSET,
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
+  .flags           = (VMK_UPLINK_GENEVE_FLAG_INNER_IPV4_CSO |
+                      VMK_UPLINK_GENEVE_FLAG_INNER_IPV4_TSO |
+                      VMK_UPLINK_GENEVE_FLAG_INNER_IPV6_CSO |
+                      VMK_UPLINK_GENEVE_FLAG_INNER_IPV6_TSO |
+                      VMK_UPLINK_GENEVE_FLAG_OUTER_UDP_CSO)
+#else
   .flags           = VMK_UPLINK_GENEVE_FLAG_OUTER_UDP_CSO,
+#endif
 };
 #endif
 

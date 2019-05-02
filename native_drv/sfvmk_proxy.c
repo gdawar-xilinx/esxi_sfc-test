@@ -749,8 +749,11 @@ sfvmk_proxyFilterOp(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
   vmk_uint32 op;
   vmk_uint32 portId;
   vmk_uint32 matchFields;
-  vmk_VFRXMode requestedRxMode;
+  vmk_VFRXMode requestedRxMode = 0;
   const vmk_uint8 *pMac;
+  const vmk_uint16 *pEtherType;
+  const vmk_uint32 *pIpV4;
+  const vmk_uint8 *pIpV6;
   sfvmk_outbuf_t outbuf;
   sfvmk_inbuf_t inbuf;
 
@@ -811,7 +814,8 @@ sfvmk_proxyFilterOp(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
   }
 
   switch (matchFields &
-          ((1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN) |
+          ((1 << MC_CMD_FILTER_OP_IN_MATCH_DST_IP_LBN) |
+           (1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN) |
            (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_LBN) |
            (1 << MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_UCAST_DST_LBN))) {
     case 0:
@@ -820,6 +824,53 @@ sfvmk_proxyFilterOp(sfvmk_adapter_t *pAdapter, vmk_uint32 vf,
        */
       requestedRxMode = VMK_VF_RXMODE_UNICAST;
       break;
+
+    case (1 << MC_CMD_FILTER_OP_IN_MATCH_DST_IP_LBN): {
+      pEtherType = MCDI_IN2(inbuf, vmk_uint16, FILTER_OP_IN_ETHER_TYPE);
+
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                          "VF %u etherType %x", vf, vmk_BE16ToCPU(*pEtherType));
+      switch (vmk_BE16ToCPU(*pEtherType)) {
+        case VMK_ETH_TYPE_IPV4: {
+          pIpV4 = MCDI_IN2(inbuf, vmk_uint32, FILTER_OP_IN_DST_IP);
+
+          SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                              "VF %u ipv4: "VMK_IPV4_ADDR_FMT_STR, vf,
+                              VMK_IPV4_ADDR_FMT_STR_ARGS(*pIpV4));
+          /* Check broadcast first since it matches multicast as well */
+          if (*pIpV4 == vmk_CPUToBE32(0xffffffff))
+            requestedRxMode = VMK_VF_RXMODE_BROADCAST;
+          /* Check if multicast IP address */
+          else if ((*pIpV4 & vmk_CPUToBE32(0xf0000000)) ==
+                   vmk_CPUToBE32(0xe0000000))
+            requestedRxMode = VMK_VF_RXMODE_MULTICAST;
+          else
+            requestedRxMode = VMK_VF_RXMODE_UNICAST;
+          break;
+        }
+        case VMK_ETH_TYPE_IPV6: {
+          pIpV6 = MCDI_IN2(inbuf, vmk_uint8, FILTER_OP_IN_DST_IP);
+          SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                              "VF %u ipv6: "VMK_IPV6_ADDR_FMT_STR, vf,
+                              VMK_IPV6_ADDR_FMT_STR_ARGS(pIpV6));
+
+          /* The first byte must be 0xff for IPv6 multicast address */
+          if (pIpV6[0] == 0xff)
+            requestedRxMode = VMK_VF_RXMODE_MULTICAST;
+          else
+            requestedRxMode = VMK_VF_RXMODE_UNICAST;
+          break;
+        }
+        default:
+          SFVMK_ADAPTER_ERROR(pAdapter,
+                              "VF %u unexpected EtherType=%x dest IP match",
+                               vf, vmk_BE16ToCPU(*pEtherType));
+          status = VMK_NO_PERMISSION;
+          goto done;
+      }
+      break;
+    }
+
     case (1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN):
       pMac = MCDI_IN2(inbuf, vmk_uint8, FILTER_OP_IN_DST_MAC);
 

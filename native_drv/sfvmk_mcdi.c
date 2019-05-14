@@ -489,27 +489,6 @@ sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state)
 }
 #endif
 
-/*! \brief Routine to reset the MCDI completion mode and starting new epoch
-**
-** \param[in] pAdapter pointer to sfvmk_adapter_t
-**
-** \return: void
-*/
-void
-sfvmk_mcdiReset(sfvmk_adapter_t *pAdapter)
-{
-  VMK_ASSERT_NOT_NULL(pAdapter);
-
-  /* Start a new epoch (allow fresh MCDI requests to succeed) */
-  efx_mcdi_new_epoch(pAdapter->pNic);
-
-  /* Set MCDI mode to polling */
-  sfvmk_MutexLock(pAdapter->mcdi.lock);
-  pAdapter->mcdi.mode = SFVMK_MCDI_MODE_POLL;
-  sfvmk_MutexUnlock(pAdapter->mcdi.lock);
-}
-
-
 #if EFSYS_OPT_MCDI_PROXY_AUTH_SERVER && defined(SFVMK_SUPPORT_SRIOV)
 /*! \brief Routine handling mcdi proxy event request.
 **
@@ -720,6 +699,8 @@ sfvmk_mcdiFini(sfvmk_adapter_t *pAdapter)
                          pAdapter->mcdi.mem.ioElem.length);
 
   sfvmk_mutexDestroy(pAdapter->mcdi.lock);
+
+  pAdapter->mcdi.state = SFVMK_MCDI_STATE_UNINITIALIZED;
 
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_MCDI);

@@ -1103,6 +1103,194 @@ static vmk_DriverOps sfvmk_DriverOps = {
    .forgetDevice  = sfvmk_forgetDevice,
 };
 
+/*! \brief  Function to tear down adapter state during reset or unload
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+**
+** \return: None
+*/
+void
+sfvmk_nicFini(sfvmk_adapter_t *pAdapter)
+{
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  if (pAdapter->isTunnelEncapSupported)
+    sfvmk_tunnelFini(pAdapter);
+
+  /* Deinit mon */
+  sfvmk_monFini(pAdapter);
+
+  /* Tear down common code subsystems. */
+  if (pAdapter->pNic != NULL) {
+    efx_nvram_fini(pAdapter->pNic);
+    efx_vpd_fini(pAdapter->pNic);
+    efx_nic_reset(pAdapter->pNic);
+    efx_nic_unprobe(pAdapter->pNic);
+  }
+
+  /* Tear down MCDI. */
+  sfvmk_mcdiFini(pAdapter);
+
+  /* Destroy common code context. */
+  if (pAdapter->pNic != NULL) {
+    efx_nic_destroy(pAdapter->pNic);
+    pAdapter->pNic = NULL;
+  }
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+}
+
+/*! \brief  Start the adapter as part of a reset or module load
+**
+** \param[in]  pAdapter  pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK or VMK_FAILURE
+*/
+VMK_ReturnStatus
+sfvmk_nicInit(sfvmk_adapter_t *pAdapter)
+{
+  VMK_ReturnStatus status = VMK_FAILURE;
+  const efx_nic_cfg_t *pNicCfg = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  status = efx_nic_create(pAdapter->efxFamily,
+                          (efsys_identifier_t *)pAdapter,
+                          &pAdapter->bar,
+                          &pAdapter->nicLock,
+                          &pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_create failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_nic_create;
+  }
+
+  /* Register driver version with FW */
+  status = efx_nic_set_drv_version(pAdapter->pNic,
+                                   SFVMK_DRIVER_VERSION_STRING,
+                                   sizeof(SFVMK_DRIVER_VERSION_STRING) - 1);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_set_drv_version failed status: %s",
+		        vmk_StatusToString(status));
+  }
+
+  /* Initialize MCDI to talk to the management controller. */
+  status = sfvmk_mcdiInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mcdiInit failed status: %s",
+		        vmk_StatusToString(status));
+    goto failed_mcdi_init;
+  }
+
+  /* Probe  NIC and build the configuration data area. */
+  status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
+                        vmk_StatusToString(status));
+    status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
+                          vmk_StatusToString(status));
+      goto failed_nic_probe;
+    }
+  }
+
+  /* Initialize NVRAM. */
+  status = efx_nvram_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nvram_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_nvram_init;
+  }
+
+  /* Initialize VPD. */
+  status = efx_vpd_init(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_vpd_init failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_vpd_init;
+  }
+
+  status = sfvmk_setResourceLimits(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setResourceLimits failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_set_resource_limit;
+  }
+
+  status = sfvmk_monInit(pAdapter);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_monInit failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_mon_init;
+  }
+
+  pNicCfg = efx_nic_cfg_get(pAdapter->pNic);
+  if (pNicCfg == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
+    goto failed_nic_cfg_get;
+  }
+
+  /* Prepare bit mask for supported encap offloads */
+  if (pNicCfg->enc_tunnel_encapsulations_supported) {
+    if (modParams.vxlanOffload)
+      pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
+    if (modParams.geneveOffload)
+      pAdapter->isTunnelEncapSupported |= SFVMK_GENEVE_OFFLOAD;
+#endif
+  }
+
+  if (pAdapter->isTunnelEncapSupported) {
+    status = sfvmk_tunnelInit(pAdapter);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
+                          vmk_StatusToString(status));
+      goto failed_tunnel_init;
+    }
+  }
+
+  /* Reset NIC. */
+  status = efx_nic_reset(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed status: %s",
+                        vmk_StatusToString(status));
+    goto failed_nic_reset;
+  }
+
+  goto done;
+
+failed_nic_reset:
+failed_tunnel_init:
+failed_nic_cfg_get:
+  sfvmk_monFini(pAdapter);
+
+failed_set_resource_limit:
+failed_mon_init:
+  efx_vpd_fini(pAdapter->pNic);
+
+failed_vpd_init:
+  efx_nvram_fini(pAdapter->pNic);
+
+failed_nvram_init:
+  efx_nic_unprobe(pAdapter->pNic);
+
+failed_nic_probe:
+  sfvmk_mcdiFini(pAdapter);
+
+failed_mcdi_init:
+  if (pAdapter->pNic != NULL) {
+    efx_nic_destroy(pAdapter->pNic);
+    pAdapter->pNic = NULL;
+  }
+
+failed_nic_create:
+done:
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+
+  return status;
+}
+
 /*! \brief  Callback routine for the device layer to announce device to the
 ** driver.
 **
@@ -1177,45 +1365,11 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_lock;
   }
 
-  status = efx_nic_create(pAdapter->efxFamily,
-                          (efsys_identifier_t *)pAdapter,
-                          &pAdapter->bar,
-                          &pAdapter->nicLock,
-                          &pAdapter->pNic);
+  status = sfvmk_nicInit(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_create failed status: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_nicInit failed status: %s",
                         vmk_StatusToString(status));
-    goto failed_nic_create;
-  }
-
-  /* Register driver version with FW */
-  status = efx_nic_set_drv_version(pAdapter->pNic,
-                                   SFVMK_DRIVER_VERSION_STRING,
-                                   sizeof(SFVMK_DRIVER_VERSION_STRING) - 1);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_set_drv_version failed status: %s",
-		        vmk_StatusToString(status));
-  }
-
-  /* Initialize MCDI to talk to the management controller. */
-  status = sfvmk_mcdiInit(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_mcdiInit failed status: %s",
-		        vmk_StatusToString(status));
-    goto failed_mcdi_init;
-  }
-
-  /* Probe  NIC and build the configuration data area. */
-  status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_FULL_FEATURED);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_FULL_FEATURED failed: %s",
-                        vmk_StatusToString(status));
-    status = efx_nic_probe(pAdapter->pNic, EFX_FW_VARIANT_DONT_CARE);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_probe VAR_DONT_CARE failed: %s",
-                          vmk_StatusToString(status));
-      goto failed_nic_probe;
-    }
+    goto failed_sfvmk_nic_init;
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
@@ -1228,22 +1382,6 @@ sfvmk_attachDevice(vmk_Device dev)
   }
 #endif
 
-  /* Initialize NVRAM. */
-  status = efx_nvram_init(pAdapter->pNic);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nvram_init failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_nvram_init;
-  }
-
-  /* Initialize VPD. */
-  status = efx_vpd_init(pAdapter->pNic);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_vpd_init failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_vpd_init;
-  }
-
   /* Get VPD info to find out the interface which does not have valid VPD.
      The interface which does not have valid VPD should not be attached.
      This happens in PF partioning which is not supported by the driver.
@@ -1254,21 +1392,6 @@ sfvmk_attachDevice(vmk_Device dev)
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_vpdGetInfo failed status: %s",
                         vmk_StatusToString(status));
     goto failed_vpd_get_info;
-  }
-
-  /* Reset NIC. */
-  status = efx_nic_reset(pAdapter->pNic);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_nic_reset;
-  }
-
-  status = sfvmk_setResourceLimits(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_setResourceLimits failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_set_resource_limit;
   }
 
   status = efx_nic_init(pAdapter->pNic);
@@ -1310,13 +1433,6 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_port_init;
   }
 
-  status = sfvmk_monInit(pAdapter);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_monInit failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_mon_init;
-  }
-
   status = sfvmk_txInit(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_txInit failed status: %s",
@@ -1335,25 +1451,6 @@ sfvmk_attachDevice(vmk_Device dev)
   if (pNicCfg == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_cfg_get failed");
     goto failed_nic_cfg_get;
-  }
-
-  /* Prepare bit mask for supported encap offloads */
-  if (pNicCfg->enc_tunnel_encapsulations_supported) {
-    if (modParams.vxlanOffload)
-      pAdapter->isTunnelEncapSupported = SFVMK_VXLAN_OFFLOAD;
-#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
-    if (modParams.geneveOffload)
-      pAdapter->isTunnelEncapSupported |= SFVMK_GENEVE_OFFLOAD;
-#endif
-  }
-
-  if (pAdapter->isTunnelEncapSupported) {
-    status = sfvmk_tunnelInit(pAdapter);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_tunnelInit failed status: %s",
-                          vmk_StatusToString(status));
-      goto failed_tunnel_init;
-    }
   }
 
   status = sfvmk_mutexInit("adapterLock", &pAdapter->lock);
@@ -1426,20 +1523,13 @@ failed_uplinkData_init:
   pAdapter->lock = NULL;
 
 failed_mutex_init:
-  if (pAdapter->isTunnelEncapSupported)
-    sfvmk_tunnelFini(pAdapter);
-
 failed_nic_cfg_get:
-failed_tunnel_init:
   sfvmk_rxFini(pAdapter);
 
 failed_rx_init:
   sfvmk_txFini(pAdapter);
 
 failed_tx_init:
-  sfvmk_monFini(pAdapter);
-
-failed_mon_init:
   sfvmk_portFini(pAdapter);
 
 failed_port_init:
@@ -1453,31 +1543,15 @@ failed_get_vi_pool:
   efx_nic_fini(pAdapter->pNic);
 
 failed_nic_init:
-failed_set_resource_limit:
-failed_nic_reset:
 failed_vpd_get_info:
-  efx_vpd_fini(pAdapter->pNic);
 
-failed_vpd_init:
-  efx_nvram_fini(pAdapter->pNic);
-
-failed_nvram_init:
 #ifdef SFVMK_SUPPORT_SRIOV
   sfvmk_sriovFini(pAdapter);
 failed_sriov_init:
 #endif
-  efx_nic_unprobe(pAdapter->pNic);
+  sfvmk_nicFini(pAdapter);
 
-failed_nic_probe:
-  sfvmk_mcdiFini(pAdapter);
-
-failed_mcdi_init:
-  if (pAdapter->pNic != NULL) {
-    efx_nic_destroy(pAdapter->pNic);
-    pAdapter->pNic = NULL;
-  }
-
-failed_nic_create:
+failed_sfvmk_nic_init:
   sfvmk_destroyLock(pAdapter->nicLock.lock);
 
 failed_create_lock:
@@ -1653,12 +1727,8 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_mutexDestroy(pAdapter->lock);
   pAdapter->lock = NULL;
 
-  if (pAdapter->isTunnelEncapSupported)
-    sfvmk_tunnelFini(pAdapter);
   sfvmk_rxFini(pAdapter);
   sfvmk_txFini(pAdapter);
-  /* Deinit mon */
-  sfvmk_monFini(pAdapter);
   /* Deinit port */
   sfvmk_portFini(pAdapter);
   /* Deinit EVQs */
@@ -1689,16 +1759,7 @@ sfvmk_detachDevice(vmk_Device dev)
     }
     status = VMK_OK;
   }
-#endif
 
-  /* Tear down common code subsystems. */
-  if (pAdapter->pNic != NULL) {
-    efx_nvram_fini(pAdapter->pNic);
-    efx_vpd_fini(pAdapter->pNic);
-    efx_nic_reset(pAdapter->pNic);
-  }
-
-#ifdef SFVMK_SUPPORT_SRIOV
   /* De-init SR-IOV */
   status = sfvmk_sriovFini(pAdapter);
   if (status != VMK_OK) {
@@ -1709,17 +1770,7 @@ sfvmk_detachDevice(vmk_Device dev)
   sfvmk_removeAdapterFromList(pAdapter);
 #endif
 
-  if (pAdapter->pNic != NULL)
-    efx_nic_unprobe(pAdapter->pNic);
-
-  /* Tear down MCDI. */
-  sfvmk_mcdiFini(pAdapter);
-
-  /* Destroy common code context. */
-  if (pAdapter->pNic != NULL) {
-    efx_nic_destroy(pAdapter->pNic);
-    pAdapter->pNic = NULL;
-  }
+  sfvmk_nicFini(pAdapter);
 
   sfvmk_destroyLock(pAdapter->nicLock.lock);
   /* vmk related resource deallocation */

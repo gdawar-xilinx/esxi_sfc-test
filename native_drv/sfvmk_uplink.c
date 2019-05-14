@@ -4591,19 +4591,11 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     goto end;
   }
 
-  sfvmk_mcdiReset(pAdapter);
+  sfvmk_nicFini(pAdapter);
 
-  status = efx_nic_reset(pAdapter->pNic);
+  status = sfvmk_nicInit(pAdapter);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",
-                        vmk_StatusToString(status));
-    goto end;
-  }
-
-  status = efx_nic_set_workaround_bug26807(pAdapter->pNic);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,
-                        "efx_nic_set_workaround_bug26807 failed with error %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_nicInit failed status: %s",
                         vmk_StatusToString(status));
     goto end;
   }

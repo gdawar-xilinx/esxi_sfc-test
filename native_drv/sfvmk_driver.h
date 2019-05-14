@@ -836,6 +836,11 @@ static inline void sfvmk_pktRelease(sfvmk_adapter_t *pAdapter,
     sfvmk_packetOps[pCompCtx->type].pktRelease(pCompCtx, pPkt);
 }
 
+void
+sfvmk_nicFini(sfvmk_adapter_t *pAdapter);
+VMK_ReturnStatus
+sfvmk_nicInit(sfvmk_adapter_t *pAdapter);
+
 /* Functions for interrupt handling */
 VMK_ReturnStatus sfvmk_intrInit(sfvmk_adapter_t *pAdapter);
 VMK_ReturnStatus sfvmk_intrFini(sfvmk_adapter_t *pAdapter);
@@ -897,7 +902,6 @@ vmk_Bool sfvmk_getMCLogging(sfvmk_adapter_t *pAdapter);
 void sfvmk_setMCLogging(sfvmk_adapter_t *pAdapter, vmk_Bool state);
 #endif
 void sfvmk_setMCDIMode(sfvmk_adapter_t *pAdapter, sfvmk_mcdiMode_t mode);
-void sfvmk_mcdiReset(sfvmk_adapter_t *pAdapter);
 
 /* Functions for event queue handling */
 VMK_ReturnStatus sfvmk_evInit(sfvmk_adapter_t *pAdapter);

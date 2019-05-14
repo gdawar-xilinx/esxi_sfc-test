@@ -2574,6 +2574,9 @@ proxy_auth_init_failed:
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  if (status != VMK_OK)
+    pAdapter->state = SFVMK_ADAPTER_STATE_START_FAILED;
+
   return status;
 }
 
@@ -4572,6 +4575,7 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status;
   unsigned int attempt;
+  vmk_Bool needStartIO = VMK_FALSE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -4584,6 +4588,11 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     pAdapter->evbState = SFVMK_EVB_STATE_STOPPING;
 #endif
 
+  if ((pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) ||
+      (pAdapter->state == SFVMK_ADAPTER_STATE_START_FAILED)) {
+    needStartIO = VMK_TRUE;
+  }
+
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceIO failed with error %s",
@@ -4592,6 +4601,9 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   }
 
   sfvmk_nicFini(pAdapter);
+
+  if (needStartIO == VMK_FALSE)
+    goto end;
 
   status = sfvmk_nicInit(pAdapter);
   if (status != VMK_OK) {

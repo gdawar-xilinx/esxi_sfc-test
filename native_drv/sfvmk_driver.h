@@ -520,6 +520,7 @@ typedef struct sfvmk_uplink_s {
 typedef enum sfvmk_adapterState_e {
   SFVMK_ADAPTER_STATE_UNINITIALIZED = 0,
   SFVMK_ADAPTER_STATE_REGISTERED,
+  SFVMK_ADAPTER_STATE_START_FAILED,
   SFVMK_ADAPTER_STATE_STARTED,
   SFVMK_ADAPTER_NSTATES
 } sfvmk_adapterState_t;

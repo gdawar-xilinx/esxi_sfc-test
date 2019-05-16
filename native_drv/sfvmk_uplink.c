@@ -4602,15 +4602,15 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
 
   sfvmk_nicFini(pAdapter);
 
-  if (needStartIO == VMK_FALSE)
-    goto end;
-
   status = sfvmk_nicInit(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_nicInit failed status: %s",
                         vmk_StatusToString(status));
     goto end;
   }
+
+  if (needStartIO == VMK_FALSE)
+    goto end;
 
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);

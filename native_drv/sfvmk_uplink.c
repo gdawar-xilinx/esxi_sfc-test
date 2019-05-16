@@ -2631,10 +2631,8 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
-    /* VM kernel does not expect error code here */
-    status = VMK_OK;
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
-    goto done;
+    goto clean_up_evb;
   }
 
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
@@ -2663,6 +2661,7 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
 
   efx_nic_fini(pAdapter->pNic);
 
+clean_up_evb:
 #ifdef SFVMK_SUPPORT_SRIOV
   /* clean-up EVB switch */
   if (pAdapter->evbState == SFVMK_EVB_STATE_STOPPING) {

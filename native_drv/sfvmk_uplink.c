@@ -2574,9 +2574,6 @@ proxy_auth_init_failed:
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_UPLINK);
 
-  if (status != VMK_OK)
-    pAdapter->state = SFVMK_ADAPTER_STATE_START_FAILED;
-
   return status;
 }
 
@@ -2631,8 +2628,10 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
   VMK_ASSERT_NOT_NULL(pAdapter);
 
   if (pAdapter->state != SFVMK_ADAPTER_STATE_STARTED) {
+    /* VM kernel does not expect error code here */
+    status = VMK_OK;
     SFVMK_ADAPTER_ERROR(pAdapter, "Adapter IO is not yet started");
-    goto clean_up_evb;
+    goto done;
   }
 
   pAdapter->state = SFVMK_ADAPTER_STATE_REGISTERED;
@@ -2661,7 +2660,6 @@ sfvmk_quiesceIO(sfvmk_adapter_t *pAdapter)
 
   efx_nic_fini(pAdapter->pNic);
 
-clean_up_evb:
 #ifdef SFVMK_SUPPORT_SRIOV
   /* clean-up EVB switch */
   if (pAdapter->evbState == SFVMK_EVB_STATE_STOPPING) {
@@ -4574,7 +4572,6 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   sfvmk_adapter_t *pAdapter = (sfvmk_adapter_t *)cookie.ptr;
   VMK_ReturnStatus status;
   unsigned int attempt;
-  vmk_Bool needStartIO = VMK_FALSE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -4587,11 +4584,6 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     pAdapter->evbState = SFVMK_EVB_STATE_STOPPING;
 #endif
 
-  if ((pAdapter->state == SFVMK_ADAPTER_STATE_STARTED) ||
-      (pAdapter->state == SFVMK_ADAPTER_STATE_START_FAILED)) {
-    needStartIO = VMK_TRUE;
-  }
-
   status = sfvmk_quiesceIO(pAdapter);
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceIO failed with error %s",
@@ -4599,17 +4591,22 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
     goto end;
   }
 
-  sfvmk_nicFini(pAdapter);
+  sfvmk_mcdiReset(pAdapter);
 
-  status = sfvmk_nicInit(pAdapter);
+  status = efx_nic_reset(pAdapter->pNic);
   if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_nicInit failed status: %s",
+    SFVMK_ADAPTER_ERROR(pAdapter, "efx_nic_reset failed with error %s",
                         vmk_StatusToString(status));
     goto end;
   }
 
-  if (needStartIO == VMK_FALSE)
+  status = efx_nic_set_workaround_bug26807(pAdapter->pNic);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "efx_nic_set_workaround_bug26807 failed with error %s",
+                        vmk_StatusToString(status));
     goto end;
+  }
 
   for (attempt = 0; attempt < 3; ++attempt) {
     status = sfvmk_startIO(pAdapter);

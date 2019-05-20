@@ -54,6 +54,12 @@ DEV = {
                   "sub device id"     : "802d",
                   "description"       : "XtremeScale X2562 10/25G OCP Network Adapter",
                },
+               {
+                  "device id"         : "0b03",
+                  "sub vendor id"     : "1924",
+                  "sub device id"     : "802b",
+                  "description"       : "XtremeScale X2552 10/25G OCP Network Adapter",
+               },
 
             ],
          },

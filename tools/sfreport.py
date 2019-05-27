@@ -215,7 +215,6 @@ def system_summary(output_file, server, mode):
 def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
     """function to fetch Solarflare Module versions"""
     cnt = 0
-    keys = ['VMNIC']
     output_file.write('<h1 id="Software Versions"style="font-size:26px;"\
                           > Software Versions: <br></H1>')
     html = '<table><table border="1">'
@@ -225,8 +224,12 @@ def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
     html += '</table>'
     output_file.write(html)
     if cli_vib:
-        fw_html = '<table><th>Firmware Version Table</th></tr><table border="1">'
         for nic in nic_list:
+            if cnt == 0:
+                fw_html = '<table><th>Firmware Version Table</th></tr><table border="1">'
+            else:
+                fw_html = '<table><table border="1">'
+            keys = ['VMNIC']
             values = [nic]
             cmd = 'esxcli ' + server + ' sfvmk firmware get -n ' + nic
             out = execute(cmd, mode)
@@ -243,16 +246,15 @@ def sw_versions(output_file, server, nic_list, mode, sf_ver, cli_vib):
                         lhs = "MAC"
                     keys.append(lhs)
                     values.append(rhs)
-            if cnt == 0:
-                for key in keys:
-                    fw_html += '<th>%s &nbsp' % key + '</th>'
-                fw_html += '</tr>'
+            for key in keys:
+                fw_html += '<th>%s &nbsp' % key + '</th>'
+            fw_html += '</tr>'
             for value in values:
                 fw_html += '<td> %s &nbsp</td>' % value
             fw_html += '</tr>'
             cnt += 1
-        fw_html += '</table>'
-        output_file.write(fw_html)
+            fw_html += '</table>'
+            output_file.write(fw_html)
     return 0
 
 def driver_binding(output_file, server, mode):

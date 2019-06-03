@@ -290,7 +290,7 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIReadConfig failed status: %s",
                         vmk_StatusToString(status));
-    goto done;
+    goto pci_read_config_failed;
   }
 
   numVfs = MIN(totalVFs, maxVfs);
@@ -303,7 +303,7 @@ sfvmk_sriovInit(sfvmk_adapter_t *pAdapter)
     if (status != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_PCIEnableVFs [%u] failed status: %s",
                           numVfs, vmk_StatusToString(status));
-      goto done;
+      goto pci_enable_vfs_failed;
     }
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                         "Enabled vfs: %u", numVfs);
@@ -401,6 +401,8 @@ mem_alloc_failed:
     pAdapter->numVfsEnabled = 0;
   }
 
+pci_enable_vfs_failed:
+pci_read_config_failed:
 pci_find_ext_cap_failed:
   sfvmk_mutexDestroy(pAdapter->secondaryListLock);
 done:

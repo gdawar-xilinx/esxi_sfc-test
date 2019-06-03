@@ -264,6 +264,13 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
+  if (pAdapter->numVfsEnabled == 0) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "VFs not enabled on this adapter");
+    status = VMK_OK;
+    goto done;
+  }
+
   pPrimary = pAdapter->pPrimary;
 
   if (pPrimary == NULL) {
@@ -272,7 +279,7 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
   }
 
   sfvmk_MutexLock(pPrimary->secondaryListLock);
-  if ((pPrimary->pProxyState == NULL) && pAdapter->numVfsEnabled) {
+  if (pPrimary->pProxyState == NULL) {
     reqSize = MAX(MC_CMD_VADAPTOR_SET_MAC_IN_LEN,
                   MAX(MC_CMD_FILTER_OP_EXT_IN_LEN,
                       MC_CMD_SET_MAC_EXT_IN_LEN));

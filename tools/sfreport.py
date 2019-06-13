@@ -51,13 +51,70 @@ def execute(cmd, mode='esxi'):
         print("ERROR:", err)
         print("Error while running command:", cmd)
         if not "date" in cmd:
-          TXT_FILE.write('\n' + err)
+          TXT_FILE.write('\n' + str(err))
         return 1
     elif out:
         out = (out).decode('ascii')
         if not "date" in cmd:
            TXT_FILE.write('\n' + out)
         return out
+
+def call_jscript(output_file):
+    """ function to call java script"""
+    output_file.write('<script>')
+    output_file.write('var coll = document.getElementsByClassName("collapsible");\
+        var i;\
+        for (i = 0; i < coll.length; i++) {\
+          coll[i].addEventListener("click", function() {\
+            this.classList.toggle("active");\
+            var content = this.nextElementSibling;\
+            if (content.style.display === "block") {\
+              content.style.display = "none";\
+            } else {\
+              content.style.display = "block";\
+            }\
+          });\
+        }')
+    output_file.write('</script>')
+    return 0
+
+def collapse(output_file, txt, button):
+    """ function to collapse the contents of the HTML"""
+    output_file.write('<style>')
+    output_file.write('.content {\
+      padding: 0 18px;\
+      display: none;\
+      overflow: hidden;\
+      background-color: #f1f1f1;\
+    }')
+    output_file.write('</style>')
+
+    output_file.write('<body>')
+    output_file.write(' <button class="collapsible">%s</button> '%button)
+    output_file.write(' <div class="content">\
+                 <p><PRE>%s</PRE></p>\
+                 </div> ' % txt)
+    """
+    output_file.write('<script>')
+    output_file.write('var coll = document.getElementsByClassName("collapsible");\
+    var i;\
+    for (i = 0; i < coll.length; i++) {\
+      coll[i].addEventListener("click", function() {\
+        this.classList.toggle("active");\
+        var content = this.nextElementSibling;\
+        if (content.style.display === "block") {\
+          content.style.display = "none";\
+        } else {\
+          content.style.display = "block";\
+        }\
+      });\
+    }')
+    output_file.write('</script>')
+    """
+    output_file.write('</body>')
+    return 0
+
+
 
 def file_header(output_file, time, mode, sf_ver):
     """function to create file header"""
@@ -1176,6 +1233,67 @@ def get_vxlan_info(output_file, server, mode):
         output_file.write('<p><PRE>%s</PRE></p>' % net_vdl_info)
     return 0
 
+def get_sriov_info(output_file, server, mode, adapters, sriov_list):
+    """function to get sriov related information"""
+    output_file.write('<h1 id="SRIOV"style="font-size:26px;">\
+                                  SRIOV: <br></H1>')
+    output_file.write('<h1"style="font-size:18px;"><b>SR-IOV enabled adapters:'
+                      '</b><br></H1>')
+    output_file.write('<p><PRE>%s</PRE></p>' % sriov_list)
+    output_file.write('<h1"style="font-size:18px;"><b>SRIOV VF list for Solarflare Adapters:'
+                      '</b><br></H1>')
+    # get the SF uplinks where SRIOV is enabled:
+    sriov_uplink_list = []
+    for iface in adapters:
+        vf_list_cmd = "esxcli " + server + " network sriovnic vf list -n " + iface
+        vf_list = execute(vf_list_cmd)
+        if "vf id" in vf_list.lower():
+            output_file.write('<br><h1"style="font-size:5px;"><b>%s:'
+                              '</b><br></H1>' % iface)
+            output_file.write('<p><PRE>%s</PRE></p>' % vf_list)
+            sriov_uplink_list.append(iface)
+    # Get ESXi mode specific information:
+    if mode == "esxi":
+        output_file.write('<h1"style="font-size:18px;"><b>cat /etc/vmware/esx.conf for max_vfs:'
+                          '</b><br></H1>')
+        vfs_esx_conf = execute("cat /etc/vmware/esx.conf | grep max_vfs")
+        output_file.write('<p><PRE>%s</PRE></p>' % vfs_esx_conf)
+
+        # get vfs stats:
+        output_file.write('<h1"style="font-size:18px;"><b>VF-Statistics:'
+                          '</b><br></H1>')
+        for iface in sriov_uplink_list:
+            output_file.write('<br><h1"style="font-size:5px;"><b>%s:'
+                              '</b><br></H1>' % iface)
+            get_vfs = "vsish -e ls net/sriov/%s/vfs"%iface
+            vf_nos = execute(get_vfs)
+            vf_count = []
+            for line in vf_nos.splitlines():
+                vf = line.replace('/', '')
+                vf_count.append(vf)
+            for v in vf_count:
+                vf_stats_cmd = "vsish -e get net/sriov/" + iface +"/vfs/" + v + "/stats"
+                vf_stats = execute(vf_stats_cmd)
+                if vf_stats == 1:
+                    output_file.write('<br><h1"style="font-size:5px;"><b>%s :'
+                                      '</b></H1>' % iface)
+                    output_file.write("ERROR: %s failed to fetch stats<br>" % vf_stats_cmd)
+                    continue
+                else:
+                    output_file.write('<br><h1"style="font-size:18px;"><b>%s' % iface +'-VF stats for for VF#%s:'
+                                      '</b><br></H1>' % v)
+                    collapse(output_file, vf_stats, "Expand Stats")
+        # get uplink hwCapabilities
+        output_file.write('<br><h1"style="font-size:5px;"><b>vsish -e cat /net/pNics/<uplink>'
+                          '/hwCapabilities/CAP_SRIOV:</b><br></H1>')
+        for iface in sriov_uplink_list:
+            hw_cap_cmd = "vsish -e cat /net/pNics/" + iface + "/hwCapabilities/CAP_SRIOV"
+            hw_cap = execute(hw_cap_cmd)
+            output_file.write('<br><h1"style="font-size:5px;"><b>%s:'  % iface + '%s'
+                              '</b><br></H1>' %hw_cap)
+            #output_file.write('<p><PRE>%s</PRE></p>' % hw_cap)
+    return 0
+
 def file_properties(output_file, server, mode):
     """function to get file properties of SF drivers"""
     file_cmd = "esxcli "+ server + " software vib get"
@@ -1540,6 +1658,8 @@ if __name__ == "__main__":
             n = re.split(r'\s+', m)
             CIM_VER = n[1] # cim version
             SF_VER['CIM Version'] = CIM_VER
+    # get SRIOV status
+    SRIOV_LIST = execute("esxcli " + SERVER_NAME + " network sriovnic list")
     if "sfvmk" in SF_ADAPTERS:
         print("sfreport version: "+ SFREPORT_VERSION)
         print("Solarflare Adapters detected..")
@@ -1580,6 +1700,9 @@ if __name__ == "__main__":
         if CLI_VIB:
             OUT_FILE.write('<a href="#HW Statistics">-> HW Statistics\
                                 </a><br>')
+        if SRIOV_LIST:
+            OUT_FILE.write('<a href="#SRIOV">-> SRIOV\
+                                            </a><br>')
         if CURRENT_MODE == "esxi":
             # Following module needs to be imported here as vcli python version
             # doesn't have this module included [python-ver < 3]
@@ -1684,6 +1807,8 @@ if __name__ == "__main__":
         except:
             OUT_FILE.write("WARNING: get_vxlan_info failed due to following reasons:<br>")
             OUT_FILE.write("Traceback:%s"%traceback.format_exc())
+        if SRIOV_LIST:
+            get_sriov_info(OUT_FILE, SERVER_NAME, CURRENT_MODE, SFVMK_ADAPTERS, SRIOV_LIST)
         try:
             interface_statistics(OUT_FILE, SFVMK_ADAPTERS, SERVER_NAME, CURRENT_MODE)
         except:
@@ -1733,12 +1858,13 @@ if __name__ == "__main__":
             except:
                 OUT_FILE.write("WARNING: pci_configuration_space failed due to following reasons:<br>")
                 OUT_FILE.write("Traceback:%s" % traceback.format_exc())
+        call_jscript(OUT_FILE)
         tarball = "sfreport_" + CURRENT_TIME.strip('\n') + ".tgz"
         tar_cmd = "tar cvf %s %s %s " %(tarball,HTML_FILE, TXT)
         try:
             tar_out = execute(tar_cmd, CURRENT_MODE)
             print('Generated output file: '+tarball)
-        except e:
+        except:
             print("WARNING! Unable to create tarball")
             print("Please share following files:%s & %s" %(HTML_FILE, TXT))
     else:

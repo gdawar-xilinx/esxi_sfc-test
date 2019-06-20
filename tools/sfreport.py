@@ -81,6 +81,31 @@ def call_jscript(output_file):
 def collapse(output_file, txt, button):
     """ function to collapse the contents of the HTML"""
     output_file.write('<style>')
+    output_file.write('.collapsible {\
+        background-color: lightslategray;\
+        color: white;\
+        cursor: pointer;\
+        padding: 1px;\
+        width: 100%;\
+        border: 1;\
+        text-align: left;\
+        outline: none;\
+        font-size: 15px;\
+    }')
+    output_file.write('.active,.collapsible:hover\
+    {\
+        background - color:  # 555;\
+    }')
+    output_file.write('.collapsible:after { \
+        content: "\002+"; \
+        font - size: 13px; \
+        color: white;\
+        float: right;\
+        margin - left: 5px;\
+    }')
+    output_file.write('.active:after { \
+        content: "\221-"; \
+    }')
     output_file.write('.content {\
       padding: 0 18px;\
       display: none;\
@@ -88,29 +113,11 @@ def collapse(output_file, txt, button):
       background-color: #f1f1f1;\
     }')
     output_file.write('</style>')
-
     output_file.write('<body>')
     output_file.write(' <button class="collapsible">%s</button> '%button)
     output_file.write(' <div class="content">\
                  <p><PRE>%s</PRE></p>\
                  </div> ' % txt)
-    """
-    output_file.write('<script>')
-    output_file.write('var coll = document.getElementsByClassName("collapsible");\
-    var i;\
-    for (i = 0; i < coll.length; i++) {\
-      coll[i].addEventListener("click", function() {\
-        this.classList.toggle("active");\
-        var content = this.nextElementSibling;\
-        if (content.style.display === "block") {\
-          content.style.display = "none";\
-        } else {\
-          content.style.display = "block";\
-        }\
-      });\
-    }')
-    output_file.write('</script>')
-    """
     output_file.write('</body>')
     return 0
 
@@ -390,8 +397,7 @@ def get_sensor_info(output_file, server, mode, adapter_list):
         if result == 1:
             output_file.write('Not available')
             return
-        output_file.write('<h>%s:' % nic +'</h>')
-        output_file.write('<p><PRE>%s</PRE></p>' % result)
+        collapse(output_file, result, "%s Sensor logs"%nic)
     return 0
 
 
@@ -408,7 +414,7 @@ def vmkernel_logs(output_file):
     dmesg = dmesg_logs.split('\n')
     for line in dmesg:
         lines += '<small>%s</small><br>'%line
-    output_file.write('%s</p>'%lines)
+    collapse(output_file, lines, "Kernel logs")
     return 0
 
 def cim_logs(output_file):
@@ -515,6 +521,8 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
         output_file.write('Not Available')
         return
     get_pause_settings = get_pause_settings.split('\n')
+    output_file.write('<h1 style="font-size:18px;">Rx/Tx Queue Info Tables:\
+                                          </H1>')
     if mode == 'esxi':
         for intf in sfvmk_adapter_list:
             rxq_html = '<table><th>%s RX Queue Info Table</th></tr>\
@@ -531,7 +539,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
                     rxq_html += '<td> %s</td>'% rhs
                     rxq_html += '</tr>'
             rxq_html += '</table>'
-            output_file.write(rxq_html)
+            collapse(output_file, rxq_html, "%s rxQ info"%intf)
             txq_html = '<table><th>%s TX Queue Info Table</th></tr>\
                                                  <table border="1">' % intf
             txq_cmd = "vsish -e cat /net/pNics/%s/txqueues/info" % intf
@@ -546,7 +554,7 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
                     txq_html += '<td> %s</td>' % trhs
                     txq_html += '</tr>'
             txq_html += '</table>'
-            output_file.write(txq_html)
+            collapse(output_file, txq_html, "%s txQ info"%intf)
     # fetch the sfvmk parameters for all sfvmk adapters.
     for interface in sfvmk_adapter_list:
         # fetch interface specific interrupt mod settings
@@ -677,7 +685,7 @@ def pci_configuration_space(output_file):
     lines = ('<p>')
     for line in dmesg.splitlines():
         lines += '<small>%s</small><br>'%line
-    output_file.write('%s</p>'%lines)
+    collapse(output_file, lines, "PCI space")
     return 0
 
 def sf_kernel_modules(output_file):
@@ -975,7 +983,7 @@ def interface_statistics(output_file, sfvmk_adapter_list, server, mode):
             table += '<td> %s </td>'% value
         table += '</tr>'
     table += '</table>'
-    output_file.write(table)
+    collapse(output_file, table, "Stats")
     # fetch the private stats for the sf adapters
     if mode == "esxi":
         interface_count = 1
@@ -1016,7 +1024,7 @@ def interface_statistics(output_file, sfvmk_adapter_list, server, mode):
                 priv_table += '<td> %s </td>' % value
             priv_table += '</tr>'
         priv_table += '</table>'
-        output_file.write(priv_table)
+        collapse(output_file, priv_table, "Private Stats")
     return 0
 
 def sf_module_file(output_file):
@@ -1050,35 +1058,35 @@ def net_queue_status(output_file, sfvmk_adapter_list):
         for line in netq_stats.splitlines():
             q = line.replace('/', '')
             queue_count.append(q)
+        res = ""
         if queue_count:
             for qno in queue_count:
-                output_file.write('<h>%s ' % interface + 'TX Stats Q# %s</h>'
-                                  % qno)
+                res += '<h>%s ' % interface + 'TX Stats Q# %s</h>' % qno
                 stats_cmd = "vsish -e cat /net/pNics/"+ interface \
                            +"/txqueues/queues/%s/stats" % qno
                 netq_stats = execute(stats_cmd)
                 if netq_stats == 1:
-                    output_file.write('Not Available')
+                    res += ('Not Available')
                     return
-                output_file.write('<p><PRE>%s</PRE></p>' % netq_stats)
-                output_file.write('<h>%s ' % interface + 'TX Info Q# %s</h>'
-                                  % qno)
+                res += '<p><PRE>%s</PRE></p>' % netq_stats
+                res += '<h>%s ' % interface + 'TX Info Q# %s</h>' \
+                                  % qno
                 tx_info_cmd = "vsish -e cat /net/pNics/" + interface \
                            + "/txqueues/queues/%s/info" % qno
                 tx_info = execute(tx_info_cmd)
                 if tx_info == 1:
-                    output_file.write('Not Available')
+                    res += 'Not Available'
                     return
-                output_file.write('<p><PRE>%s</PRE></p>' % tx_info)
-                output_file.write('<h>%s ' % interface + 'RX Info Q# %s</h>'
-                                  % qno)
+                res += '<p><PRE>%s</PRE></p>' % tx_info
+                res += '<h>%s ' % interface + 'RX Info Q# %s</h>' % qno
                 rx_info_cmd = "vsish -e cat /net/pNics/" + interface \
                            + "/rxqueues/queues/%s/info" % qno
                 rx_info = execute(rx_info_cmd)
                 if rx_info == 1:
-                    output_file.write('Not Available')
+                    res += 'Not Available'
                     return
-                output_file.write('<p><PRE>%s</PRE></p>' % rx_info)
+                res += '<p><PRE>%s</PRE></p>' % rx_info
+            collapse(output_file, res, "%s NetQ Stats" %interface)
     return 0
 
 def get_geneve_info(output_file, server, mode):
@@ -1282,7 +1290,7 @@ def get_sriov_info(output_file, server, mode, adapters, sriov_list):
                 else:
                     output_file.write('<br><h1"style="font-size:18px;"><b>%s' % iface +'-VF stats for for VF#%s:'
                                       '</b><br></H1>' % v)
-                    collapse(output_file, vf_stats, "Expand Stats")
+                    collapse(output_file, vf_stats, "Stats")
         # get uplink hwCapabilities
         output_file.write('<br><h1"style="font-size:5px;"><b>vsish -e cat /net/pNics/<uplink>'
                           '/hwCapabilities/CAP_SRIOV:</b><br></H1>')
@@ -1291,7 +1299,6 @@ def get_sriov_info(output_file, server, mode, adapters, sriov_list):
             hw_cap = execute(hw_cap_cmd)
             output_file.write('<br><h1"style="font-size:5px;"><b>%s:'  % iface + '%s'
                               '</b><br></H1>' %hw_cap)
-            #output_file.write('<p><PRE>%s</PRE></p>' % hw_cap)
     return 0
 
 def file_properties(output_file, server, mode):
@@ -1439,7 +1446,7 @@ def hw_statistics(output_file, server, mode, adapter_list):
             sf_table += '<td> %s </td>' % value
         sf_table += '</tr>'
     sf_table += '</table>'
-    output_file.write(sf_table)
+    collapse(output_file, sf_table, "H/W Statistics")
     if failed_nic_stats:
         output_file.write("SF statistics not available for interfaces:%s"
                           %failed_nic_stats)

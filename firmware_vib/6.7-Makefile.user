@@ -1,0 +1,80 @@
+# Copyright (c) 2017 - 2019, Solarflare Communications Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+
+# Makefile
+# This builds the firmware collection VIB
+#
+
+# Construct the VIB name
+DEV_VIB_BASENAME = $(BULL_VENDOR_CODE)-ESX-$(PLUGIN)-$(PLUGIN_VERSION)
+DESC_NAME=$(shell echo $(DEV_VIB_BASENAME) | tr A-Z a-z)
+DESC_ESX_VERSION=6.7.0
+
+# Only need to evaluate once (aka use ":=").
+#    CURRENT_DIR - the directory the build was started in
+#    BUILD_DIR - where to put all generated files, relative to CURRENT_DIR
+#    SCRATCH_DIR - a place for temporary files
+#    STAGE_DIR - the base directory that will be populated exactly as how
+#                delivered files are to be installed.  It corresponds to the
+#                target host's root (/) directory.
+#    VIB_DIR - where the final versions of vibs are put
+#    BUNDLE_DIR - where the final versions of offline bundles are put
+CURRENT_DIR := $(shell pwd)
+BUILD_DIR := build
+SCRATCH_DIR := $(BUILD_DIR)/scratch
+STAGE_DIR := $(BUILD_DIR)/stage
+VIB_DIR := $(BUILD_DIR)/vib
+BUNDLE_DIR := $(BUILD_DIR)/bundle
+
+VIB_DESCRIPTOR_XML := $(SCRATCH_DIR)/descriptor.xml
+VIB_BULLETIN_XML := $(SCRATCH_DIR)/bulletin.xml
+
+VIB_BULLETIN_ID = $(BULL_VENDOR_CODE)-esx-$(DESC_ESX_VERSION)-$(PLUGIN)-$(PLUGIN_VERSION)
+
+# Export toolchain path
+HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-6.7.0-0.0.8169922)
+include $(HEXDK_BASE)/samples/common/esxcli.inc
+
+# Check paths
+ifeq ($(wildcard $(HEXDK_BASE)/samples/common/userworld-tool.inc),)
+$(error Host-Extensions devkit build 8169922 required but not installed.)
+endif
+
+.PHONY: clean
+
+all: vib
+
+vib:	build-dirs copy-payloads minimal-descriptor fill-bulletin xml-checks package
+
+package:
+	$(MAKE) -f Makefile vib-bundle
+build-dirs:
+	$(MKDIR) -p $(BUILD_DIR) $(SCRATCH_DIR) $(STAGE_DIR) $(VIB_DIR)
+copy-payloads:
+	$(CP) -r $(CURRENT_DIR)/payload_data/opt $(STAGE_DIR)
+clean:
+	$(RM) -rf $(BUILD_DIR) $(SCRATCH_DIR) $(STAGE_DIR) \
+		$(VIB_DIR) core vendor-index.xml

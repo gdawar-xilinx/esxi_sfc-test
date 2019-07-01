@@ -900,45 +900,31 @@ def network_configuration(output_file, server, mode, esx_ver):
 
 def ethernet_settings(output_file, sfvmk_adapter_list, server, mode, cli_vib):
     """Fetch ethernet setting of SF adapters"""
+    output_file.write('<h1 id="Ethernet Settings"style="font-size:26px;"> \
+                              Ethernet Settings: <br></H1>')
     for interface in sfvmk_adapter_list:
-        output_file.write('<h1 id="Ethernet Settings"style="font-size:26px;"> \
-                          Ethernet Settings for %s: <br></H1>' % interface)
+        output_file.write('<h1 style="font-size:16px;"> \
+                                      %s : </H1>'%interface)
         nic_info_cmd = "esxcli " + server + " network nic get -n " + interface
         nic_info = execute(nic_info_cmd, mode)
         if nic_info == 1:
             output_file.write('Not Available')
             return
-        nic_info = nic_info.split('\n')
-        lines = ('<p>')
-        for line in nic_info:
-            lines += '%s<br>' % line
-        output_file.write('%s</p>' % lines)
+        collapse(output_file, nic_info, "Ethernet settings:")
         ring_info_cmd = "esxcli " + server + " network nic ring current get -n "\
                         + interface
         ring_info = execute(ring_info_cmd, mode)
         if ring_info == 1:
             output_file.write('Not Available')
             return
-        ring_info = ring_info.split('\n')
-        lines = ('<p>')
-        output_file.write('<h1 style="font-size:18px;"> Rx/Tx Ring Configuration\
-                          for %s: </H1>'% interface)
-        for line in ring_info:
-            lines += '%s<br>' % line
-        output_file.write('%s</p>' % lines)
+        collapse(output_file, ring_info,"Rx/Tx Ring Configuration:")
         if cli_vib:
             fec_cmd = "esxcli " + server + " sfvmk fec get -n " + interface
             fec_info = execute(fec_cmd, mode)
             if fec_info == 1:
                 output_file.write('Not Available')
                 return
-            fec_info = fec_info.split('\n')
-            lines = ('<p>')
-            output_file.write('<h1 style="font-size:18px;"> FEC Configuration \
-                                      for %s: </H1>' % interface)
-            for line in fec_info:
-                lines += '%s<br>' % line
-            output_file.write('%s</p>' % lines)
+            collapse(output_file, fec_info, "FEC Configuration:")
 
     return 0
 

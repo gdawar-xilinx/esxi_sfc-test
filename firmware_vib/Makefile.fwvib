@@ -47,8 +47,8 @@ else
 DESC_VERSION=$(PLUGIN_VERSION)-00
 endif
 DESC_VENDOR=SFC
-DESC_SUMMARY=esxcli extension for SFVMK driver
-DESC_DESCRIPTION=Userworld Tool to communicate with a VMKAPI driver module
+DESC_SUMMARY=This VIB contains firmware images
+DESC_DESCRIPTION=Custom VIB for firmware images
 DESC_URLS=descriptor-urls.xml
 DESC_DEPENDS=descriptor-depends.xml
 DESC_CONFLICTS=

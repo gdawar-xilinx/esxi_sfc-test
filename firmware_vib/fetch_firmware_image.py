@@ -30,6 +30,10 @@ import xml.etree.ElementTree as xmlparser
 if os.name == 'nt':
     _check_image = ctypes.CDLL('libfetch_image.dll')
 else:
+    shutil.copy('./Makefile.lib' , './Makefile')
+    ret_val = os.system('make')
+    if ret_val != 0:
+        fail("Unable to make. Exiting.")
     _check_image = ctypes.cdll.LoadLibrary('./libfetch_image.so')
 _check_image.check_reflash_image.argtypes = (ctypes.c_void_p, ctypes.c_uint32,
                                                               ctypes.POINTER(ctypes.c_uint32))
@@ -40,7 +44,7 @@ rc_elements = {}
 class ImageOutputDir(object):
     """ Class stores the details of firmware variants """
     ivy_base_dir = "/project/ivy/solarflare/"
-    vib_base_dir = "/root/stagedir/payloads/payload_data"
+    vib_base_dir = "payload_data"
     encode_file_name = 'encode.py'
 
     def __init__(self, dir_arg):
@@ -459,6 +463,7 @@ def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
        opt_dir = vib_base_dir + "/opt"
        image_dir = opt_dir + '/sfc/'
        base_dir = outdir_handle.output_dir
+       rev_container = "1.1.1.1000"
        if os.name == 'nt':
            fail(" This operation will be performed only on Development VM")
        else:
@@ -469,10 +474,22 @@ def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
        ret_val = os.system("cp -r " + base_dir + " " + opt_dir + "/sfc/")
        if ret_val != 0:
            fail("Unable to copy firmware directory to create vib")
-       ret_val = os.system("vibauthor -C -t /root/stagedir -v sfc-fw-images-" +
-                            version_num + " -f --force")
-       if ret_val != 0:
-           fail("Unable to create vib: Exiting.")
+       ver = version_num.replace('-','.')
+       with open("Makefile.fwvib",'r+') as f:
+           filedata = f.read()
+           filedata = filedata.replace(rev_container, ver)
+           f.truncate(0)
+           f.write(filedata)
+       f.close()
+       if os.name != 'nt':
+           shutil.copy('./Makefile.fwvib' , './Makefile')
+           ret_val = os.system('make clean')
+           if ret_val != 0:
+               fail("Unable to make clean. Exiting.")
+           ret_val = os.system('make')
+           if ret_val != 0:
+               fail("Unable to make vib file. Exiting.")
+
     except OSError:
         fail("OS Environment error. Exiting.")
     except IOError:
@@ -611,6 +628,7 @@ def main():
                 if ret_val != 0:
                     fail("Not able to create:",ImageOutputDir.vib_base_dir)
             create_vib_of_all_images(ImageOutputDir.vib_base_dir, outdir_handle, version_num)
+            os.remove('Makefile')
     except KeyError:
         fail("Image variant not determined. Exiting.")
     except OSError:

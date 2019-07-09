@@ -17,13 +17,14 @@ ESX[2]="6.7;/opt/vmware/nativeddk-6.7.0-8169922/src;10.40.128.67;no"
 # TAG information array
 # to be filled as: "<tag>;<rel/debug>;<yes/no[for src package>]"
 # Release tag
-TAGS[0]="v2.0.0.0006;rel;yes"
+TAGS[0]="v2.3.3.1000;rel;yes"
 # Debug tag
-TAGS[1]="v2.0.0.0007;debug;no"
+TAGS[1]="v2.3.3.1001;debug;no"
 #firmware family tag
-FW_FAMILY="v7.5.0.1019;v7.5-0.1019;no"
+FW_FAMILY="v7.7.0.1003"
 #firmware vib build VM
-FW_VM="10.40.128.87"
+VIB_TOOL[0]="6.5;/opt/vmware/nativeddk-6.5.0-4598673/src;10.40.128.87;yes"
+VIB_TOOL[1]="6.7;/opt/vmware/hexdk-6.7.0-8169922/;10.40.128.67;no"
 #export all esx versions in form of array
 export ESX
 #export all tags in form of array

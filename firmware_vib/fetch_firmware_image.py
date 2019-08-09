@@ -504,7 +504,8 @@ def main():
                                           output_directory
                                           release collection version
                                           username
-                                          machinename""",
+                                          machinename
+                                          manifest_list""",
                                        version="%prog 1.1")
         parser.add_option("-t", "--tag", dest='v5_tag',
                           help="tag/branch to access and retrieve files")
@@ -512,7 +513,7 @@ def main():
                           help="[true] create a vib having all the images")
 
         options, args = parser.parse_args()
-        if len(args) < 4:
+        if len(args) < 5:
             parser.print_help()
             fail("Exiting")
         if options.v5_tag is None:
@@ -531,6 +532,7 @@ def main():
         input_ivy_dir = args[1]
         username = args[2]
         machinename = args[3]
+        manifest_list = args[4]
         curr_dir = os.getcwd()
         password = 'None'
         if not input_ivy_dir.startswith('v'):
@@ -613,6 +615,7 @@ def main():
                                 username,
                                 machinename,
                                 password)
+        manifest_list_path = "./" + manifest_list
 
         os.remove(ivy_xml_file)
         os.remove(encodefilepath)

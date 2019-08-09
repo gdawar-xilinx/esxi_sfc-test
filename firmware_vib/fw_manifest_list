@@ -1,0 +1,38 @@
+; Firmware family elements
+;
+; Firmware metadata                    Firmware DAT file
+; ------------------------------------ ---------------------------------------
+
+; X2 (a.k.a. SFC9250 and "Medford 2") controller / X2000 series BootROM
+gpxe/SFC9250.mrom.ini                  gpxe/SFC9250.dat
+
+; 8000 series and X2000 series UEFI driver
+uefi_medford_x64/SfcNicDriver.rom.ini  uefi_medford_x64/SfcNicDriver.dat
+
+; X2522-R2.x (a.k.a "Bradford R2.x")
+; Solarflare XtremeScale X2522 (10G) Adapter
+mcfw-bob/mcfw.update.ini               mcfw-bob/mcfw.dat
+sucfw-bob/sucfw.update.ini             sucfw-bob/sucfw.dat
+
+; X2522-R5.x (a.k.a. "Roxburgh R2.x")
+; Solarflare XtremeScale X2522-25G Adapter
+mcfw-solidus/mcfw.update.ini           mcfw-solidus/mcfw.dat
+sucfw-solidus/sucfw.update.ini         sucfw-solidus/sucfw.dat
+
+; X2542-R3.x (a.k.a "Coldstream R1.x")
+; Solarflare XtremeScale X2542 Adapter"
+mcfw-crown/mcfw.update.ini             mcfw-crown/mcfw.dat
+sucfw-crown/sucfw.update.ini           sucfw-crown/sucfw.dat
+
+; X2541-R1.x (a.k.a "Stirling R1.x")
+; Solarflare XtremeScale X2541 Adapter
+mcfw-sovereign/mcfw.update.ini         mcfw-sovereign/mcfw.dat
+sucfw-sovereign/sucfw.update.ini       sucfw-sovereign/sucfw.dat
+
+; Dell-X2522-R2.x (a.k.a. "Dell Roxburgh R2.x")
+; Solarflare XtremeScale X2522-25G Adapter
+bundle-sol/bundle.update.ini           bundle-sol/bundle.dat
+
+; Dell-X2562-R2.x (a.k.a. "Dell Melrose R2.x")
+; Solarflare XtremeScale X2562 10/25G Adapter
+bundle-sixpence/bundle.update.ini      bundle-sixpence/bundle.dat

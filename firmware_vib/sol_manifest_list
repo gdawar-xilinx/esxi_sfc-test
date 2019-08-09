@@ -1,0 +1,8 @@
+; Bundle elements
+;
+; Firmware metadata                    Firmware DAT file                        Path modification (optional)            Hardware ID (optional)
+; ------------------------------------ ---------------------------------------- --------------------------------------- -------------------------------------
+
+; Dell-X2522-R2.x (a.k.a. "Dell Roxburgh R2.x")
+; Solarflare XtremeScale X2522-25G Adapter
+bundle-sol/bundle.update.ini           bundle-sol/bundle.dat

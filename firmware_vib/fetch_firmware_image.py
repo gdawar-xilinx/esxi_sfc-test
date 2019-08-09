@@ -25,20 +25,10 @@ import optparse
 import shutil
 import ctypes
 import getpass
+import ConfigParser
 import xml.etree.ElementTree as xmlparser
 
-if os.name == 'nt':
-    _check_image = ctypes.CDLL('libfetch_image.dll')
-else:
-    shutil.copy('./Makefile.lib' , './Makefile')
-    ret_val = os.system('make')
-    if ret_val != 0:
-        fail("Unable to make. Exiting.")
-    _check_image = ctypes.cdll.LoadLibrary('./libfetch_image.so')
-_check_image.check_reflash_image.argtypes = (ctypes.c_void_p, ctypes.c_uint32,
-                                                              ctypes.POINTER(ctypes.c_uint32))
-_check_image.check_reflash_image.restypes = (ctypes.c_int)
-
+INI_IM_SECTION = 'image' # Section of INI file in which image details are stored
 rc_elements = {}
 
 class ImageOutputDir(object):
@@ -64,18 +54,10 @@ class ImageOutputDir(object):
             if not os.path.exists(self.output_dir):
                 print("Output Directory doesn't exists")
                 return False
-            modified_dir = os.path.join(self.output_dir, "firmware")
-            if os.path.exists(modified_dir):
-                print("Firmware sub directory present in:" + self.output_dir)
-                overwrite = raw_input("Do you want to Overwrite it ?[y/n]")
-                if not overwrite == 'y':
-                    print("ERROR: Cannot Overwrite " + modified_dir + " Exiting")
-                    return False
-                else:
-                    self.output_dir = os.path.join(self.output_dir, "firmware")
-            else:
-                self.output_dir = os.path.join(self.output_dir, "firmware")
-                os.mkdir(self.output_dir)
+            self.output_dir = os.path.join(self.output_dir, "firmware")
+            if os.path.exists(self.output_dir):
+                shutil.rmtree(self.output_dir)
+            os.mkdir(self.output_dir)
             return True
         except OSError:
             print("Fail to create output directory")
@@ -187,15 +169,6 @@ def fail(msg):
     print(msg)
     sys.exit(1)
 
-def read_image_hdr(destfilepath, image_type):
-    """ Function checks the image header for type and subtype value """
-    file_size = os.path.getsize(destfilepath)
-    fd = open(destfilepath,'rb')
-    data = fd.read()
-    result = _check_image.check_reflash_image(data, file_size, image_type)
-    fd.close()
-    return result
-
 def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename,
                 destfilepath, fw_family_ver):
     """ Function creates a json object """
@@ -217,57 +190,6 @@ def create_json(name, rev, outdir_handle, json_handle, image_type, newfilename,
         json_handle.create_json_object(jsonobj, "bundle")
     else:
         json_handle.create_json_object(jsonobj, "bootrom")
-
-def get_dat_file(name, ivydir, outdir, image_type, username, machinename, password):
-    """ Using scp to get the dat image files from the repository"""
-    try:
-        if(name.find('mcfw') > -1):
-           subtype_index = name.find('-')
-           filename = "mcfw.dat"
-        elif(name.find('sucfw') > -1):
-           subtype_index = name.find('-')
-           filename = "sucfw.dat"
-        elif(name.find('bundle') > -1):
-           subtype_index = name.find('-')
-           filename = "bundle.dat"
-        else:
-           subtype_index = name.find('_')
-           filename = "SfcNicDriver.dat"
-        if subtype_index == -1:
-            fail('Cannot determine firmware subtype')
-        else:
-            subtype_index += 1
-        subtype = name[subtype_index:]
-        newfilename = subtype.upper() + '.dat'
-        srcfilepath = os.path.join(ivydir, filename)
-        destfilepath = os.path.join(outdir, newfilename)
-        image_file_path = outdir + '/' + filename
-
-        if os.name != 'nt':
-            ret_val = os.system('scp -q ' + username + '@' + machinename + ":" + srcfilepath
-                                          + ' ' + outdir)
-        else:
-            ret_val = os.system('pscp -q -pw ' + password + ' ' + username + '@'
-                                               + machinename + ":" + srcfilepath + ' '
-                                               + outdir)
-        if ret_val != 0:
-            fail("Unable to get dat file. Exiting.")
-        shutil.move(image_file_path, destfilepath)
-        result = read_image_hdr(destfilepath, image_type)
-        if result != 0:
-            fail('Not able to Check MCFW image',result)
-    except KeyError:
-        fail("Fail to get Image details. Exiting")
-    except OSError:
-        if name.find("mcfw") > -1:
-            fail("Fail to generate mcfw dat Image. Exiting")
-        elif name.find("sucfw") > -1:
-            fail("Fail to generate sucfw dat Image. Exiting")
-        elif name.find("bundle") > -1:
-            fail("Fail to generate bundle dat Image. Exiting")
-        else:
-            fail("Fail to generate uefirom dat Image. Exiting")
-    return newfilename
 
 def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
     """ Get firmware family version and bundle dat files"""
@@ -299,163 +221,269 @@ def get_fw_family_ver(curr_dir, ivy_file, password, username, machinename):
         fail("Image variant not determined. Exiting.")
     except OSError:
         fail("OS Environment error. Exiting.")
-
-def get_bundle_file(name, rev, outdir_handle, json_handle, username,
-                          machinename, password):
-    """ Gets bundle file from version specified in rev
-        and copies them to output directory. Also creates a Json object
-        of the image metadata """
+def get_dat_ini_file(name, rev, outdir_handle, json_handle, username, machinename, password):
+    """ Using scp to get the dat and ini files from the repository"""
     try:
         ivydir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/bins/'
-        image_type = (ctypes.c_uint32 * 2)()
-        if name.find("bundle") > -1:
-            outdir = outdir_handle.bundle_dir
-            newfilename = get_dat_file(name, ivydir, outdir, image_type,
-                                                   username, machinename, password)
-            print "{ FIRMWARE_BUNDLE, " + str(image_type[1]) + ", " + \
-                                           "\"" + newfilename + "\"" + " },"
+        if name.find("uefi") > -1:
+            inidir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/includes/'
         else:
-            fail("Not able to get the bundle dat file")
+            inidir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/inis/'
 
-        destfilepath = os.path.join(outdir, newfilename)
-        if json_handle.create_json_file == 1:
-            create_json(name, rev, outdir_handle, json_handle,
-                                       image_type, newfilename,
-                                       destfilepath, None)
+        if(name.find('mcfw') > -1):
+           dat_filename = "mcfw.dat"
+           ini_filename = "mcfw.update.ini"
+        elif(name.find('sucfw') > -1):
+           dat_filename = "sucfw.dat"
+           ini_filename = "sucfw.update.ini"
+        elif(name.find('bundle') > -1):
+           dat_filename = "bundle.dat"
+           ini_filename = "bundle.update.ini"
+        else:
+           dat_filename = "SfcNicDriver.dat"
+           ini_filename = "SfcNicDriver.rom.ini"
+
+        datfilepath = os.path.join(ivydir, dat_filename)
+        inifilepath = os.path.join(inidir, ini_filename)
+        outdir = "./" + name
+
+        if not os.path.exists(outdir):
+               os.mkdir(outdir)
+
+        if os.name != 'nt':
+            ret_val = os.system('scp -q ' + username + '@' + machinename + ":" + datfilepath
+                                              + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get dat file. Exiting.")
+
+            ret_val = os.system('scp -q ' + username + '@' + machinename + ":" + inifilepath
+                                              + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get ini file. Exiting.")
+
+        else:
+            ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@' + machinename +
+                                                ":" + datfilepath + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get dat file. Exiting.")
+
+            ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@' + machinename +
+                                                 ":" + inifilepath + ' ' + outdir)
+            if ret_val != 0:
+               fail("Unable to get ini file. Exiting.")
+
     except KeyError:
-        fail("Fail to get Image details. Exiting")
+        fail("Fail to get File. Exiting")
     except OSError:
-        fail("Fail to generate bundle dat Image. Exiting")
-
-def get_mc_uefi_file(name, rev, outdir_handle, json_handle, username, machinename,
-                     password, fw_family_ver):
-    """ Gets MCFW and UEFIROM files from version specified in ivy.xml
-        and copies them to output directory. Also creates a Json object
-        of the image metadata """
-    try:
-        ivydir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/bins/'
-        image_type = (ctypes.c_uint32 * 2)()
         if name.find("mcfw") > -1:
-            outdir = outdir_handle.mcfw_dir
-            newfilename = get_dat_file(name, ivydir, outdir, image_type,
-                                                   username, machinename, password)
-            print "{ FIRMWARE_MCFW, " + str(image_type[1]) + ", " + \
-                                           "\"" + newfilename + "\"" + " },"
+            fail("Fail to get mcfw dat and ini file. Exiting")
         elif name.find("sucfw") > -1:
-            outdir = outdir_handle.sucfw_dir
-            newfilename = get_dat_file(name, ivydir, outdir, image_type,
-                                                  username, machinename, password)
-            print "{ FIRMWARE_SUCFW, " + str(image_type[1]) + ", " + \
-                                             "\"" + newfilename + "\"" + " },"
+            fail("Fail to get sucfw dat and ini file. Exiting")
+        elif name.find("bundle") > -1:
+            fail("Fail to get bundle dat and ini file. Exiting")
         else:
-            outdir = outdir_handle.uefi_dir
-            newfilename = get_dat_file(name, ivydir, outdir, image_type,
-                                                  username, machinename, password)
-            print "{ FIRMWARE_UEFIROM, " + str(image_type[1]) + ", " + \
-                                              "\"" + newfilename + "\"" + " },"
+            fail("Fail to get uefirom dat and ini file. Exiting")
+
+def create_package(name, rev, outdir_handle, json_handle, image_type, fw_family_ver, datpath):
+    """ Create package and JSON file """
+
+    try:
+        if(name.find('gpxe') > -1):
+            outdir = outdir_handle.boot_dir
+            dir, newfilename = datpath.split('/')
+        else:
+            if(name.find('mcfw') > -1):
+                subtype_index = name.find('-')
+                outdir = outdir_handle.mcfw_dir
+            elif(name.find('sucfw') > -1):
+                subtype_index = name.find('-')
+                outdir = outdir_handle.sucfw_dir
+            elif(name.find('bundle') > -1):
+                subtype_index = name.find('-')
+                outdir = outdir_handle.bundle_dir
+            else:
+                subtype_index = name.find('_')
+                outdir = outdir_handle.uefi_dir
+            if subtype_index == -1:
+                fail('Cannot determine firmware subtype')
+            else:
+                subtype_index += 1
+            subtype = name[subtype_index:]
+            newfilename = subtype.upper() + '.dat'
+
         destfilepath = os.path.join(outdir, newfilename)
+        shutil.copy(datpath, destfilepath)
         if json_handle.create_json_file == 1:
             create_json(name, rev, outdir_handle, json_handle,
                                        image_type, newfilename,
                                        destfilepath, fw_family_ver)
     except KeyError:
         fail("Fail to get Image details. Exiting")
+    except IOError:
+        fail("Not able to copy the image. Exiting")
     except OSError:
-        if name.find("mcfw") > -1:
-            fail("Fail to generate mcfw dat Image. Exiting")
-        elif name.find("sucfw") > -1:
-            fail("Fail to generate sucfw dat Image. Exiting")
-        else:
-            fail("Fail to generate uefirom dat Image. Exiting")
+        fail("Fail to generate Image package. Exiting")
 
-def get_bootrom_file(name, rev, outdir_handle, json_handle,
-                                username, machinename, password):
+def parse_ini(filename, hardware_id, image_type):
+  """ Read an INI file describing the characteristics of an image"""
+  config = ConfigParser.ConfigParser()
+  config.read(filename)
+  if not config.has_section(INI_IM_SECTION):
+    return None
+  try:
+    image_type[0] = config.getint(INI_IM_SECTION, 'type')
+    image_type[1] = config.getint(INI_IM_SECTION, 'subtype')
+    image_version = config.get(INI_IM_SECTION, 'version')
+  except ValueError, e:
+    print >>sys.stderr, e
+    return None
+  return image_version
+
+def parse_fw_family_xml(filename, ivy_xml_file):
+     """ Parsing the Fw_family xmlfile and returning the revison
+        of the matched image name """
+
+     tree = xmlparser.parse(ivy_xml_file)
+     root_node = tree.getroot()
+     for child in root_node:
+         if child.tag == "dependencies":
+             for dependency in child.getchildren():
+                 if((dependency.get('name')) == filename):
+                     return (dependency.get('rev'))
+                 else:
+                     continue
+     return None
+
+def pre_post_cleanup():
+    """removing unwanted image files if any"""
+    for firmware_dir in os.listdir("./"):
+        if((firmware_dir.find("mcfw")) > -1 or
+            (firmware_dir.find("sucfw")) > -1 or
+            (firmware_dir.find("gpxe")) > -1 or
+            (firmware_dir.find("uefi")) > -1 or
+            (firmware_dir.find("bundle")) > -1):
+            os.system('rm -rf ' + firmware_dir)
+        else:
+            continue
+
+def get_bootrom_file(name, rev, inifile, outdir_handle, json_handle, encodefilepath,
+                                username, machinename, password, datpath):
     """ Gets BOOTROM files from version specified in ivy.xml and
         copies them to output directory. Also creates a Json object of
         the image metadata. Support added for both medford and medford2
         boards """
     try:
         ivydir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/bins'
-        curr_dir = os.getcwd()
-        ini_dir = curr_dir + '/inis'
-        mrom_dir = curr_dir + '/bins'
-        medford_bootrom_file = 'SFC9220.mrom'
-        medford_ini_file = 'SFC9220.mrom.ini'
-        medford_bootrom_dat_file = 'SFC9220.dat'
-        medford2_bootrom_file = 'SFC9250.mrom'
-        medford2_ini_file = 'SFC9250.mrom.ini'
-        medford2_bootrom_dat_file = 'SFC9250.dat'
+        inidir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/inis'
+        outdir = "./" + name
+
+        if not os.path.exists(outdir):
+               os.mkdir(outdir)
+        mrom_file = inifile.strip(".ini")
+        mromfilepath = os.path.join(ivydir, mrom_file)
+        inifilepath = os.path.join(inidir, inifile)
+        bootrompath = os.path.join(outdir, mrom_file)
         if os.name != 'nt':
-            ret_val = os.system('scp -qr ' + username + '@' + machinename + ":"
-                                           + ivydir + ' ' + curr_dir)
+            ret_val = os.system('scp -q ' + username + '@' + machinename + ":" + mromfilepath
+                                              + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get dat file. Exiting.")
+
+            ret_val = os.system('scp -q ' + username + '@' + machinename + ":" + inifilepath
+                                              + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get ini file. Exiting.")
         else:
-            ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@'
-                                                  + machinename + ":" + ivydir + ' ' + curr_dir)
+            ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@' + machinename +
+                                                 ":" + mromfilepath + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get dat file. Exiting.")
 
+            ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@' + machinename +
+                                                 ":" + inifilepath + ' ' + outdir)
+            if ret_val != 0:
+                fail("Unable to get ini file. Exiting.")
+
+        ret_val = os.system("python "+ encodefilepath + " " + "--combo-hdr" +
+                  " " + bootrompath + " " + datpath)
         if ret_val != 0:
-            fail("Unable to get ini files. Exiting.")
-        for updatefile in os.listdir(mrom_dir):
-            if (updatefile.endswith(medford_bootrom_file)or
-                    updatefile.endswith(medford2_bootrom_file)):
-                inifilefound = 0
-                if updatefile.endswith(medford_bootrom_file):
-                    inifilename = medford_ini_file
-                    datfilename = medford_bootrom_dat_file
-                else:
-                    inifilename = medford2_ini_file
-                    datfilename = medford2_bootrom_dat_file
-                srcfilepath = os.path.join(mrom_dir, updatefile)
-                destfilepath = os.path.join(outdir_handle.base_output_dir,
-                                            updatefile)
-                shutil.copy(srcfilepath, destfilepath)
-                inidir = ImageOutputDir.ivy_base_dir + name + '/default/' + rev + '/inis'
-                if os.name != 'nt':
-                    ret_val = os.system('scp -qr ' + username + '@' + machinename + ":"
-                                                   + inidir + ' ' + curr_dir)
-                else:
-                    ret_val = os.system('pscp -q -r -pw ' + password + ' ' + username + '@'
-                                                          + machinename + ":" + inidir + ' ' + curr_dir)
-
-                if ret_val != 0:
-                    fail("Unable to get ini files. Exiting.")
-                for inifile in os.listdir(ini_dir):
-                    if inifile.endswith(inifilename):
-                        srcfilepath = os.path.join(ini_dir, inifile)
-                        destinifilepath = os.path.join(outdir_handle.
-                                                       base_output_dir, inifile)
-                        shutil.copy(srcfilepath, destinifilepath)
-                        inifilefound = 1
-                        break
-                if inifilefound == 1:
-                    bootromfile = os.path.join(outdir_handle.boot_dir, datfilename)
-                    encodefilepath = os.path.join(outdir_handle.base_output_dir,
-                                                  ImageOutputDir.encode_file_name)
-                    ret_val = os.system("python "+ encodefilepath + " " + "--combo-hdr" +
-                              " " + destfilepath + " " + bootromfile)
-                    if ret_val != 0:
-                        fail("Unable to crate bootrom file. Exiting.")
-                        continue
-                    image_type = (ctypes.c_uint32 * 2)()
-                    result = read_image_hdr(bootromfile, image_type)
-                    if result != 0:
-                        fail('Not able to Check BOOTROM image',result)
-
-                    print("{ FIRMWARE_BOOTROM, " + str(image_type[1]) + ", " + \
-                                               "\"" + datfilename + "\"" + " },")
-                    if json_handle.create_json_file == 1:
-                        create_json(name, rev, outdir_handle, json_handle,
-                                                   image_type, datfilename,
-                                                   bootromfile, None)
-                    os.remove(destfilepath)
-                    os.remove(destinifilepath)
-                else:
-                    fail("Cannot Create BOOTROM dat file")
-        shutil.rmtree(mrom_dir)
-        shutil.rmtree(ini_dir)
+            fail("Unable to create bootrom file. Exiting.")
     except KeyError:
         fail("Fail to get Bootrom Image details. Exiting")
     except OSError:
         fail("Fail to generate Bootrom dat Image. Exiting")
+
+def parse_manifest_list(list_path, ivy_xml_file, encodefilepath,
+                                   outdir_handle, json_handle,
+                                   username, machinename,
+                                   password, fw_family_ver):
+
+  """ Parsing the manifest list supplied and creating the package """
+
+  rc = 0
+  image_type = (ctypes.c_uint32 * 2)()
+  f = open(list_path, 'r')
+  try:
+    for line in f:
+      if line.startswith(';'):
+        continue
+      arr = line.split()
+      if len(arr) >= 2:
+        # Check for input path modification
+        if len(arr) > 2:
+            ini_path = os.path.join(os.path.join("./", arr[2].strip()),arr[0].strip())
+        else:
+            ini_path = os.path.join("./",arr[0].strip())
+
+        # Check for hardware_id qualification
+        if len(arr) > 3:
+            hardware_id = arr[3].strip()
+        else:
+            hardware_id = ""
+
+        filename,inifile = arr[0].split("/")
+        datpath = arr[1].strip()
+
+        if((filename.find("bundle")) > -1):
+            for bundle_name, version in rc_elements.items():
+                if(bundle_name == filename):
+                    get_dat_ini_file(filename,
+                                     version,
+                                     outdir_handle,
+                                     json_handle,
+                                     username,
+                                     machinename,
+                                     password)
+        else:
+            firmware_revision = parse_fw_family_xml(filename, ivy_xml_file)
+            if firmware_revision is None:
+                print("No firmware image found, Check the image name: ", filename)
+                fail("Exiting")
+
+            if((filename.find("gpxe")) > -1):
+                get_bootrom_file(filename, firmware_revision, inifile,
+                                 outdir_handle, json_handle, encodefilepath,
+                                 username, machinename, password, datpath)
+            else:
+                get_dat_ini_file(filename,
+                                 firmware_revision,
+                                 outdir_handle,
+                                 json_handle,
+                                 username,
+                                 machinename,
+                                 password)
+
+        version_info = parse_ini(ini_path, hardware_id, image_type)
+        if version_info is None:
+            print ('Warning: Missing firmware metadata: ', ini_path)
+            fail("Exiting.")
+        create_package(filename, version_info, outdir_handle,
+                       json_handle, image_type, fw_family_ver,
+                       datpath)
+        rc = 1
+  finally:
+    f.close()
+    return rc
 
 def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
     """ Creating a vib having all the firmware images"""
@@ -535,6 +563,8 @@ def main():
         manifest_list = args[4]
         curr_dir = os.getcwd()
         password = 'None'
+        #pre cleanup
+        pre_post_cleanup()
         if not input_ivy_dir.startswith('v'):
             version_num = input_ivy_dir
             input_ivy_dir = 'v' + input_ivy_dir
@@ -575,50 +605,22 @@ def main():
             if ret_val != 0:
                 fail("Unable to get encode file. Exiting.")
         ivy_xml_file = curr_dir + '/ivy.xml'
-        tree = xmlparser.parse(ivy_xml_file)
-        root_node = tree.getroot()
-        for child in root_node:
-            if child.tag == "dependencies":
-                for dependency in child.getchildren():
-                    if((dependency.get('name')).find('mcfw') > -1 or
-                       (dependency.get('name')).find('uefi') > -1 or
-                       (dependency.get('name')).find('sucfw') > -1):
-                        if((dependency.get('conf')).find('siena') > -1 or
-                            (dependency.get('conf')).find('huntington') > -1 or
-		            (dependency.get('name')).find('aarch') > -1 or
-		            (dependency.get('name')).find('siena') > -1 or
-		            (dependency.get('name')).find('huntington') > -1):
-                            continue
-                        else:
-                            get_mc_uefi_file(dependency.get('name'),
-                                             dependency.get('rev'),
-                                             outdir_handle,
-                                             json_handle,
-                                             username,
-                                             machinename,
-                                             password,
-                                             fw_family_version)
-                    elif((dependency.get('name')).find('gpxe') > -1):
-                        get_bootrom_file(dependency.get('name'),
-                                         dependency.get('rev'),
-                                         outdir_handle,
-                                         json_handle,
-                                         username,
-                                         machinename,
-                                         password)
-        for bundle_name, version in rc_elements.items():
-            if bundle_name.find("bundle") > -1:
-                get_bundle_file(bundle_name,
-                                version,
-                                outdir_handle,
-                                json_handle,
-                                username,
-                                machinename,
-                                password)
         manifest_list_path = "./" + manifest_list
+
+        manifest_list_path = "./" + manifest_list
+
+        #Parsing the manifest list and creating package
+        rc = parse_manifest_list(manifest_list_path, ivy_xml_file, encodefilepath,
+                                                     outdir_handle, json_handle,
+                                                     username, machinename,
+                                                     password, fw_family_version)
 
         os.remove(ivy_xml_file)
         os.remove(encodefilepath)
+
+        if rc == 0:
+            fail("No image Description found in manifest list. Exiting")
+
         if json_handle.create_json_file == 1:
             json_handle.writejsonfile()
         if ((options.vib_author is None) or
@@ -632,6 +634,8 @@ def main():
                     fail("Not able to create:",ImageOutputDir.vib_base_dir)
             create_vib_of_all_images(ImageOutputDir.vib_base_dir, outdir_handle, version_num)
             os.remove('Makefile')
+        #post clean up
+        pre_post_cleanup()
     except KeyError:
         fail("Image variant not determined. Exiting.")
     except OSError:

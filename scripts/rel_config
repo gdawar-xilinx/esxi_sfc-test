@@ -22,6 +22,12 @@ TAGS[0]="v2.3.3.1000;rel;yes"
 TAGS[1]="v2.3.3.1001;debug;no"
 #firmware family tag
 FW_FAMILY="v7.7.0.1003"
+#Use any one manifest_list file:-
+#dell_manifest_list
+#fw_manifest_list
+#sixpence_manifest_list
+#sol_manifest_list
+MANIFEST_LIST="dell_manifest_list"
 #firmware vib build VM
 VIB_TOOL[0]="6.5;/opt/vmware/nativeddk-6.5.0-4598673/src;10.40.128.87;yes"
 VIB_TOOL[1]="6.7;/opt/vmware/hexdk-6.7.0-8169922/;10.40.128.67;no"
@@ -29,3 +35,4 @@ VIB_TOOL[1]="6.7;/opt/vmware/hexdk-6.7.0-8169922/;10.40.128.67;no"
 export ESX
 #export all tags in form of array
 export TAGS
+

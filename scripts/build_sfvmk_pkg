@@ -185,6 +185,7 @@ done
 #firmware vib build section
 #requires fw_family name as user input
 fw_family=$FW_FAMILY
+manifest_list=$MANIFEST_LIST
 cnt=0
 for i in "${VIB_TOOL[@]}"
 do
@@ -227,7 +228,7 @@ do
   echo "Fetching firmware images.."
   echo "Please wait, it could take a few minutes.."
   echo
-  cmd="cd $ddk_tag_dir/firmware_vib/; python fetch_firmware_image.py ./ $fw_family $user chisel.uk.solarflarecom.com -c true"
+  cmd="cd $ddk_tag_dir/firmware_vib/; python fetch_firmware_image.py ./ $fw_family $user chisel.uk.solarflarecom.com $manifest_list -c true"
   ssh -l root ${ddk_vm} "${cmd}"
   echo "Fetching firmware images completed"
   # create the firmware package directory if it doesn't exist

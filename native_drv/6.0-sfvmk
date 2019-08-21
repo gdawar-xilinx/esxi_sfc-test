@@ -129,7 +129,6 @@ sfvmk_vib_def = {
              ],
       "depends":
              [
-                  {'name': 'vmkapi_2_2_0_0'},
              ],
       "conflicts":
              [

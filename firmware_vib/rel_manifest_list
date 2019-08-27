@@ -1,0 +1,86 @@
+; Firmware family elements
+;
+; Firmware metadata                    Firmware DAT file
+; ------------------------------------ ---------------------------------------
+
+; X2 (a.k.a. SFC9250 and "Medford 2") controller / X2000 series BootROM
+gpxe/SFC9250.mrom.ini                  gpxe/SFC9250.dat
+
+; X1 (a.k.a. SFC9220 and "Medford 1") controller / 8000 series BootROM
+gpxe/SFC9220.mrom.ini                  gpxe/SFC9220.dat
+
+; 8000 series and X2000 series UEFI driver
+uefi_medford_x64/SfcNicDriver.rom.ini  uefi_medford_x64/SfcNicDriver.dat
+
+; SFN8041-R1 (a.k.a "Cyclops R1")
+; SolarFlare 8041 OCP 1x40G Adapter
+mcfw-cyclops/mcfw.update.ini           mcfw-cyclops/mcfw.dat
+sucfw-cyclops/sucfw.update.ini         sucfw-cyclops/sucfw.dat
+
+; SFN8042-R3 (a.k.a "Byblos R3")
+; SolarFlare 8042 OCP 2x40G Adapter
+mcfw-byblos/mcfw.update.ini            mcfw-byblos/mcfw.dat
+sucfw-byblos/sucfw.update.ini          sucfw-byblos/sucfw.dat
+
+; SFN8522-R2 (a.k.a "Sparta R2")
+; SolarFlare 8522 2x10G Adapter
+mcfw-sparta/mcfw.update.ini            mcfw-sparta/mcfw.dat
+
+; SFN8522-R3 (a.k.a "Jericho R3")
+; SolarFlare 8522 OCP 2x10G Adapter
+mcfw-jericho/mcfw.update.ini           mcfw-jericho/mcfw.dat
+sucfw-jericho/sucfw.update.ini         sucfw-jericho/sucfw.dat
+
+; SFN8542 (a.k.a "Thebes")
+; SolarFlare 8542 2x40G Adapter
+mcfw-thebes/mcfw.update.ini            mcfw-thebes/mcfw.dat
+
+; SFN8722 (a.k.a "Icarus")
+; SolarFlare 8722 OCP Adapter
+mcfw-icarus/mcfw.update.ini            mcfw-icarus/mcfw.dat
+sucfw-icarus/sucfw.update.ini          sucfw-icarus/sucfw.dat
+
+; X2522-R1.x (a.k.a "Shilling R1.x")
+; Solarflare XtremeScale X2522 (10G) Adapter
+mcfw-shilling/mcfw.update.ini          mcfw-shilling/mcfw.dat
+sucfw-shilling/sucfw.update.ini        sucfw-shilling/sucfw.dat
+
+; X2522-R2.x (a.k.a "Bradford R2.x")
+; Solarflare XtremeScale X2522 (10G) Adapter
+mcfw-bob/mcfw.update.ini               mcfw-bob/mcfw.dat
+sucfw-bob/sucfw.update.ini             sucfw-bob/sucfw.dat
+
+; X2552-R3.x (a.k.a "Threepence X2552 R3.x")
+; Solarflare XtremeScale X2552 Adapter
+mcfw-threepence/mcfw.update.ini        mcfw-threepence/mcfw.dat
+sucfw-threepence/sucfw.update.ini      sucfw-threepence/sucfw.dat
+
+; X2522-R4.x (a.k.a. "Hog R4.x")
+; Solarflare XtremeScale X2522-25G Adapter
+mcfw-hog/mcfw.update.ini               mcfw-hog/mcfw.dat
+sucfw-hog/sucfw.update.ini             sucfw-hog/sucfw.dat
+
+; X2522-R5.x (a.k.a. "Roxburgh R5.x")
+; Solarflare XtremeScale X2522-25G Adapter
+mcfw-solidus/mcfw.update.ini           mcfw-solidus/mcfw.dat
+sucfw-solidus/sucfw.update.ini         sucfw-solidus/sucfw.dat
+
+; X2541-R1.x (a.k.a "Stirling R1.x")
+; Solarflare XtremeScale X2541 Adapter
+mcfw-sovereign/mcfw.update.ini         mcfw-sovereign/mcfw.dat
+sucfw-sovereign/sucfw.update.ini       sucfw-sovereign/sucfw.dat
+
+; X2542 (a.k.a "Florin")
+; Solarflare XtremeScale X2542 Adapter"
+mcfw-florin/mcfw.update.ini            mcfw-florin/mcfw.dat
+sucfw-florin/sucfw.update.ini          sucfw-florin/sucfw.dat
+
+; X2542-R3.x (a.k.a "Coldstream R1.x")
+; Solarflare XtremeScale X2542 Adapter"
+mcfw-crown/mcfw.update.ini             mcfw-crown/mcfw.dat
+sucfw-crown/sucfw.update.ini           sucfw-crown/sucfw.dat
+
+; X2552-R3.x (a.k.a. "Joey X2552 R3.x")
+; Solarflare XtremeScale X2552 Adapter
+bundle-joey/bundle.update.ini          bundle-joey/bundle.dat
+

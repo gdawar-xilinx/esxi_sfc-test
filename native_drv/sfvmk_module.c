@@ -101,7 +101,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  29
+#define SFVMK_ALLOC_DESC_SIZE  30
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -126,7 +126,7 @@ sfvmk_calcHeapSize(void)
 #if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 4, 0, 0)
   /* For MCDI lock, adapter lock */
   vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
-  allocDesc[index++].count = 2;
+  allocDesc[index++].count = 2 * SFVMK_MAX_ADAPTER;
 
   /* Binary semaphore at the module level */
   allocDesc[index].size = vmk_SemaAllocSize((vmk_uint32 *)&allocDesc[index].alignment);
@@ -246,6 +246,10 @@ sfvmk_calcHeapSize(void)
   allocDesc[index].size = vmk_BitVectorSize(SFVMK_MAX_VLANS);
   allocDesc[index].alignment = 0;
   allocDesc[index++].count = SFVMK_MAX_ADAPTER * SFVMK_PROXY_AUTH_NUM_BLOCKS;
+
+  /* For secondaryListLock */
+  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER;
 #endif
 
   VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);

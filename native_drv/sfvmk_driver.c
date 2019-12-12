@@ -429,6 +429,7 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   efx_drv_limits_t limits;
   VMK_ReturnStatus status = VMK_FAILURE;
   vmk_uint32 maxEvqCount;
+  vmk_uint32 maxRxq, maxTxq;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
@@ -447,9 +448,14 @@ sfvmk_setResourceLimits(sfvmk_adapter_t *pAdapter)
   pAdapter->txDmaDescMaxSize = pNicCfg->enc_tx_dma_desc_size_max;
   vmk_Memset(&limits, 0, sizeof(limits));
 
+  /* Minimum value of intr supported and queues limit,
+   * this is the max number of queues can be supported */
+  maxTxq = MIN(pNicCfg->enc_txq_limit, pNicCfg->enc_intr_limit);
+  maxRxq = MIN(pNicCfg->enc_rxq_limit, pNicCfg->enc_intr_limit);
+
   /* Get number of queues supported (this is depend on number of cpus) */
-  status = vmk_UplinkQueueGetNumQueuesSupported(pNicCfg->enc_txq_limit,
-                                                pNicCfg->enc_rxq_limit,
+  status = vmk_UplinkQueueGetNumQueuesSupported(maxTxq,
+                                                maxRxq,
                                                 &limits.edl_max_txq_count,
                                                 &limits.edl_max_rxq_count);
   if (status != VMK_OK) {

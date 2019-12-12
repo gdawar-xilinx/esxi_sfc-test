@@ -182,6 +182,13 @@ sfvmk_registerInterrupts(sfvmk_adapter_t *pAdapter)
       goto failed_intr_reg;
     }
 
+    if (pEvq->netPoll == NULL) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "No netpoll associated with EVQ[%u]",
+                          pEvq->index);
+      status = VMK_FAILURE;
+      goto failed_intr_reg;
+    }
+
     vmk_NameFormat(&intrProps.deviceName,
                    "%s-intr%d", pAdapter->uplink.name.string, index);
 
@@ -249,6 +256,13 @@ sfvmk_unregisterInterrupts(sfvmk_adapter_t *pAdapter)
     pEvq = pAdapter->ppEvq[index];
     if (pEvq == NULL) {
       SFVMK_ADAPTER_ERROR(pAdapter, "NULL EVQ ptr");
+      status = VMK_FAILURE;
+      goto done;
+    }
+
+    if (pEvq->netPoll == NULL) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "No netpoll associated with EVQ[%u]",
+                          pEvq->index);
       status = VMK_FAILURE;
       goto done;
     }

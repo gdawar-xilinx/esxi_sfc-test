@@ -3029,6 +3029,14 @@ sfvmk_createUplinkRxq(sfvmk_adapter_t *pAdapter,
 
   if (feat & (VMK_UPLINK_QUEUE_FEAT_RSS |
               VMK_UPLINK_QUEUE_FEAT_RSS_DYN)) {
+
+    if (!sfvmk_isRSSEnable(pAdapter)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "RSSq allocation requested but "
+                          "RSS is not enabled");
+      status = VMK_FAILURE;
+      goto done;
+    }
+
     vmk_uint32 hwQueueIndex = sfvmk_getRSSQStartIndex(pAdapter);
 
     sfvmk_MutexLock(pAdapter->lock);

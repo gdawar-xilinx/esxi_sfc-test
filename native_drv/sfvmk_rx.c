@@ -258,11 +258,15 @@ sfvmk_rxInit(sfvmk_adapter_t *pAdapter)
                                    pAdapter->numRxqsAllotted);
 
   /* NetQ count can not be more than RXQs allocated */
-  if (pAdapter->numRxqsAllocated < pAdapter->numNetQs)
+  if (pAdapter->numRxqsAllocated <= pAdapter->numNetQs) {
     pAdapter->numNetQs = pAdapter->numRxqsAllocated;
-
-  if (pAdapter->numRxqsAllocated > sfvmk_getRSSQStartIndex(pAdapter))
+    pAdapter->numRSSQs = 0;
+  } else if (pAdapter->numRxqsAllocated >= sfvmk_getRSSQStartIndex(pAdapter)) {
     pAdapter->numRSSQs = pAdapter->numRxqsAllocated - sfvmk_getRSSQStartIndex(pAdapter);
+   /* If RSS is enabled there should be atleast two more RXQs to support RSS */
+    if (pAdapter->numRSSQs < 2)
+      pAdapter->numRSSQs = 0;
+  }
 
   rxqArraySize = sizeof(sfvmk_rxq_t *) * pAdapter->numRxqsAllocated;
 

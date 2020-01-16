@@ -7,7 +7,7 @@
 
 #---------------------------------------------------------------------------#
 # Supported build platforms :
-#   ESXI 6.0/6.5/6.7
+#   ESXI 6.0/6.5/6.7/7.0
 #
 # This script selects appropiate build files [sfvmk.sc and tool-defs.inc]
 # for the selected build platform and it extracts following informations
@@ -30,12 +30,12 @@ NDDK_VER=$(echo $NDDK_DIR | cut -c 11-13)
 
 
 # Retrieve NDDK build number
-BUILD_NUM=$(echo $NDDK_DIR | cut -c 17-23)
+BUILD_NUM=$(echo $NDDK_DIR | cut -c 17-24)
 
 # Perform sanity Checks
 sanityChecks () {
     # Check supported NDDK version
-    if [ "$NDDK_VER" != "6.0" ] && [ "$NDDK_VER" != "6.5" ] && [ "$NDDK_VER" != "6.7" ]; then
+    if [ "$NDDK_VER" != "6.0" ] && [ "$NDDK_VER" != "6.5" ] && [ "$NDDK_VER" != "6.7" ] && [ "$NDDK_VER" != "7.0" ]; then
       echo "UNSUPPORTED NDDK version '${NDDK_VER}' found"
     fi
 }
@@ -58,6 +58,8 @@ cfg_sfvmksc () {
     elif [ "$NDDK_VER" == "6.5" ] || [ "$NDDK_VER" == "6.7" ]; then
        # Same build parameters are being used for 6.5 and 6.7
        cp 6.5-sfvmk sfvmk.sc
+    elif [ "$NDDK_VER" == "7.0" ]; then
+       cp 7.0-sfvmk sfvmk.sc
     fi
 }
 
@@ -67,6 +69,8 @@ cfg_toolscfg () {
     elif [ "$NDDK_VER" == "6.5" ] || [ "$NDDK_VER" == "6.7" ]; then
        # Same tool versions are being used for 6.5 and 6.7
        cp 6.5-tool-defs.inc tool-defs.inc
+    elif [ "$NDDK_VER" == "7.0" ]; then
+       cp 7.0-tool-defs.inc tool-defs.inc
     fi
 }
 

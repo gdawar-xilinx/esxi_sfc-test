@@ -19,7 +19,7 @@ global out
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
-SFREPORT_VERSION = "2.3.3.1008"
+SFREPORT_VERSION = "2.3.3.1010"
 
 def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """

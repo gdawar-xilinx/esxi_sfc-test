@@ -31,7 +31,7 @@
 
 /* Wait time  for common EVQ to start */
 #define SFVMK_EVQ_START_POLL_TIME_USEC   VMK_USEC_PER_MSEC
-#define SFVMK_EVQ_START_TIME_OUT_USEC    (200 *  VMK_USEC_PER_MSEC)
+#define SFVMK_EVQ_START_TIME_OUT_USEC    (500 *  VMK_USEC_PER_MSEC)
 
 /* Default static interrupt moderation value */
 #define SFVMK_MODERATION_USEC         30

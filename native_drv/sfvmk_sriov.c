@@ -73,20 +73,25 @@ sfvmk_sriovInitMaxVfs(sfvmk_adapter_t *pAdapter, vmk_uint32 *pMaxVfs)
   VMK_ASSERT_NOT_NULL(pAdapter);
   VMK_ASSERT_NOT_NULL(pMaxVfs);
 
-  if (modParams.maxVfsCount == 1)
-    /* If there is only one entry in max_vfs array,
-     * use it for all NICs for backward compatibility.
-     */
-    idx = 0;
-  else
-    idx = sfvmk_sriovPfCount - 1;
-
+  idx = sfvmk_sriovPfCount - 1;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 5, 0, 0)
+  vmk_uint32 maxVfs = 0;
+  VMK_ReturnStatus vmkStatus;
+  vmkStatus = vmk_DeviceGetParamMaxVfs(pAdapter->device, &maxVfs);
+  if (vmkStatus != VMK_OK) {
+    maxVfs = 0;
+    SFVMK_ADAPTER_ERROR(pAdapter, "Get max_vfs fail: %s",
+                        vmk_StatusToString(vmkStatus));
+  }
+  *pMaxVfs = maxVfs;
+#else
   if ((idx >= modParams.maxVfsCount) ||
       (max_vfs[idx] < 0) ||
       (max_vfs[idx] > SFVMK_MAX_VFS_PER_PF))
      *pMaxVfs = SFVMK_MAX_VFS_DEFAULT;
   else
      *pMaxVfs = max_vfs[idx];
+#endif
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                       "Index: %u, modParams.maxVfsCount: %u maxVfs: %u",

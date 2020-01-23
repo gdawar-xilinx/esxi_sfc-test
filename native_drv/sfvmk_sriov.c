@@ -1605,6 +1605,9 @@ sfvmk_registerVFs(sfvmk_adapter_t *pAdapter)
   VMK_ReturnStatus status = VMK_FAILURE;
   sfvmk_vfInfo_t *pVfInfo = NULL;
   vmk_AddrCookie vfConfigOps;
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 6, 0, 0)
+  vmk_PCIPtOpsFunc ptOpsFunc;
+#endif
   vmk_uint32 i = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
@@ -1656,8 +1659,12 @@ sfvmk_registerVFs(sfvmk_adapter_t *pAdapter)
                         "vmk_PCIRegisterVF vfPciDev%u: %04x:%02x:%02x.%x", i,
                         pVfInfo->vfPciDevAddr.seg, pVfInfo->vfPciDevAddr.bus,
                         pVfInfo->vfPciDevAddr.dev, pVfInfo->vfPciDevAddr.fn);
-
+#if VMKAPI_REVISION >= VMK_REVISION_FROM_NUMBERS(2, 6, 0, 0)
+    ptOpsFunc.generic = vfConfigOps;
+    vmk_PCISetVFPtOpsFunc(pVfInfo->vfPciDev, ptOpsFunc);
+#else
     vmk_PCISetVFPrivateData(pVfInfo->vfPciDev, vfConfigOps);
+#endif
     sfvmk_vfInfoReset(pAdapter, pVfInfo);
   }
 

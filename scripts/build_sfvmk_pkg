@@ -142,8 +142,13 @@ do
          echo "Aborting!.."
          exit
       fi
-      echo "Copying sfvmk_offline.bundle"
-      scp root@$ddk_vm:$ddk_tag_dir"/native_drv/build/bundle/offline-bundle.zip" $pkg_dir
+      if [ $esx_ver == "7.0" ] ;then
+         echo "Copying component"
+         scp root@$ddk_vm:$ddk_tag_dir"/native_drv/build/component/VMW-esx-7.0.0*.zip" $pkg_dir
+      else
+         echo "Copying sfvmk_offline.bundle"
+         scp root@$ddk_vm:$ddk_tag_dir"/native_drv/build/bundle/offline-bundle.zip" $pkg_dir
+      fi
       if [ $? -ne 0 ] ;then
          echo "ERROR: SCP failed"
          echo "Aborting!.."

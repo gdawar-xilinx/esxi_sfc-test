@@ -2,7 +2,7 @@
 #############
 
 # This script currently:
-# - version bumps in 6.0-sfvmk & 6.5-sfvmk
+# - version bumps in 6.0-sfvmk, 6.5-sfvmk & 7.0-sfvmk
 # - tags esxi_sfc
 # - commit and push changes
 
@@ -457,11 +457,20 @@ addSfvmkTag () {
     liveVibParamUpdate "6.0-sfvmk"
     echo "Updating 6.0-Makefile.user"
     updateEsxcliMakefile "6.0"
+
     echo "Updating 6.5-sfvmk file for 6.5 build...."
     versionUpdate "6.5-sfvmk"
     liveVibParamUpdate "6.5-sfvmk"
     echo "Updating 6.5-Makefile.user"
     updateEsxcliMakefile "6.5"
+
+    echo "Updating 7.0-sfvmk file for 7.0 build...."
+    versionUpdate "7.0-sfvmk"
+    liveVibParamUpdate "7.0-sfvmk"
+    # TBD: esxcli for 7.0
+    #echo "Updating 7.0-Makefile.user"
+    #updateEsxcliMakefile "7.0"
+
     echo "Updating Makefile ...."
     buildtypeupdate
     updateV5Target

@@ -10,16 +10,17 @@
 # ESXi information array
 # to be filled as: "<ESX_VER>;<NDDK_PATH>;<VM_IP>;<sfvmkcli_build>"
 # Note: ESXCLI is built only for 6.0 and the same VIB works for higher versions of ESXi
-ESX[0]="6.0;/opt/vmware/nativeddk-6.0.0-2768847/src;10.40.128.99;cli"
-ESX[1]="6.5;/opt/vmware/nativeddk-6.5.0-4598673/src;10.40.128.87;no"
-ESX[2]="6.7;/opt/vmware/nativeddk-6.7.0-8169922/src;10.40.128.67;no"
+#ESX[0]="6.0;/opt/vmware/nativeddk-6.0.0-2768847/src;10.40.128.117;cli"
+ESX[0]="6.5;/opt/vmware/nativeddk-6.5.0-4598673/src;10.40.128.155;cli"
+ESX[1]="7.0;/opt/vmware/nativeddk-7.0.0-14828939/src;10.40.128.184;no"
+#ESX[2]="6.7;/opt/vmware/nativeddk-6.7.0-8169922/src;10.40.128.67;no"
 
 # TAG information array
 # to be filled as: "<tag>;<rel/debug>;<yes/no[for src package>]"
 # Release tag
-TAGS[0]="v2.3.3.1000;rel;yes"
+TAGS[0]="v2.3.3.1012;rel;yes"
 # Debug tag
-TAGS[1]="v2.3.3.1001;debug;no"
+TAGS[1]="v2.3.3.1013;debug;no"
 #firmware family tag
 FW_FAMILY="v7.7.0.1003"
 #Use any one manifest_list file:-

@@ -1,0 +1,77 @@
+# Copyright (c) 2017 - 2019, Solarflare Communications Inc.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+# Makefile
+#
+# This builds the firmware collection VIB
+#
+
+# Construct the VIB name
+DEV_VIB_BASENAME ?= $(BULL_VENDOR_CODE)-ESX-$(UWTOOL)-$(UWTOOL_VERSION)
+
+DESC_NAME=$(shell echo $(BULL_VENDOR_CODE)-ESX-$(UWTOOL) | tr A-Z a-z)
+DESC_ESX_VERSION=7.0.0
+
+HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-7.0.0-1.0.15525992)
+
+include $(HEXDK_BASE)/samples/common/userworld-tool.inc
+
+# Only need to evaluate once (aka use ":=").
+CURRENT_DIR := $(shell pwd)
+BUILD_DIR := build
+SCRATCH_DIR := $(BUILD_DIR)/scratch
+VIB_DIR := $(BUILD_DIR)/vib
+BUNDLE_DIR := $(BUILD_DIR)/component
+STAGE_DIR := $(BUILD_DIR)/payloads/$(DESC_PAYLOAD_NAME)
+TARGET_XML_DIR := /usr/lib/vmware/esxcli/ext
+
+VIB_DESCRIPTOR_XML := $(SCRATCH_DIR)/descriptor.xml
+VIB_BULLETIN_XML := $(SCRATCH_DIR)/bulletin.xml
+
+VIB_BULLETIN_ID = $(BULL_VENDOR_CODE)-esx-$(DESC_ESX_VERSION)-$(UWTOOL)-$(UWTOOL_VERSION)
+
+VPATH += :$(abspath $(DEV_COMMON_DIR))
+ifdef AUTOSIGGEN_DEFS
+UWTOOL_SOURCES += signature_definition.c
+VPATH += :$(abspath $(AUTOSIG_DIR))
+VPATH += :$(abspath $(COMMON_MGMT_INFRASTRUCTURE_DIR))
+endif
+
+.PHONY: clean
+
+all: vib
+
+vib:	build-dirs copy-payloads minimal-descriptor fill-bulletin xml-checks package
+
+package:
+	$(MAKE) -f Makefile vib-bundle
+build-dirs:
+	$(MKDIR) -p $(BUILD_DIR) $(SCRATCH_DIR) $(STAGE_DIR) $(VIB_DIR)
+copy-payloads:
+	$(CP) -r $(CURRENT_DIR)/payload_data/opt $(STAGE_DIR)
+clean:
+	$(RM) -rf $(BUILD_DIR) $(SCRATCH_DIR) $(STAGE_DIR) \
+		$(VIB_DIR) core vendor-index.xml
+

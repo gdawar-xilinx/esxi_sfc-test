@@ -1,3 +1,4 @@
+#
 # Copyright (c) 2017 - 2019, Solarflare Communications Inc.
 # All rights reserved.
 #
@@ -30,27 +31,25 @@ RELEASE_CONTAINER_VER := 1.1.1.1000
 # to put in auto-generating metadata file (bulletin.xml, descriptor.xml etc)
 # Note: UWTOOL* and PLUGIN* is name of the host extension (VIB) and used as
 # per the ESX version.
-ifeq ($(NDDK_VER),6.5)
 UWTOOL = fw-vib
 UWTOOL_VERSION := $(RELEASE_CONTAINER_VER)
-else
 PLUGIN = fw-vib
 PLUGIN_VERSION = $(RELEASE_CONTAINER_VER)
-endif
 
 PLUGIN_XML =
 
 DESC_VENDOR_EMAIL=support@solarflare.com
-ifeq ($(NDDK_VER),6.5)
 DESC_VERSION=$(UWTOOL_VERSION)-00
-else
 DESC_VERSION=$(PLUGIN_VERSION)-00
-endif
 DESC_VENDOR=SFC
 DESC_SUMMARY=This VIB contains firmware images
 DESC_DESCRIPTION=Custom VIB for firmware images
 DESC_URLS=descriptor-urls.xml
+ifeq ($(NDDK_VER),7.0)
+DESC_DEPENDS=7.0-descriptor-depends.xml
+else
 DESC_DEPENDS=descriptor-depends.xml
+endif
 DESC_CONFLICTS=
 DESC_REPLACES=
 DESC_PROVIDES=
@@ -62,12 +61,19 @@ DESC_STATELESS_READY=true
 DESC_ACCEPTANCE_LEVEL=partner
 
 DEV_SIGNING_PREFIX=vmpartner
-
+DESC_PAYLOAD_NAME=sfvmk-fw
 BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
 BULL_VENDOR_CODE=SFC
 
 KEYPATH=/opt/vmware/vibtools/testcerts/vmpartner.key
 CERTPATH=/opt/vmware/vibtools/testcerts/vmpartner.cert
+
+ifeq ($(NDDK_VER),7.0)
+BULL_CNS_NAME=SFC-FWVIB
+BULL_CNS_STRING=$(DESC_DESCRIPTION)
+BULL_CVS_VERSION=1.0-0.0.0001
+BULL_CVS_STRING=1.0 - Build 0001
+endif
 
 include $(NDDK_VER)-Makefile.user

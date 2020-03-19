@@ -510,7 +510,11 @@ sfvmk_updateFromFile(sfvmk_masterDevNode_t *pMsNode,
   }
 
   memset(&imgUpdateV2, 0, sizeof(imgUpdateV2));
+#if (VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 3, 0, 0))
   imgUpdateV2.pFileBuffer = (vmk_uint64)((vmk_uint32)pBuf);
+#else
+  imgUpdateV2.pFileBuffer = (vmk_uint64)pBuf;
+#endif
   imgUpdateV2.size = fileSize;
   imgUpdateV2.type = sfvmk_getNvramType(fwType);
 

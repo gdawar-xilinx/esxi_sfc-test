@@ -56,11 +56,24 @@ DESC_STATELESS_READY=true
 
 DESC_ACCEPTANCE_LEVEL=partner
 
+ifeq ($(NDDK_VER),7.0)
+KEYPATH=/opt/vmware/vibtools/testcerts/vmpartner.key
+CERTPATH=/opt/vmware/vibtools/testcerts/vmpartner.cert
+endif
+
 DEV_SIGNING_PREFIX=vmpartner
 
+DESC_PAYLOAD_NAME=sfvmk-esxcli
 BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
 BULL_VENDOR_CODE=SFC
+
+ifeq ($(NDDK_VER),7.0)
+BULL_CNS_NAME=SFC-ESXCLI
+BULL_CNS_STRING=$(DESC_DESCRIPTION)
+BULL_CVS_VERSION=1.0-0.0.0001
+BULL_CVS_STRING=1.0 - Build 0001
+endif
 
 DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 DEV_release_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast

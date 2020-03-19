@@ -488,7 +488,12 @@ sfvmk_hwQueueStats(int opType, sfvmk_mgmtDevInfo_t *pMgmtParm)
   }
 
   memset(pBuffer, 0, stats.size);
+#if (VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 3, 0, 0))
   stats.statsBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
+#else
+  stats.statsBuffer = (vmk_uint64)pBuffer;
+#endif
+
   stats.subCmd = SFVMK_MGMT_STATS_GET;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
                                       SFVMK_CB_HW_QUEUE_STATS_GET, pMgmtParm, &stats);
@@ -731,7 +736,12 @@ sfvmk_hwSensorGet(sfvmk_mgmtDevInfo_t *pMgmtParm, int opType)
   }
 
   memset(pBuffer, 0, sensor.size);
+#if (VMKAPI_REVISION == VMK_REVISION_FROM_NUMBERS(2, 3, 0, 0))
   sensor.sensorBuffer = (vmk_uint64)((vmk_uint32)pBuffer);
+#else
+  sensor.sensorBuffer = (vmk_uint64)pBuffer;
+#endif
+
   sensor.subCmd = SFVMK_MGMT_SENSOR_GET;
   status = vmk_MgmtUserCallbackInvoke(mgmtHandle, VMK_MGMT_NO_INSTANCE_ID,
                                       SFVMK_CB_SENSOR_INFO_GET, pMgmtParm, &sensor);

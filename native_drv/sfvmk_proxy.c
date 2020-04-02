@@ -603,8 +603,6 @@ sfvmk_proxyCompleteRequest(sfvmk_adapter_t *pAdapter,
                                    pReqState->pProxyEvent->requestTag,
                                    &numCancelled);
 
-  VMK_ASSERT(numCancelled == 1);
-
   if (status != VMK_OK) {
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_HelperCancelRequest proxy requests failed: %s",
@@ -669,11 +667,13 @@ sfvmk_handleRequestTimeout(vmk_AddrCookie data)
                                    SFVMK_PROXY_REQ_STATE_OUTSTANDING) {
      SFVMK_ADAPTER_ERROR(pAdapter, "Invalid state %lu on index %u",
                          vmk_AtomicRead64(&pReqState->reqState), index);
+     goto exit;
   }
 
   pReqState->result = pProxyState->defaultResult;
   sfvmk_proxyAuthSendResponse(pAdapter, pProxyState, index, pReqState);
 
+exit:
   if (sfvmk_changeAtomicVar(&pProxyState->authState,
                             SFVMK_PROXY_AUTH_STATE_RUNNING,
                             SFVMK_PROXY_AUTH_STATE_READY,

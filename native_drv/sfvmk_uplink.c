@@ -2409,12 +2409,6 @@ static VMK_ReturnStatus
 sfvmk_startIO(sfvmk_adapter_t *pAdapter)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
-#ifdef SFVMK_SUPPORT_SRIOV
-  sfvmk_adapter_t *pPrimary = NULL;
-  sfvmk_adapter_t *pOther = NULL;
-  vmk_ListLinks *pLink = NULL;
-  vmk_uint32 totalVfs = 0;
-#endif
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
@@ -2552,20 +2546,7 @@ failed_intr_start:
 failed_nic_init:
 failed_set_drv_limits:
 #ifdef SFVMK_SUPPORT_SRIOV
-  /* Do not clean-up proxy auth module if some other port is using it */
-  pPrimary = pAdapter->pPrimary;
-  totalVfs = pPrimary->proxiedVfs;
-
-  sfvmk_MutexLock(pPrimary->secondaryListLock);
-  VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
-    pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-    totalVfs += pOther->proxiedVfs;
-  }
-  sfvmk_MutexUnlock(pPrimary->secondaryListLock);
-
-  if (totalVfs - pAdapter->proxiedVfs == 0)
-    sfvmk_proxyAuthFini(pAdapter);
-  pAdapter->proxiedVfs = 0;
+  sfvmk_proxyAuthFini(pAdapter);
 
 proxy_auth_init_failed:
   sfvmk_evbSwitchFini(pAdapter);

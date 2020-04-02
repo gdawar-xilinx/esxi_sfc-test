@@ -194,7 +194,9 @@ sfvmk_proxyAuthConfigureList(sfvmk_adapter_t *pAdapter,
     goto proxy_auth_configure_failed;
   }
 
-  pProxyState->authState = SFVMK_PROXY_AUTH_STATE_READY;
+  VMK_ASSERT(vmk_AtomicRead64(&pProxyState->authState) ==\
+                              SFVMK_PROXY_AUTH_STATE_STARTING);
+  vmk_AtomicWrite64(&pProxyState->authState, SFVMK_PROXY_AUTH_STATE_READY);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                       "Configured proxy auth successfully");
@@ -253,6 +255,9 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
   vmk_uint32 reqSize;
   vmk_uint32 respSize;
   vmk_uint32 handledPrivileges;
+  sfvmk_adapter_t *pOther = NULL;
+  vmk_ListLinks *pLink = NULL;
+  vmk_uint32 totalVfs = 0;
 
   vmk_uint32 opList[] = {
     MC_CMD_VADAPTOR_SET_MAC,
@@ -264,13 +269,6 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  if (pAdapter->numVfsEnabled == 0) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                        "VFs not enabled on this adapter");
-    status = VMK_OK;
-    goto done;
-  }
-
   pPrimary = pAdapter->pPrimary;
 
   if (pPrimary == NULL) {
@@ -278,7 +276,27 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
+  /*
+   * To take care of the case where primary and secondary adapters both have
+   * SR-IOV enabled. Then using vsish commands, primary adapter is quiesced,
+   * and detached. This will cause proxyAuthFini to be invoked. When it is
+   * re-attached and secondary has SR-IOV enabled, re-initialize proxyAuthInit.
+   */
   sfvmk_MutexLock(pPrimary->secondaryListLock);
+  if ((pAdapter->numVfsEnabled == 0) && (pPrimary == pAdapter)) {
+    VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
+      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
+      totalVfs += pOther->proxiedVfs;
+    }
+
+    if (totalVfs == 0) {
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                          "VFs not enabled on this card");
+      status = VMK_OK;
+      goto done;
+    }
+  }
+
   if (pPrimary->pProxyState == NULL) {
     reqSize = MAX(MC_CMD_VADAPTOR_SET_MAC_IN_LEN,
                   MAX(MC_CMD_FILTER_OP_EXT_IN_LEN,
@@ -340,14 +358,16 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   vmk_uint32 i = 0;
   vmk_uint32 numCancelled = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
+  sfvmk_adapter_t *pOther = NULL;
+  vmk_ListLinks *pLink = NULL;
+  vmk_uint32 totalVfs = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
-  pAdapter->proxiedVfs = 0;
+  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
 
-  /* Fetch the number of VFs enabled on primary port */
   pPrimary = pAdapter->pPrimary;
   if (pPrimary == NULL) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
@@ -355,16 +375,47 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  sfvmk_MutexLock(pPrimary->secondaryListLock);
   pProxyState = pPrimary->pProxyState;
-
   if (pProxyState == NULL) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                         "Proxy auth not initialized for this card");
     goto done;
   }
 
-  pProxyState->authState = SFVMK_PROXY_AUTH_STATE_STOPPING;
+  /* Wait until proxy auth isn't being used by any adapter */
+  status = sfvmk_changeAtomicVar(&pProxyState->authState,
+                                 SFVMK_PROXY_AUTH_STATE_READY,
+                                 SFVMK_PROXY_AUTH_STATE_STOPPING,
+                                 VMK_FALSE,
+                                 0,
+                                 SFVMK_PROXY_CLEANUP_WAIT_USEC);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+  if (pAdapter != pPrimary) {
+    /* Fetch the number of VFs enabled on primary port */
+    totalVfs = pPrimary->proxiedVfs;
+
+    sfvmk_MutexLock(pPrimary->secondaryListLock);
+    VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
+      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
+      totalVfs += pOther->proxiedVfs;
+    }
+    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
+
+    /* Do not clean-up proxy auth module if some other port is using it */
+    if (totalVfs - pAdapter->proxiedVfs != 0) {
+        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                            "Total %u VFs in use, VFs on current adapter: %u",
+                            totalVfs, pAdapter->proxiedVfs);
+        /* Restore the authState back to ready */
+        vmk_AtomicWrite64(&pProxyState->authState, SFVMK_PROXY_AUTH_STATE_READY);
+        goto done;
+    }
+  }
 
   /* Cancel all proxy requests (tagged 0) */
   status = vmk_HelperCancelRequest(pProxyState->proxyHelper, 0, &numCancelled);
@@ -372,6 +423,8 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter,
                         "vmk_HelperCancelRequest proxy requests failed: %s",
                         vmk_StatusToString(status));
+  } else {
+    vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
   }
 
   SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
@@ -386,28 +439,17 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
                                        &numCancelled);
 
       if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter,
-                          "vmk_HelperCancelRequest timeout request %u failed: %s",
-                          i, vmk_StatusToString(status));
+        SFVMK_ADAPTER_ERROR(pAdapter,
+                            "vmk_HelperCancelRequest timeout request %u failed: %s",
+                            i, vmk_StatusToString(status));
+      } else {
+        vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
       }
 
       SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                           "vmk_HelperCancelRequest %lu numCancelled: %u",
                           pReqState->pProxyEvent->requestTag.addr,
                           numCancelled);
-
-    }
-  }
-
-  /* Now wait for the worlds processing proxy request to gracefully exit */
-  while (vmk_AtomicRead64(&pProxyState->numWorlds)) {
-    /* Sleep for 10 milliseconds */
-    status = sfvmk_worldSleep(SFVMK_PROXY_CLEANUP_WAIT_USEC);
-    if (status != VMK_OK) {
-      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
-                          vmk_StatusToString(status));
-      /* World is dying */
-      break;
     }
   }
 
@@ -437,12 +479,24 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
                      pProxyState->blockCount * sizeof(sfvmk_proxyReqState_t));
   pProxyState->pReqState = NULL;
 
+  /* Now wait for the requests to either complete or get cancelled */
+  while (vmk_AtomicRead64(&pProxyState->numRequests)) {
+    /* Sleep for 10 milliseconds */
+    status = sfvmk_worldSleep(SFVMK_PROXY_CLEANUP_WAIT_USEC);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
+                          vmk_StatusToString(status));
+      /* World is dying */
+      break;
+    }
+  }
+
   vmk_HeapFree(sfvmk_modInfo.heapID, pProxyState);
   pPrimary->pProxyState = NULL;
 
 done:
-  if (pPrimary)
-    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
+  pAdapter->proxiedVfs = 0;
+  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
 }
@@ -551,6 +605,14 @@ sfvmk_proxyCompleteRequest(sfvmk_adapter_t *pAdapter,
 
   VMK_ASSERT(numCancelled == 1);
 
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "vmk_HelperCancelRequest proxy requests failed: %s",
+                        vmk_StatusToString(status));
+  } else {
+    vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
+  }
+
   SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                       "vmk_HelperCancelRequest %lu status %s num: %u",
                       pReqState->pProxyEvent->requestTag.addr,
@@ -582,10 +644,24 @@ sfvmk_handleRequestTimeout(vmk_AddrCookie data)
   sfvmk_adapter_t *pAdapter = pProxyEvent->pAdapter;
   sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
   vmk_uint32 index = pProxyEvent->index;
+  VMK_ReturnStatus status = VMK_FAILURE;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
-  vmk_AtomicInc64(&pProxyState->numWorlds);
+  if (sfvmk_changeAtomicVar(&pProxyState->authState,
+                            SFVMK_PROXY_AUTH_STATE_READY,
+                            SFVMK_PROXY_AUTH_STATE_RUNNING,
+                            VMK_TRUE,
+                            SFVMK_PROXY_AUTH_STATE_STOPPING,
+                            SFVMK_PROXY_CLEANUP_WAIT_USEC) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed");
+    /* Free the proxy event for this request */
+    if (pReqState->pProxyEvent) {
+      sfvmk_MemFree(pReqState->pProxyEvent);
+      pReqState->pProxyEvent = NULL;
+    }
+    goto done;
+  }
 
   if (vmk_AtomicReadIfEqualWrite64(&pReqState->reqState,
                                    SFVMK_PROXY_REQ_STATE_OUTSTANDING,
@@ -598,7 +674,20 @@ sfvmk_handleRequestTimeout(vmk_AddrCookie data)
   pReqState->result = pProxyState->defaultResult;
   sfvmk_proxyAuthSendResponse(pAdapter, pProxyState, index, pReqState);
 
-  vmk_AtomicDec64(&pProxyState->numWorlds);
+  if (sfvmk_changeAtomicVar(&pProxyState->authState,
+                            SFVMK_PROXY_AUTH_STATE_RUNNING,
+                            SFVMK_PROXY_AUTH_STATE_READY,
+                            VMK_TRUE,
+                            SFVMK_PROXY_AUTH_STATE_STOPPING,
+                            SFVMK_PROXY_CLEANUP_WAIT_USEC) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status : %s",
+                        vmk_StatusToString(status));
+    VMK_ASSERT(status != VMK_FAILURE);
+  }
+
+
+done:
+  vmk_AtomicDec64(&pProxyState->numRequests);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
 }
 
@@ -1112,13 +1201,15 @@ sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
   vmk_uint32 index;
   vmk_uint32 pf;
   vmk_uint32 vf;
+  vmk_uint64 authState;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
   VMK_ASSERT_NOT_NULL(pProxyState);
-  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
-                        pProxyState->authState);
+
+  authState = vmk_AtomicRead64(&pProxyState->authState);
+  if (authState != SFVMK_PROXY_AUTH_STATE_RUNNING) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %lu", authState);
     status = VMK_ESHUTDOWN;
     goto done;
   }
@@ -1161,9 +1252,9 @@ sfvmk_proxyAuthExecuteRequest(sfvmk_adapter_t *pAdapter,
                  pProxyState->requestSize, pResponseBuff,
                  pProxyState->responseSize, pCbContext);
 
-  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
-                        pProxyState->authState);
+  authState = vmk_AtomicRead64(&pProxyState->authState);
+  if (authState != SFVMK_PROXY_AUTH_STATE_RUNNING) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %lu", authState);
     goto done;
   }
 
@@ -1298,14 +1389,15 @@ sfvmk_proxyAuthHandleResponse(sfvmk_adapter_t *pAdapter,
   sfvmk_proxyReqState_t *pReqState = NULL;
   vmk_uint32 handle;
   vmk_uint32 index;
+  vmk_uint64 authState;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
   VMK_ASSERT_NOT_NULL(pProxyState);
 
-  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
-                        pProxyState->authState);
+  authState = vmk_AtomicRead64(&pProxyState->authState);
+  if (authState != SFVMK_PROXY_AUTH_STATE_RUNNING) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %lu", authState);
     status = VMK_ESHUTDOWN;
     goto done;
   }
@@ -1570,10 +1662,38 @@ sfvmk_processProxyRequest(vmk_AddrCookie data)
   vmk_uint32 handle = 0;
   vmk_uint64 uhandle = 0;
   vmk_uint16 pf = 0, vf = 0, rid = 0;
+  vmk_uint32 numCancelled = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
-  vmk_AtomicInc64(&pProxyState->numWorlds);
+  status = sfvmk_changeAtomicVar(&pProxyState->authState,
+                                 SFVMK_PROXY_AUTH_STATE_READY,
+                                 SFVMK_PROXY_AUTH_STATE_RUNNING,
+                                 VMK_TRUE,
+                                 SFVMK_PROXY_AUTH_STATE_STOPPING,
+                                 SFVMK_PROXY_CLEANUP_WAIT_USEC);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
+                        vmk_StatusToString(status));
+    /* Check and cancel delayed requests for this proxy request */
+    status = vmk_HelperCancelRequest(pProxyState->proxyHelper,
+                                     pReqState->pProxyEvent->requestTag,
+                                     &numCancelled);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "vmk_HelperCancelRequest proxy requests failed: %s",
+                          vmk_StatusToString(status));
+    } else {
+      vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
+    }
+
+    /* Free the proxy event for this request */
+    if (pReqState->pProxyEvent) {
+      sfvmk_MemFree(pReqState->pProxyEvent);
+      pReqState->pProxyEvent = NULL;
+    }
+    goto done;
+  }
 
   VMK_ASSERT(index < pProxyState->blockCount);
 
@@ -1622,7 +1742,8 @@ sfvmk_processProxyRequest(vmk_AddrCookie data)
                         vmk_StatusToString(status));
 
     pReqState->result = pProxyState->defaultResult;
-    if (pProxyState->authState == SFVMK_PROXY_AUTH_STATE_READY) {
+    if (vmk_AtomicRead64(&pProxyState->authState) ==
+        SFVMK_PROXY_AUTH_STATE_RUNNING) {
       vmk_AtomicWrite64(&pReqState->reqState, SFVMK_PROXY_REQ_STATE_COMPLETED);
 
       status = sfvmk_proxyCompleteRequest(pAdapter, pProxyState, index, pReqState);
@@ -1636,7 +1757,19 @@ sfvmk_processProxyRequest(vmk_AddrCookie data)
   }
 
 done:
-  vmk_AtomicDec64(&pProxyState->numWorlds);
+  status = sfvmk_changeAtomicVar(&pProxyState->authState,
+                                 SFVMK_PROXY_AUTH_STATE_RUNNING,
+                                 SFVMK_PROXY_AUTH_STATE_READY,
+                                 VMK_TRUE,
+                                 SFVMK_PROXY_AUTH_STATE_STOPPING,
+                                 SFVMK_PROXY_CLEANUP_WAIT_USEC);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
+                        vmk_StatusToString(status));
+  }
+
+  vmk_AtomicDec64(&pProxyState->numRequests);
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return;
 }
@@ -1689,6 +1822,7 @@ sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent)
                          vmk_StatusToString(status));
      goto done;
   }
+  vmk_AtomicInc64(&pProxyState->numRequests);
 
   props.tag.addr = 0;
   status = vmk_HelperSubmitRequest(pProxyState->proxyHelper,
@@ -1701,8 +1835,16 @@ sfvmk_submitProxyRequest(sfvmk_proxyEvent_t *pProxyEvent)
      vmk_HelperCancelRequest(pProxyState->proxyHelper,
                              pProxyEvent->requestTag,
                              &numCancelled);
+     if (status != VMK_OK) {
+       SFVMK_ADAPTER_ERROR(pAdapter,
+                           "vmk_HelperCancelRequest proxy requests failed: %s",
+                           vmk_StatusToString(status));
+     } else {
+       vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
+     }
+  } else {
+    vmk_AtomicInc64(&pProxyState->numRequests);
   }
-
 done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return status;

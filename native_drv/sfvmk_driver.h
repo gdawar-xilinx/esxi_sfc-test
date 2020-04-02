@@ -598,6 +598,7 @@ typedef struct sfvmk_vfInfo_s {
 typedef enum sfvmk_proxyAuthState_e {
   SFVMK_PROXY_AUTH_STATE_STARTING = 0,
   SFVMK_PROXY_AUTH_STATE_READY,
+  SFVMK_PROXY_AUTH_STATE_RUNNING,
   SFVMK_PROXY_AUTH_STATE_STOPPING,
 } sfvmk_proxyAuthState_t;
 
@@ -617,7 +618,7 @@ typedef struct sfvmk_proxyEvent_s {
 
 typedef struct sfvmk_proxyAdminState_s {
   /* Proxy auth module state */
-  sfvmk_proxyAuthState_t    authState;
+  vmk_atomic64              authState;
   /* Pointer to array of proxy request state for all functions */
   sfvmk_proxyReqState_t     *pReqState;
   /* Proxy result in case of authorization failure/timeout */
@@ -638,8 +639,8 @@ typedef struct sfvmk_proxyAdminState_s {
   vmk_uint32                handledPrivileges;
   /* Helper world for processing proxy requests */
   vmk_Helper                proxyHelper;
-  /* Total number of helper worlds currently running for proxy requests */
-  vmk_atomic64               numWorlds;
+  /* Total number of requests submitted on the helper queue */
+  vmk_atomic64               numRequests;
 } sfvmk_proxyAdminState_t;
 
 typedef enum sfvmk_proxyRequestState_e {
@@ -1274,4 +1275,11 @@ sfvmk_isBroadcastEtherAddr(const vmk_uint8 *pAddr);
 vmk_uint8
 sfvmk_firstBitSet(vmk_uint8 mask);
 
+VMK_ReturnStatus
+sfvmk_changeAtomicVar(vmk_atomic64  *var,
+                      vmk_uint64 old,
+                      vmk_uint64 new,
+                      vmk_Bool   termCheck,
+                      vmk_uint64 termVal,
+                      vmk_uint64 timeout);
 #endif /* __SFVMK_DRIVER_H__ */

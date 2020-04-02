@@ -526,17 +526,22 @@ sfvmk_mcdiProxyRequest(void *pPriv, vmk_uint32 index)
   sfvmk_adapter_t         *pAdapter = (sfvmk_adapter_t *)pPriv;
   sfvmk_proxyAdminState_t *pProxyState = pAdapter->pProxyState;
   sfvmk_proxyReqState_t   *pReqState = NULL;
+  vmk_uint64               authState;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                       "Proxy request index %u", index);
 
-  VMK_ASSERT_NOT_NULL(pProxyState);
+  if (pProxyState == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Null proxy state");
+    goto done;
+  }
 
-  if (pProxyState->authState != SFVMK_PROXY_AUTH_STATE_READY) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %u",
-                        pProxyState->authState);
+  authState = vmk_AtomicRead64(&pProxyState->authState);
+  if ((authState != SFVMK_PROXY_AUTH_STATE_READY) &&
+      (authState != SFVMK_PROXY_AUTH_STATE_RUNNING)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid proxy state %lu", authState);
     goto done;
   }
 

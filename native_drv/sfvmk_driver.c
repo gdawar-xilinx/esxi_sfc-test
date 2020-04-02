@@ -1058,51 +1058,10 @@ done:
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
 
-/*! \brief  Remove the given adapter when found on given list.
+/*! \brief  Remove the adapter from the list it belongs to. Also, move its
+**          secondary list entries to un-associated list, if any.
 **
- ** \param[in]  pAdapter pointer to sfvmk_adapter_t
-**        [in]  pList pointer to the given list
-**
-** \return: void
-**
-*/
-static void
-sfvmk_removeAdapterFromListSub(sfvmk_adapter_t *pAdapter,
-                               vmk_ListLinks *pList)
-{
-  sfvmk_adapter_t *pOther = NULL;
-  vmk_ListLinks   *pLink = NULL;
-  vmk_ListLinks   *pNext = NULL;
-
-  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
-  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
-
-  /* If we can find the adapter on the list, remove it */
-  VMK_LIST_FORALL_SAFE(pList, pLink, pNext) {
-    pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-    if (pOther == pAdapter) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
-                          "Removing adapter %s from list %p",
-                          pOther->pciDeviceName.string,
-                          pList);
-      vmk_ListRemove(&pOther->adapterLink);
-      pOther->pPrimary = NULL;
-      break;
-    }
-  }
-  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
-
-  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
-}
-
-
-/*! \brief  If this is the first adapter in card, remove it from the primary
-**          list. Also, remove all entries from its secondary list.
-**          For secondary adapters, remove them from their primarys adapter's
-**          secondary list. If the adapter's pPrimary pointer is NULL,
-**          remove it from the un-associated list.
-**
- ** \param[in]  pAdapter pointer to sfvmk_adapter_t
+** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
 ** \return: void
 **
@@ -1113,40 +1072,35 @@ sfvmk_removeAdapterFromList(sfvmk_adapter_t *pAdapter)
   sfvmk_adapter_t *pOther = NULL;
   vmk_ListLinks   *pLink = NULL;
   vmk_ListLinks   *pNext = NULL;
-  sfvmk_adapter_t *pPrimary = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
-  pPrimary = pAdapter->pPrimary;
-  if (pPrimary == pAdapter) {
-    sfvmk_removeAdapterFromListSub(pAdapter,
-                                   &sfvmk_modInfo.primaryList);
-  } else if (!pPrimary) {
-    sfvmk_removeAdapterFromListSub(pAdapter,
-                                   &sfvmk_modInfo.unassociatedList);
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                      "Removing %s",
+                      pAdapter->pciDeviceName.string);
+
+  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
+
+  sfvmk_MutexLock(pAdapter->secondaryListLock);
+  VMK_LIST_FORALL_SAFE(&pAdapter->secondaryList, pLink, pNext) {
+    pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
+
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                        "Moving secondary %s to unassociated list",
+                        pOther->pciDeviceName.string);
+      vmk_ListRemove(&pOther->adapterLink);
+
+      vmk_ListInsert(&pOther->adapterLink,
+                     vmk_ListAtRear(&sfvmk_modInfo.unassociatedList));
+
+      pOther->pPrimary = NULL;
   }
 
-  /*
-   * For primary adapter, remove all secondary adapters;
-   * For secondary adapter, remove it from its primary's secondary list.
-   */
-  if (pPrimary) {
-    sfvmk_MutexLock(pPrimary->secondaryListLock);
+  vmk_ListRemove(&pAdapter->adapterLink);
+  pAdapter->pPrimary = NULL;
+  sfvmk_MutexUnlock(pAdapter->secondaryListLock);
 
-    VMK_LIST_FORALL_SAFE(&pPrimary->secondaryList, pLink, pNext) {
-      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
-                          "Removing secondary %s : %p",
-                          pOther->pciDeviceName.string,
-                          &pOther->adapterLink);
-      if (pPrimary == pAdapter || pOther == pAdapter) {
-        vmk_ListRemove(&pOther->adapterLink);
-        pOther->pPrimary = NULL;
-      }
-    }
-    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
-  }
+  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
@@ -1738,11 +1692,10 @@ sfvmk_detachDevice(vmk_Device dev)
 #ifdef SFVMK_SUPPORT_SRIOV
   /*
    * Invoke sfvmk_proxyAuthFini unconditionally as proxy state
-   * is allocated on the primary adapter and detach is invoked
-   * on the primary adapter first.
+   * is allocated on the primary adapter even when no VFs are
+   * enabled on the primary adapter.
    */
   sfvmk_proxyAuthFini(pAdapter);
-
   if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED) {
     status = sfvmk_evbSwitchFini(pAdapter);
     if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {

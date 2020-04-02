@@ -511,3 +511,54 @@ sfvmk_allocDmaBuffer(sfvmk_adapter_t *pAdapter,
   return status;
 }
 
+/*! \brief wrapper function to change atomic variable holding value 'old'
+**         to value 'new'. Wait for 'timeout' microseconds before re-check.
+**         In case termCheck is true and old value is found equal to termVal,
+**         return with Failure.
+**
+** \param[in]  var           pointer to atomic variable to be modified
+** \param[in]  old           old value of atomic variable
+** \param[in]  new           new value of atomic variable
+** \param[in]  termCheck     whether the termVal should be checked
+** \param[in]  termVal       if termCheck is true and old value is found
+**                           equal to termVal, return with Failure
+** \param[in]  timeout       timeout in microseconds to wait before re-checking
+**
+** \return: VMK_OK [success] error code [failure]
+*/
+VMK_ReturnStatus
+sfvmk_changeAtomicVar(vmk_atomic64  *var,
+                      vmk_uint64 old,
+                      vmk_uint64 new,
+                      vmk_Bool   termCheck,
+                      vmk_uint64 termVal,
+                      vmk_uint64 timeout)
+{
+  VMK_ReturnStatus status = VMK_OK;
+  vmk_uint64 val = 0;
+  vmk_uint64 cnt = 0;
+
+  val = vmk_AtomicReadIfEqualWrite64(var, old, new);
+  while (val != old) {
+    if ((termCheck == VMK_TRUE) && (val == termVal)) {
+      SFVMK_DEBUG(SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                  "Exiting on term val: %lu", termVal);
+      status = VMK_FAILURE;
+      break;
+    }
+    status = sfvmk_worldSleep(timeout);
+    if (status != VMK_OK) {
+      SFVMK_ERROR("vmk_WorldSleep failed status: %s", vmk_StatusToString(status));
+      break;
+    }
+
+    /* Log an error if stuck in this loop */
+    if ((++cnt & 0xFF) == 0)
+      SFVMK_ERROR("State machine stuck? cnt: %lu", cnt);
+
+    val = vmk_AtomicReadIfEqualWrite64(var, old, new);
+  }
+
+  return status;
+}
+

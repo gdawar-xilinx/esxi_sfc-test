@@ -28,6 +28,8 @@
 #ifdef SFVMK_SUPPORT_SRIOV
 #include "efx_regs_mcdi.h"
 
+#define SFVMK_SRIOV_CLEANUP_WAIT_USEC  10000
+
 static vmk_uint32 sfvmk_sriovPfCount = 0;
 
 /* VMware requires max_vfs module parameter for SR-IOV configuration.
@@ -1376,6 +1378,28 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
   SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_SRIOV, SFVMK_LOG_LEVEL_DBG,
                       "sfvmk_vfConfigOps PTOP: 0x%x called", op);
 
+  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
+  if (pAdapter->pPrimary == NULL || pAdapter->pPrimary->pProxyState == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "NULL primary adapter or proxy state");
+    sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
+    return VMK_FAILURE;
+  }
+  vmk_AtomicInc64(&pAdapter->pPrimary->pProxyState->numRequests);
+  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
+
+  status = sfvmk_changeAtomicVar(&pAdapter->pPrimary->pProxyState->authState,
+                                 SFVMK_PROXY_AUTH_STATE_READY,
+                                 SFVMK_PROXY_AUTH_STATE_RUNNING,
+                                 VMK_TRUE,
+                                 SFVMK_PROXY_AUTH_STATE_STOPPING,
+                                 SFVMK_SRIOV_CLEANUP_WAIT_USEC);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
+                        vmk_StatusToString(status));
+    goto done;
+  }
+
+
   switch (op) {
     case VMK_NETPTOP_VF_QUIESCE:
     {
@@ -1539,6 +1563,21 @@ sfvmk_vfConfigOps(sfvmk_adapter_t *pAdapter, vmk_NetPTOP op, void *pArgs)
       SFVMK_ADAPTER_ERROR(pAdapter, "PTOP %d unhandled", op);
   }
 
+  status = sfvmk_changeAtomicVar(&pAdapter->pPrimary->pProxyState->authState,
+                                 SFVMK_PROXY_AUTH_STATE_RUNNING,
+                                 SFVMK_PROXY_AUTH_STATE_READY,
+                                 VMK_TRUE,
+                                 SFVMK_PROXY_AUTH_STATE_STOPPING,
+                                 SFVMK_SRIOV_CLEANUP_WAIT_USEC);
+  if (status != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
+                        vmk_StatusToString(status));
+    VMK_ASSERT(status != VMK_FAILURE);
+  }
+
+
+done:
+  vmk_AtomicDec64(&pAdapter->pPrimary->pProxyState->numRequests);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
   return status;
 }

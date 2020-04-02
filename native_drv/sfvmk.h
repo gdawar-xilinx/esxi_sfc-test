@@ -54,6 +54,7 @@ typedef struct sfvmk_modInfo_s {
    vmk_ListLinks      unassociatedList;
    /* Unique identifier for each proxy request */
    vmk_atomic64       proxyRequestId;
+   vmk_Mutex          listsLock;
 #endif
 } sfvmk_modInfo_t;
 

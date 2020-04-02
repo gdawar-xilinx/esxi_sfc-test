@@ -40,7 +40,8 @@ sfvmk_modInfo_t sfvmk_modInfo = {
    .vmkdevHashTable  = VMK_INVALID_HASH_HANDLE,
    .lock             = NULL,
 #ifdef SFVMK_SUPPORT_SRIOV
-   .proxyRequestId   = 1
+   .proxyRequestId   = 1,
+   .listsLock        = NULL,
 #endif
 };
 
@@ -72,6 +73,12 @@ sfvmk_modInfoCleanup(void)
     vmk_SemaDestroy(&sfvmk_modInfo.lock);
   }
 
+#ifdef SFVMK_SUPPORT_SRIOV
+  if (sfvmk_modInfo.listsLock) {
+    sfvmk_mutexDestroy(sfvmk_modInfo.listsLock);
+  }
+#endif /* SFVMK_SUPPORT_SRIOV */
+
   if (sfvmk_modInfo.lockDomain != VMK_LOCKDOMAIN_INVALID) {
     vmk_LockDomainDestroy(sfvmk_modInfo.lockDomain);
     sfvmk_modInfo.lockDomain = VMK_LOCKDOMAIN_INVALID;
@@ -101,7 +108,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  30
+#define SFVMK_ALLOC_DESC_SIZE  31
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -250,6 +257,10 @@ sfvmk_calcHeapSize(void)
   /* For secondaryListLock */
   vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
   allocDesc[index++].count = SFVMK_MAX_ADAPTER;
+
+  /* For listsLock */
+  vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
+  allocDesc[index++].count = 1;
 #endif
 
   VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);
@@ -388,7 +399,15 @@ init_module(void)
 #ifdef SFVMK_SUPPORT_SRIOV
   vmk_ListInit(&sfvmk_modInfo.primaryList);
   vmk_ListInit(&sfvmk_modInfo.unassociatedList);
-#endif
+
+  status = sfvmk_mutexInit("listsLock", &sfvmk_modInfo.listsLock);
+
+  if (status != VMK_OK) {
+    SFVMK_ERROR("Creating listsLock failed status %s",
+                vmk_StatusToString(status));
+    goto failed_listslock_init;
+  }
+#endif /* SFVMK_SUPPORT_SRIOV */
 
   /* Register Driver with with device layer */
   status = sfvmk_driverRegister();
@@ -423,6 +442,9 @@ failed_throttled_log_register:
 failed_lock_domain_create:
 failed_mem_pool_create:
 failed_sema_init:
+#ifdef SFVMK_SUPPORT_SRIOV
+failed_listslock_init:
+#endif /* SFVMK_SUPPORT_SRIOV */
 failed_hash_init:
 failed_driver_register:
 failed_mgmt_init:

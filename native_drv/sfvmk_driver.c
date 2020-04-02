@@ -1002,13 +1002,8 @@ sfvmk_addAdapterToList(sfvmk_adapter_t *pAdapter)
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
+  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
   if (pAdapter->pPrimary == pAdapter) {
-    vmk_ListInsert(&pAdapter->adapterLink,
-                   vmk_ListAtRear(&sfvmk_modInfo.primaryList));
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
-                        "Added %s to primary list",
-                        pAdapter->pciDeviceName.string);
-
     /* Scan entries from un-associated list and look for secondary adapters */
     VMK_LIST_FORALL_SAFE(&sfvmk_modInfo.unassociatedList, pLink, pNext) {
       pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
@@ -1019,15 +1014,22 @@ sfvmk_addAdapterToList(sfvmk_adapter_t *pAdapter)
         SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                             "Moving %s to secondary list of %s",
                             pOther->pciDeviceName.string, pAdapter->pciDeviceName.string);
+        sfvmk_MutexLock(pAdapter->secondaryListLock);
         vmk_ListInsert(&pOther->adapterLink,
                        vmk_ListAtRear(&pAdapter->secondaryList));
+        sfvmk_MutexUnlock(pAdapter->secondaryListLock);
         pOther->pPrimary = pAdapter;
-        goto done;
       }
     }
+
+    vmk_ListInsert(&pAdapter->adapterLink,
+                   vmk_ListAtRear(&sfvmk_modInfo.primaryList));
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                        "Added %s to primary list",
+                        pAdapter->pciDeviceName.string);
   } else {
     /* Adding secondary function; look for primary */
-    VMK_LIST_FORALL(&sfvmk_modInfo.primaryList, pLink) {
+    VMK_LIST_FORALL_SAFE(&sfvmk_modInfo.primaryList, pLink, pNext) {
       pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                           "Primary list entry %s", pOther->pciDeviceName.string);
@@ -1035,8 +1037,10 @@ sfvmk_addAdapterToList(sfvmk_adapter_t *pAdapter)
         SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                             "Adding %s to secondary list of %s",
                             pAdapter->pciDeviceName.string, pOther->pciDeviceName.string);
+        sfvmk_MutexLock(pOther->secondaryListLock);
         vmk_ListInsert(&pAdapter->adapterLink,
                        vmk_ListAtRear(&pOther->secondaryList));
+        sfvmk_MutexUnlock(pOther->secondaryListLock);
         pAdapter->pPrimary = pOther;
         goto done;
       }
@@ -1050,14 +1054,53 @@ sfvmk_addAdapterToList(sfvmk_adapter_t *pAdapter)
   }
 
 done:
+  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
 
+/*! \brief  Remove the given adapter when found on given list.
+**
+ ** \param[in]  pAdapter pointer to sfvmk_adapter_t
+**        [in]  pList pointer to the given list
+**
+** \return: void
+**
+*/
+static void
+sfvmk_removeAdapterFromListSub(sfvmk_adapter_t *pAdapter,
+                               vmk_ListLinks *pList)
+{
+  sfvmk_adapter_t *pOther = NULL;
+  vmk_ListLinks   *pLink = NULL;
+  vmk_ListLinks   *pNext = NULL;
+
+  SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
+  sfvmk_MutexLock(sfvmk_modInfo.listsLock);
+
+  /* If we can find the adapter on the list, remove it */
+  VMK_LIST_FORALL_SAFE(pList, pLink, pNext) {
+    pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
+    if (pOther == pAdapter) {
+      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
+                          "Removing adapter %s from list %p",
+                          pOther->pciDeviceName.string,
+                          pList);
+      vmk_ListRemove(&pOther->adapterLink);
+      pOther->pPrimary = NULL;
+      break;
+    }
+  }
+  sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
+
+  SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
+}
+
+
 /*! \brief  If this is the first adapter in card, remove it from the primary
-**          list. Also, remove all entries from its secondary list. Nothing
-**          done here for secondary adapters as they are removed along with
-**          primary adapter. This function assumes that all adapters will be
-**          removed together at the time of module unload.
+**          list. Also, remove all entries from its secondary list.
+**          For secondary adapters, remove them from their primarys adapter's
+**          secondary list. If the adapter's pPrimary pointer is NULL,
+**          remove it from the un-associated list.
 **
  ** \param[in]  pAdapter pointer to sfvmk_adapter_t
 **
@@ -1070,30 +1113,44 @@ sfvmk_removeAdapterFromList(sfvmk_adapter_t *pAdapter)
   sfvmk_adapter_t *pOther = NULL;
   vmk_ListLinks   *pLink = NULL;
   vmk_ListLinks   *pNext = NULL;
+  sfvmk_adapter_t *pPrimary = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_DRIVER);
 
-  if (pAdapter->pPrimary == pAdapter) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
-                        "Removing primary %s : %p",
-                        pAdapter->pciDeviceName.string,
-                        &pAdapter->adapterLink);
-    vmk_ListRemove(&pAdapter->adapterLink);
+  pPrimary = pAdapter->pPrimary;
+  if (pPrimary == pAdapter) {
+    sfvmk_removeAdapterFromListSub(pAdapter,
+                                   &sfvmk_modInfo.primaryList);
+  } else if (!pPrimary) {
+    sfvmk_removeAdapterFromListSub(pAdapter,
+                                   &sfvmk_modInfo.unassociatedList);
+  }
 
-    VMK_LIST_FORALL_SAFE(&pAdapter->secondaryList, pLink, pNext) {
+  /*
+   * For primary adapter, remove all secondary adapters;
+   * For secondary adapter, remove it from its primary's secondary list.
+   */
+  if (pPrimary) {
+    sfvmk_MutexLock(pPrimary->secondaryListLock);
+
+    VMK_LIST_FORALL_SAFE(&pPrimary->secondaryList, pLink, pNext) {
       pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
 
       SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_DRIVER, SFVMK_LOG_LEVEL_DBG,
                           "Removing secondary %s : %p",
                           pOther->pciDeviceName.string,
                           &pOther->adapterLink);
-      vmk_ListRemove(&pOther->adapterLink);
-      pOther->pPrimary = NULL;
+      if (pPrimary == pAdapter || pOther == pAdapter) {
+        vmk_ListRemove(&pOther->adapterLink);
+        pOther->pPrimary = NULL;
+      }
     }
-    pAdapter->pPrimary = NULL;
+    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
   }
+
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_DRIVER);
 }
+
 #endif
 
 /************************************************************************
@@ -1705,6 +1762,7 @@ sfvmk_detachDevice(vmk_Device dev)
   }
 
 #ifdef SFVMK_SUPPORT_SRIOV
+  sfvmk_removeAdapterFromList(pAdapter);
   /* De-init SR-IOV */
   status = sfvmk_sriovFini(pAdapter);
   if (status != VMK_OK) {
@@ -1712,7 +1770,6 @@ sfvmk_detachDevice(vmk_Device dev)
                         vmk_StatusToString(status));
   }
 
-  sfvmk_removeAdapterFromList(pAdapter);
 #endif
 
   if (pAdapter->pNic != NULL)

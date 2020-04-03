@@ -503,12 +503,12 @@ def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
        if ret_val != 0:
            fail("Unable to copy firmware directory to create vib")
        ver = version_num.replace('-','.')
-       with open("Makefile.fwvib",'r+') as f:
-           filedata = f.read()
-           filedata = filedata.replace(rev_container, ver)
-           f.truncate(0)
-           f.write(filedata)
+       f = open("Makefile.fwvib",'rt')
+       out_file = open("Makefile",'wt')
+       for line in f:
+           out_file.write(line.replace(rev_container, ver))
        f.close()
+       out_file.close()
        if os.name != 'nt':
            shutil.copy('./Makefile.fwvib' , './Makefile')
            ret_val = os.system('make clean')

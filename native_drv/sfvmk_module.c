@@ -25,7 +25,6 @@
 */
 
 #include "sfvmk_driver.h"
-#include "sfvmk_ut.h"
 #include "sfvmk_mgmt_interface.h"
 
 extern const vmk_MgmtApiSignature sfvmk_mgmtSig;

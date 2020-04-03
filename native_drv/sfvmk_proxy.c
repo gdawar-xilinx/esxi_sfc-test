@@ -598,23 +598,25 @@ sfvmk_proxyCompleteRequest(sfvmk_adapter_t *pAdapter,
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
-  /* Check and cancel delayed requests for this proxy request */
-  status = vmk_HelperCancelRequest(pProxyState->proxyHelper,
-                                   pReqState->pProxyEvent->requestTag,
-                                   &numCancelled);
+  if (pReqState->pProxyEvent) {
+    /* Check and cancel delayed requests for this proxy request */
+    status = vmk_HelperCancelRequest(pProxyState->proxyHelper,
+                                     pReqState->pProxyEvent->requestTag,
+                                     &numCancelled);
 
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,
-                        "vmk_HelperCancelRequest proxy requests failed: %s",
-                        vmk_StatusToString(status));
-  } else {
-    vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "vmk_HelperCancelRequest proxy requests failed: %s",
+                          vmk_StatusToString(status));
+    } else {
+      vmk_AtomicSub64(&pProxyState->numRequests, numCancelled);
+    }
+
+    SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "vmk_HelperCancelRequest %lu status %s num: %u",
+                        pReqState->pProxyEvent->requestTag.addr,
+                        vmk_StatusToString(status), numCancelled);
   }
-
-  SFVMK_ADAPTER_DEBUG(pAdapter,SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                      "vmk_HelperCancelRequest %lu status %s num: %u",
-                      pReqState->pProxyEvent->requestTag.addr,
-                      vmk_StatusToString(status), numCancelled);
 
   status = sfvmk_proxyAuthSendResponse(pAdapter, pProxyState, index, pReqState);
   if (status != VMK_OK) {

@@ -1433,6 +1433,7 @@ sfvmk_attachDevice(vmk_Device dev)
 
 #ifdef SFVMK_SUPPORT_SRIOV
 failed_get_serial_number:
+  sfvmk_destroyHelper(pAdapter, pAdapter->helper);
 #endif
 failed_create_helper:
 failed_set_drvdata:

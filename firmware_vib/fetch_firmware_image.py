@@ -510,7 +510,6 @@ def create_vib_of_all_images(vib_base_dir, outdir_handle, version_num):
        f.close()
        out_file.close()
        if os.name != 'nt':
-           shutil.copy('./Makefile.fwvib' , './Makefile')
            ret_val = os.system('make clean')
            if ret_val != 0:
                fail("Unable to make clean. Exiting.")

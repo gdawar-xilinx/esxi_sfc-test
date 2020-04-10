@@ -506,16 +506,6 @@ typedef struct efsys_bar_s {
 
 #define EFSYS_SLEEP     EFSYS_SPIN
 
-/* Timestamps */
-typedef  vmk_TimeVal efsys_timestamp_t;
-
-#define EFSYS_TIMESTAMP(_usp)                                           \
-        do {                                                            \
-            efsys_timestamp_t now;                                      \
-            vmk_GetUptime(&now);                                        \
-            *(_usp) = (now.sec * 1000000) + now.usec;                   \
-        } while (B_FALSE)
-
 /* Statistics */
 typedef uint64_t    efsys_stat_t;
 

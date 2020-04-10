@@ -879,10 +879,7 @@ VMK_ReturnStatus sfvmk_worldSleep(vmk_uint64 sleepTime);
 /* Get time in micro seconds */
 static inline void sfvmk_getTime(vmk_uint64 *pTime)
 {
-  vmk_TimeVal time;
-
-  vmk_GetTimeOfDay(&time);
-  *pTime = (time.sec * VMK_USEC_PER_SEC) + time.usec;
+  *pTime = vmk_TimerUnsignedTCToUS(vmk_GetTimerCycles());
 }
 
 /* Functions for MCDI handling */

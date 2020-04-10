@@ -162,8 +162,15 @@ do
             echo "Aborting!.."
             exit
          fi
-         echo "Copying esxcli_ext_bundle.zip"
-         scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/SFC*.zip" $pkg_dir
+
+         if [ $esx_ver == "7.0" ] ;then
+            echo "Copying esxcli_ext component"
+            scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/component/VMW*.zip" $pkg_dir
+         else
+            echo "Copying esxcli_ext_bundle.zip"
+            scp root@$ddk_vm:$ddk_tag_dir"/esxcli_ext/build/bundle/SFC*.zip" $pkg_dir
+         fi
+
          if [ $? -ne 0 ] ;then
             echo "ERROR: SCP failed"
             echo "Aborting!.."

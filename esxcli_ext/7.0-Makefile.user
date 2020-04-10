@@ -98,8 +98,8 @@ DEV_NEED_VMKMGMT = 1
 ################################################################
 # Nothing beyond this point should require modification.
 
-HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-7.0.0-1.0.15525992)
-VMW_DRIVER_DEVKIT_BASE := $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-nativeddk-devtools-7.0.0-1.0.15525992)
+HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-7.0.0-1.0.15843807)
+VMW_DRIVER_DEVKIT_BASE := $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-nativeddk-devtools-7.0.0-15843807)
 
 VMKAPI_LOCATION = $(VMW_DRIVER_DEVKIT_BASE)/src/bora/vmkernel/include/vmkapi/v2_6_0_0
 

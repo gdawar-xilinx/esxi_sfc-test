@@ -34,7 +34,7 @@ DEV_VIB_BASENAME ?= $(BULL_VENDOR_CODE)-ESX-$(UWTOOL)-$(UWTOOL_VERSION)
 DESC_NAME=$(shell echo $(BULL_VENDOR_CODE)-ESX-$(UWTOOL) | tr A-Z a-z)
 DESC_ESX_VERSION=7.0.0
 
-HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-7.0.0-1.0.15525992)
+HEXDK_BASE = $(shell /bin/rpm -q --qf '%{instprefixes}\n' vmware-esx-hexdk-devtools-7.0.0-1.0.15843807)
 
 include $(HEXDK_BASE)/samples/common/userworld-tool.inc
 

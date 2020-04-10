@@ -80,7 +80,7 @@ V5_TAG          = v4_13_2_1013
 V5_BRANCH       = v4_13_2_sfvmk
 
 ifeq ($(BUILDTYPE), beta)
-V5_TARGET       = $(V5_BRANCH)
+V5_TARGET       = $(V5_TAG)
 else
 V5_TARGET       = $(V5_TAG)
 endif

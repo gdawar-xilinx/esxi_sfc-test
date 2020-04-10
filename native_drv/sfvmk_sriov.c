@@ -225,11 +225,10 @@ sfvmk_evbSwitchFini(sfvmk_adapter_t *pAdapter)
   }
 
   efx_evb_fini(pAdapter->pNic);
-  pAdapter->evbState = SFVMK_EVB_STATE_STOPPED;
-
   status = VMK_OK;
 
 done:
+  pAdapter->evbState = SFVMK_EVB_STATE_UNINITIALIZED;
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_SRIOV);
   return status;
 }

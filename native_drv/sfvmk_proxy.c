@@ -276,28 +276,23 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  /*
-   * To take care of the case where primary and secondary adapters both have
-   * SR-IOV enabled. Then using vsish commands, primary adapter is quiesced,
-   * and detached. This will cause proxyAuthFini to be invoked. When it is
-   * re-attached and secondary has SR-IOV enabled, re-initialize proxyAuthInit.
-   */
+  if (pPrimary != pAdapter) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "Secondary adapter, exit");
+    status = VMK_OK;
+    goto done;
+  }
+
   sfvmk_MutexLock(pPrimary->secondaryListLock);
-  if ((pAdapter->numVfsEnabled == 0) && (pPrimary == pAdapter)) {
+  totalVfs = pPrimary->numVfsEnabled;
+  if (totalVfs == 0) {
     VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
       pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-      totalVfs += pOther->proxiedVfs;
-    }
-
-    if (totalVfs == 0) {
-      SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                          "VFs not enabled on this card");
-      status = VMK_OK;
-      goto done;
+      totalVfs += pOther->numVfsEnabled;
     }
   }
 
-  if (pPrimary->pProxyState == NULL) {
+  if ((pPrimary->pProxyState == NULL) && (totalVfs != 0)) {
     reqSize = MAX(MC_CMD_VADAPTOR_SET_MAC_IN_LEN,
                   MAX(MC_CMD_FILTER_OP_EXT_IN_LEN,
                       MC_CMD_SET_MAC_EXT_IN_LEN));
@@ -328,17 +323,15 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
     if ((status != VMK_OK) && (status != VMK_BUSY)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "Proxy auth configurtion failed: %s",
                           vmk_StatusToString(status));
+      sfvmk_MutexUnlock(pPrimary->secondaryListLock);
       goto done;
     }
   }
 
-  pAdapter->proxiedVfs = pAdapter->numVfsEnabled;
   status = VMK_OK;
+  sfvmk_MutexUnlock(pPrimary->secondaryListLock);
 
 done:
-  if (pPrimary)
-    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
-
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
   return status;
 }
@@ -358,9 +351,6 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   vmk_uint32 i = 0;
   vmk_uint32 numCancelled = 0;
   VMK_ReturnStatus status = VMK_FAILURE;
-  sfvmk_adapter_t *pOther = NULL;
-  vmk_ListLinks *pLink = NULL;
-  vmk_uint32 totalVfs = 0;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_PROXY);
 
@@ -372,6 +362,12 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   if (pPrimary == NULL) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                         "Primary adapter not found");
+    goto done;
+  }
+
+  if (pPrimary != pAdapter) {
+    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
+                        "Secondary adapter, exit");
     goto done;
   }
 
@@ -393,28 +389,6 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_changeAtomicVar failed, status: %s",
                         vmk_StatusToString(status));
     goto done;
-  }
-
-  if (pAdapter != pPrimary) {
-    /* Fetch the number of VFs enabled on primary port */
-    totalVfs = pPrimary->proxiedVfs;
-
-    sfvmk_MutexLock(pPrimary->secondaryListLock);
-    VMK_LIST_FORALL(&pPrimary->secondaryList, pLink) {
-      pOther = VMK_LIST_ENTRY(pLink, sfvmk_adapter_t, adapterLink);
-      totalVfs += pOther->proxiedVfs;
-    }
-    sfvmk_MutexUnlock(pPrimary->secondaryListLock);
-
-    /* Do not clean-up proxy auth module if some other port is using it */
-    if (totalVfs - pAdapter->proxiedVfs != 0) {
-        SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                            "Total %u VFs in use, VFs on current adapter: %u",
-                            totalVfs, pAdapter->proxiedVfs);
-        /* Restore the authState back to ready */
-        vmk_AtomicWrite64(&pProxyState->authState, SFVMK_PROXY_AUTH_STATE_READY);
-        goto done;
-    }
   }
 
   /* Cancel all proxy requests (tagged 0) */
@@ -495,9 +469,7 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   pPrimary->pProxyState = NULL;
 
 done:
-  pAdapter->proxiedVfs = 0;
   sfvmk_MutexUnlock(sfvmk_modInfo.listsLock);
-
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_PROXY);
 }
 

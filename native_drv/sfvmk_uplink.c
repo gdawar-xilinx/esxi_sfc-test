@@ -2423,7 +2423,7 @@ sfvmk_startIO(sfvmk_adapter_t *pAdapter)
 
 #ifdef SFVMK_SUPPORT_SRIOV
   /* Setup EVB switching */
-  if (pAdapter->evbState != SFVMK_EVB_STATE_STARTED) {
+  if (pAdapter->evbState == SFVMK_EVB_STATE_UNINITIALIZED) {
     status = sfvmk_evbSwitchInit(pAdapter);
     if ((status != VMK_OK) && (status != VMK_BAD_PARAM)) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_evbSwitchInit failed status: %s",
@@ -4568,8 +4568,14 @@ sfvmk_uplinkResetHelper(vmk_AddrCookie cookie)
   sfvmk_MutexLock(pAdapter->lock);
 
 #ifdef SFVMK_SUPPORT_SRIOV
-  if (pAdapter->evbState == SFVMK_EVB_STATE_STARTED)
-    pAdapter->evbState = SFVMK_EVB_STATE_STOPPING;
+  /*
+   * evbState is per adapter but it forms the basis for decision of
+   * proxyAuthInit and proxyAuthFini as well. In case, primary has no
+   * VFs enabled, evbState will remain UNINITIALIZED and hence will
+   * not be set to STOPPING here if checked for STARTED. So, set evbState
+   * to STOPPING unconditionally to take care of such case.
+   */
+  pAdapter->evbState = SFVMK_EVB_STATE_STOPPING;
 #endif
 
   status = sfvmk_quiesceIO(pAdapter);

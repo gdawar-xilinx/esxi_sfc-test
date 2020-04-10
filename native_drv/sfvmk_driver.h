@@ -674,7 +674,6 @@ typedef enum sfvmk_evbState_e {
   SFVMK_EVB_STATE_UNINITIALIZED = 0,
   SFVMK_EVB_STATE_STARTED,
   SFVMK_EVB_STATE_STOPPING,
-  SFVMK_EVB_STATE_STOPPED
 } sfvmk_evbState_t;
 #endif
 
@@ -796,8 +795,6 @@ typedef struct sfvmk_adapter_s {
 
   /* Number of VFs enabled */
   vmk_uint32                 numVfsEnabled;
-  /* Number of VFs using proxy module */
-  vmk_uint32                 proxiedVfs;
   /* Pointer to primary adapter (port number 0) */
   struct sfvmk_adapter_s*    pPrimary;
   /* Linked list for secondary ports */

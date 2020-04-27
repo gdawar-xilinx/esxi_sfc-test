@@ -27,8 +27,9 @@
 #include "efx_mcdi.h"
 #include "sfvmk_driver.h"
 
-#define SFVMK_MCDI_POLL_INTERVAL_MIN 10   /* 10us in 1us units */
-#define SFVMK_MCDI_POLL_INTERVAL_MAX 100000 /* 100ms in 1us units */
+#define SFVMK_MCDI_POLL_INTERVAL_MIN       10 /* 10us in 1us units */
+#define SFVMK_MCDI_POLL_INTERVAL_MAX       100000 /* 100ms in 1us units */
+#define SFVMK_MCDI_POLL_AFTER_MC_REBOOT_US (1000 * 500)
 
 /*! \brief routine to be called on mcdi timeout.
 **
@@ -131,6 +132,7 @@ sfvmk_mcdiWaitForCompletion(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
   vmk_uint64 currentTime;
   vmk_uint64 startTime;
   vmk_uint64 timeOut;
+  vmk_Bool completed;
 
   VMK_ASSERT_NOT_NULL(pAdapter);
 
@@ -147,6 +149,17 @@ sfvmk_mcdiWaitForCompletion(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
       sfvmk_getTime(&currentTime);
       continue;
     } else if (status == VMK_TIMEOUT) {
+      /*
+       * It is thought that there are cases when MCDI requests can complete but
+       * either the expected interrupt or event is not generated. Poll the MCDI
+       * buffer once to check if the request has actually completed.
+       */
+       completed = efx_mcdi_request_poll(pAdapter->pNic);
+       if (completed) {
+         SFVMK_ADAPTER_ERROR(pAdapter, "MCDI completed without an event");
+         break;
+       }
+
       /* Attempt to abort any pending request. If there is no pending request,
        * we have simultaneous completion and timeout. Do nothing. */
       if (efx_mcdi_request_abort(pAdapter->pNic)) {
@@ -159,6 +172,14 @@ sfvmk_mcdiWaitForCompletion(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
         VMK_ASSERT(0);
       }
     }
+    completed = efx_mcdi_request_poll(pAdapter->pNic);
+    if (!completed) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "MCDI event signalled but request not"\
+                            "complete - polling for a response");
+        sfvmk_mcdiPoll(pAdapter, SFVMK_MCDI_POLL_AFTER_MC_REBOOT_US);
+        break;
+    }
+
     break;
   }
 }
@@ -261,6 +282,10 @@ sfvmk_mcdiExecute(void *arg, efx_mcdi_req_t *pEmrp)
 
   /* Check if driver reset required */
   if (pEmrp->emr_rc == EIO) {
+    sfvmk_MutexLock(pAdapter->mcdi.lock);
+    pAdapter->mcdi.mode = SFVMK_MCDI_MODE_DEAD;
+    sfvmk_MutexUnlock(pAdapter->mcdi.lock);
+
     SFVMK_ADAPTER_ERROR(pAdapter, "Reboot detected, schedule the reset helper");
     if ((status = sfvmk_scheduleReset(pAdapter)) != VMK_OK) {
       SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_scheduleReset failed with error %s",

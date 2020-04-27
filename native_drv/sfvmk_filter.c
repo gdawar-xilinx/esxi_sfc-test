@@ -134,7 +134,7 @@ sfvmk_prepareVMACFilterRule(sfvmk_adapter_t *pAdapter,
                       mac[0], mac[1], mac[2],
                       mac[3], mac[4], mac[5]);
 
-  efx_filter_spec_init_rx(&pFdbEntry->spec[0], EFX_FILTER_PRI_HINT, flags, pRxq->pCommonRxq);
+  efx_filter_spec_init_rx(&pFdbEntry->spec[0], EFX_FILTER_PRI_MANUAL, flags, pRxq->pCommonRxq);
 
   status = efx_filter_spec_set_eth_local(&pFdbEntry->spec[0],
                                          vlanID,
@@ -212,7 +212,7 @@ sfvmk_prepareTunnelFilterRule(sfvmk_adapter_t *pAdapter,
     }
 
     efx_filter_spec_init_rx(&pFdbEntry->spec[i],
-                            EFX_FILTER_PRI_HINT,
+                            EFX_FILTER_PRI_MANUAL,
                             flags, pRxq->pCommonRxq);
 
     if (encapType == EFX_TUNNEL_PROTOCOL_VXLAN) {

@@ -1135,6 +1135,7 @@ sfvmk_attachDevice(vmk_Device dev)
   const efx_nic_cfg_t *pNicCfg = NULL;
   vmk_uint8 vpdPayload[SFVMK_VPD_MAX_PAYLOAD] = {0};
   vmk_uint8 vpdLen = 0;
+  vmk_uint32 fcwOffset = 0;
 
   SFVMK_DEBUG_FUNC_ENTRY(SFVMK_DEBUG_DRIVER, "VMK device:%p", dev);
 
@@ -1194,9 +1195,15 @@ sfvmk_attachDevice(vmk_Device dev)
     goto failed_create_lock;
   }
 
+  /* Driver supports only Medford family and for Medford family
+   * devices fcw offset must be set to 0
+   */
+  fcwOffset = 0;
+
   status = efx_nic_create(pAdapter->efxFamily,
                           (efsys_identifier_t *)pAdapter,
                           &pAdapter->bar,
+                          fcwOffset,
                           &pAdapter->nicLock,
                           &pAdapter->pNic);
   if (status != VMK_OK) {

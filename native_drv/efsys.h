@@ -65,6 +65,8 @@
 #define MAX(_x, _y)             (((_x) > (_y)) ? (_x) : (_y))
 #define MIN(_x, _y)             (((_x) <= (_y)) ? (_x) : (_y))
 
+#define UINT32_MAX VMK_UINT32_MAX
+
 typedef vmk_int8                int8_t;
 typedef vmk_uint8               uint8_t;
 typedef vmk_int16               int16_t;

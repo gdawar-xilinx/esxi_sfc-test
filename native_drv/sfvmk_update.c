@@ -275,6 +275,14 @@ VMK_ReturnStatus sfvmk_performUpdate(sfvmk_adapter_t  *pAdapter,
     goto fail3;
   }
 
+  if (type == EFX_NVRAM_MC_FIRMWARE) {
+    status = sfvmk_removeBundleUpdateDisabledTag(pAdapter);
+    if ((status != VMK_OK) && (status != VMK_EOPNOTSUPP)) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "Remove Bundle Update Disable Tag Failed with err %s",
+                vmk_StatusToString(status));
+    }
+  }
+
   if ((type == EFX_NVRAM_MC_FIRMWARE) ||
       (type == EFX_NVRAM_MUM_FIRMWARE) ||
       (type == EFX_NVRAM_BUNDLE)) {

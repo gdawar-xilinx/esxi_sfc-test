@@ -171,3 +171,136 @@ finish_rw:
 end:
   return status;
 }
+
+/*! \brief Routine to perform delete the BUNDLE_UPDATE_DISABLED tag
+**
+** \param[in]      pAdapter    pointer to sfvmk_adapter_t
+**
+** \return: VMK_OK [success] error code [failure]
+**
+*/
+VMK_ReturnStatus
+sfvmk_removeBundleUpdateDisabledTag(sfvmk_adapter_t *pAdapter)
+{
+  efx_nic_t   *pNic = NULL;
+  size_t      partSize = 0;
+  vmk_uint8   *pNvramBuf = NULL;
+  vmk_uint8 *pReadBuf = NULL;
+  vmk_uint32  tagLoc = 0;
+  vmk_uint32  tagVal = 0;
+  vmk_uint32  tagLength = 0;
+  vmk_uint32  valueOffset = 0;
+  size_t      chunkSize = 0;
+  vmk_uint32  length = 0;
+  vmk_uint32  offset = 0;
+  VMK_ReturnStatus status = VMK_FAILURE;
+
+  if (!pAdapter) {
+    SFVMK_ADAPTER_ERROR(pAdapter,"Invalid function parameters");
+    goto end;
+  }
+
+
+  pNic = pAdapter->pNic;
+
+  /* Open the dynamic config partition */
+  if ((status = efx_nvram_rw_start(pNic, EFX_NVRAM_DYNAMIC_CFG, &chunkSize)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "NVRAM dynamic partition rw start failed with err %s",
+                         vmk_StatusToString(status));
+    goto end;
+  }
+
+  if ((status = efx_nvram_size(pNic, EFX_NVRAM_DYNAMIC_CFG, &partSize)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "NVRAM dynamic partition get size failed with err %s",
+                        vmk_StatusToString(status));
+    goto finish_rw;
+  }
+
+  pNvramBuf = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, partSize);
+  if (pNvramBuf == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "pNvramBuf memory allocation failed");
+    status = VMK_NO_MEMORY;
+    goto finish_rw;
+  }
+
+  /* Read full partition into memory buffer */
+  if ((status = efx_nvram_read_chunk(pNic, EFX_NVRAM_DYNAMIC_CFG,
+                                     0, pNvramBuf, partSize)) != VMK_OK) {
+    SFVMK_ADAPTER_ERROR(pAdapter,
+                        "NVRAM dynamic partition read failed with err %s",
+                        vmk_StatusToString(status));
+    goto free_nv_buf;
+  }
+
+  /* Search for the BUNDLE_UPDATE_DISABLED tag */
+  do {
+    status =  efx_tlv_buffer_peek_item(pNvramBuf, partSize, tagLoc,
+                                          &tagVal, &tagLength, &valueOffset);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM tag lookup failed with err %s",
+                          vmk_StatusToString(status));
+      goto free_nv_buf;
+    }
+
+    if (tagVal == TLV_TAG_BUNDLE_UPDATE_DISABLED) {
+      length = tagLength;
+      offset = tagLoc;
+      break;
+    }
+
+    tagLoc += tagLength;
+  } while (tagVal != TLV_TAG_END);
+
+  if (length == 0) {
+    status = VMK_EOPNOTSUPP;
+    goto free_nv_buf;
+  }
+
+  pReadBuf = (char *)vmk_HeapAlloc(sfvmk_modInfo.heapID, chunkSize);
+  if (pReadBuf == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "pReadBuf memory allocation failed");
+    status = VMK_NO_MEMORY;
+    goto free_nv_buf;
+  }
+
+  /* Delete tag at the location */
+  efx_tlv_buffer_delete_item(pNvramBuf, partSize, offset, length, partSize);
+
+  /* Write partition buffer */
+  efx_tlv_buffer_finish(pNvramBuf, partSize);
+
+  efx_nvram_erase(pNic, EFX_NVRAM_DYNAMIC_CFG);
+
+  for (offset = 0; offset < partSize; offset += chunkSize) {
+    if ((status = efx_nvram_write_chunk(pNic, EFX_NVRAM_DYNAMIC_CFG, offset,
+                                        pNvramBuf + offset, chunkSize)) != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM write failed with err %s at offset %u",
+                          vmk_StatusToString(status), offset);
+      goto free_rd_buf;
+    }
+
+    /* Verify data read from partition */
+    efx_nvram_read_backup(pNic, EFX_NVRAM_DYNAMIC_CFG, offset, pReadBuf, chunkSize);
+
+    if (memcmp(pReadBuf, pNvramBuf + offset, chunkSize) != 0) {
+      SFVMK_ADAPTER_ERROR(pAdapter, "NVRAM verification failed");
+      goto free_rd_buf;
+    }
+  }
+
+  status = VMK_OK;
+
+free_rd_buf:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pReadBuf);
+
+free_nv_buf:
+  vmk_HeapFree(sfvmk_modInfo.heapID, pNvramBuf);
+
+finish_rw:
+  efx_nvram_rw_finish(pNic, EFX_NVRAM_DYNAMIC_CFG, NULL);
+
+end:
+  return status;
+}

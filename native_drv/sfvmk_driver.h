@@ -1168,6 +1168,8 @@ VMK_ReturnStatus
 sfvmk_nvramWriteAll(sfvmk_adapter_t *pAdapter, efx_nvram_type_t type, vmk_uint8 *pNvramBuf,
                     vmk_uint32 *pBufSize, vmk_Bool eraseNvram);
 
+VMK_ReturnStatus sfvmk_removeBundleUpdateDisabledTag(sfvmk_adapter_t *pAdapter);
+
 VMK_ReturnStatus
 sfvmk_requestSensorData(sfvmk_adapter_t *pAdapter, char *pSensorBuf, vmk_ByteCount size, vmk_ByteCount *pBytesCopied);
 

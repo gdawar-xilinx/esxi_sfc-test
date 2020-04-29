@@ -44,23 +44,35 @@ sucfw-icarus/sucfw.update.ini          sucfw-icarus/sucfw.dat
 ; Solarflare XtremeScale X2522 (10G) Adapter
 mcfw-bob/mcfw.update.ini               mcfw-bob/mcfw.dat
 sucfw-bob/sucfw.update.ini             sucfw-bob/sucfw.dat
+bundle-bob/bundle.update.ini           bundle-bob/bundle.dat
 
 ; X2522-R5.x (a.k.a. "Roxburgh R5.x")
 ; Solarflare XtremeScale X2522-25G Adapter
 mcfw-solidus/mcfw.update.ini           mcfw-solidus/mcfw.dat
 sucfw-solidus/sucfw.update.ini         sucfw-solidus/sucfw.dat
+bundle-solidus/bundle.update.ini       bundle-solidus/bundle.dat
 
 ; X2541-R1.x (a.k.a "Stirling R1.x")
 ; Solarflare XtremeScale X2541 Adapter
 mcfw-sovereign/mcfw.update.ini         mcfw-sovereign/mcfw.dat
 sucfw-sovereign/sucfw.update.ini       sucfw-sovereign/sucfw.dat
+bundle-sovereign/bundle.update.ini     bundle-sovereign/bundle.dat
 
 ; X2542-R3.x (a.k.a "Coldstream R1.x")
 ; Solarflare XtremeScale X2542 Adapter"
 mcfw-crown/mcfw.update.ini             mcfw-crown/mcfw.dat
 sucfw-crown/sucfw.update.ini           sucfw-crown/sucfw.dat
+bundle-crown/bundle.update.ini         bundle-crown/bundle.dat
 
-; X2552-R3.x (a.k.a. "Joey X2552 R3.x")
+; Dell-X2522-R2.x (a.k.a. "Dell Roxburgh R2.x")
+; Solarflare XtremeScale X2522-25G Adapter
+bundle-sol/bundle.update.ini           bundle-sol/bundle.dat
+
+; X2562-R2.x (a.k.a. "Melrose R2.x")
+; Solarflare XtremeScale X2562 Adapter
+bundle-tanner/bundle.update.ini        bundle-tanner/bundle.dat
+
+; X2552-R3.2+ (a.k.a. "Joey X2552 R3.2+")
 ; Solarflare XtremeScale X2552 Adapter
 bundle-joey/bundle.update.ini          bundle-joey/bundle.dat
 

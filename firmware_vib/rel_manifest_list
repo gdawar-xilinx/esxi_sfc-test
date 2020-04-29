@@ -40,25 +40,10 @@ mcfw-thebes/mcfw.update.ini            mcfw-thebes/mcfw.dat
 mcfw-icarus/mcfw.update.ini            mcfw-icarus/mcfw.dat
 sucfw-icarus/sucfw.update.ini          sucfw-icarus/sucfw.dat
 
-; X2522-R1.x (a.k.a "Shilling R1.x")
-; Solarflare XtremeScale X2522 (10G) Adapter
-mcfw-shilling/mcfw.update.ini          mcfw-shilling/mcfw.dat
-sucfw-shilling/sucfw.update.ini        sucfw-shilling/sucfw.dat
-
 ; X2522-R2.x (a.k.a "Bradford R2.x")
 ; Solarflare XtremeScale X2522 (10G) Adapter
 mcfw-bob/mcfw.update.ini               mcfw-bob/mcfw.dat
 sucfw-bob/sucfw.update.ini             sucfw-bob/sucfw.dat
-
-; X2552-R3.x (a.k.a "Threepence X2552 R3.x")
-; Solarflare XtremeScale X2552 Adapter
-mcfw-threepence/mcfw.update.ini        mcfw-threepence/mcfw.dat
-sucfw-threepence/sucfw.update.ini      sucfw-threepence/sucfw.dat
-
-; X2522-R4.x (a.k.a. "Hog R4.x")
-; Solarflare XtremeScale X2522-25G Adapter
-mcfw-hog/mcfw.update.ini               mcfw-hog/mcfw.dat
-sucfw-hog/sucfw.update.ini             sucfw-hog/sucfw.dat
 
 ; X2522-R5.x (a.k.a. "Roxburgh R5.x")
 ; Solarflare XtremeScale X2522-25G Adapter
@@ -69,11 +54,6 @@ sucfw-solidus/sucfw.update.ini         sucfw-solidus/sucfw.dat
 ; Solarflare XtremeScale X2541 Adapter
 mcfw-sovereign/mcfw.update.ini         mcfw-sovereign/mcfw.dat
 sucfw-sovereign/sucfw.update.ini       sucfw-sovereign/sucfw.dat
-
-; X2542 (a.k.a "Florin")
-; Solarflare XtremeScale X2542 Adapter"
-mcfw-florin/mcfw.update.ini            mcfw-florin/mcfw.dat
-sucfw-florin/sucfw.update.ini          sucfw-florin/sucfw.dat
 
 ; X2542-R3.x (a.k.a "Coldstream R1.x")
 ; Solarflare XtremeScale X2542 Adapter"

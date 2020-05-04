@@ -47,7 +47,7 @@ def execute(cmd, mode='esxi'):
     out, err = process.communicate()
     timer.cancel()
 
-    if err:
+    if err and "warning" not in err.lower():
         print("ERROR:", err)
         print("Error while running command:", cmd)
         if not "date" in cmd:

@@ -29,6 +29,7 @@ UWTOOL = sfvmkcli
 UWTOOL_VERSION = 2.4.0.0009
 
 NDDK_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKVER)
+BUILD_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKBUILDVER)
 
 # mgmtInterface.c is in DEV_COMMON_DIR, the build system looks
 # there for sources as well as here.
@@ -41,9 +42,13 @@ PLUGIN_XML = esxcli-sfvmk.xml
 
 DESC_VENDOR_EMAIL=support@solarflare.com
 DESC_VERSION=$(UWTOOL_VERSION)-06
+ifeq ($(shell expr $(NDDK_VER) \>= 7.0), 1)
+DESC_VENDOR=Solarflare
+else
 DESC_VENDOR=SFC
+endif
 DESC_SUMMARY=esxcli extension for SFVMK driver
-DESC_DESCRIPTION=Userworld Tool to communicate with a VMKAPI driver module
+DESC_DESCRIPTION=Solarflare Userworld Tool to communicate with a VMKAPI driver module
 DESC_URLS=descriptor-urls.xml
 DESC_DEPENDS=$(NDDK_VER)-descriptor-depends.xml
 DESC_CONFLICTS=
@@ -56,7 +61,7 @@ DESC_STATELESS_READY=true
 
 DESC_ACCEPTANCE_LEVEL=partner
 
-ifeq ($(NDDK_VER),7.0)
+ifeq ($(shell expr $(NDDK_VER) \>= 7.0), 1)
 KEYPATH=/opt/vmware/vibtools/testcerts/vmpartner.key
 CERTPATH=/opt/vmware/vibtools/testcerts/vmpartner.cert
 endif
@@ -68,11 +73,11 @@ BULL_KBURL=http://www.solarflare.com
 BULL_PLATFORMS=bulletin-platforms.url
 BULL_VENDOR_CODE=SFC
 
-ifeq ($(NDDK_VER),7.0)
+ifeq ($(shell expr $(NDDK_VER) \>= 7.0), 1)
 BULL_CNS_NAME=SFC-ESXCLI
 BULL_CNS_STRING=$(DESC_DESCRIPTION)
-BULL_CVS_VERSION=1.0-0.0.0001
-BULL_CVS_STRING=1.0 - Build 0001
+BULL_CVS_VERSION=$(UWTOOL_VERSION)-$(BUILD_VER)
+BULL_CVS_STRING=$(UWTOOL_VERSION)
 endif
 
 DEV_beta_COMPILEFLAGS = -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast

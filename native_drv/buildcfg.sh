@@ -32,6 +32,9 @@ NDDK_VER=$(echo $NDDK_DIR | cut -c 11-13)
 # Retrieve NDDK build number
 BUILD_NUM=$(echo $NDDK_DIR | cut -c 17-24)
 
+# Retrieve NDDK build number
+BUILD_VER=$(echo $NDDK_DIR | cut -c 11-24)
+
 # Perform sanity Checks
 sanityChecks () {
     # Check supported NDDK version
@@ -50,6 +53,10 @@ get_nddkver () {
 
 get_buildnum () {
     echo ${BUILD_NUM} | sed -e 's/^[ \t]*//' -e 's/[ \t]*$//'
+}
+
+get_buildver () {
+    echo ${BUILD_VER} | sed -e 's/-/./g'
 }
 
 cfg_sfvmksc () {
@@ -74,27 +81,24 @@ cfg_toolscfg () {
     fi
 }
 
-
 sanityChecks
 case "$1" in
     CFG_SFVMKBUILD)
         cfg_toolscfg
         cfg_sfvmksc
-        break
         ;;
     GET_NDDKDIR)
         get_ndddir
-        break
         ;;
     GET_NDDKVER)
         get_nddkver
-        break
         ;;
     GET_NDDKBUILDNUM)
         get_buildnum
-        break
+        ;;
+    GET_NDDKBUILDVER)
+        get_buildver
         ;;
     *)
-        break
         ;;
 esac

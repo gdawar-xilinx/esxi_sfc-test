@@ -217,14 +217,17 @@ sfvmk_evbSwitchFini(sfvmk_adapter_t *pAdapter)
     goto done;
   }
 
-  status = efx_evb_vswitch_destroy(pAdapter->pNic, pAdapter->pVswitch);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter,
-                        "efx_evb_vswitch_destroy failed status: %s",
-                        vmk_StatusToString(status));
+  if (pAdapter->pVswitch != NULL) {
+    status = efx_evb_vswitch_destroy(pAdapter->pNic, pAdapter->pVswitch);
+    if (status != VMK_OK) {
+      SFVMK_ADAPTER_ERROR(pAdapter,
+                          "efx_evb_vswitch_destroy failed status: %s",
+                          vmk_StatusToString(status));
+    }
+    pAdapter->pVswitch = NULL;
+    efx_evb_fini(pAdapter->pNic);
   }
 
-  efx_evb_fini(pAdapter->pNic);
   status = VMK_OK;
 
 done:

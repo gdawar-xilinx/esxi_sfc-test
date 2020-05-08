@@ -2380,6 +2380,7 @@ sfvmk_uplinkStartIO(vmk_AddrCookie cookie)
       /* World is dying */
       break;
     }
+    sfvmk_mcdiReset(pAdapter);
   }
 
   if (status != VMK_OK) {

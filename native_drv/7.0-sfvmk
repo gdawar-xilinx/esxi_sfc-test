@@ -179,7 +179,7 @@ fullVersion = GenerateFullVibVersionNumber(sfvmk_identification['version'],
                                            sfvmk_identification['binary compat'],
                                            sfvmk_identification.get('version_bump', None))
 shortVersion = '%s-%s' % (sfvmk_identification['version'],
-                          sfvmk_identification.get('version_bump', 0))
+                          sfvmk_identification.get('version_bump', 1))
 
 sfvmk_bulletin_def = {
    "identification" : sfvmk_identification,
@@ -196,8 +196,7 @@ sfvmk_bulletin_def = {
       'kbUrl'       : 'http://kb.vmware.com/kb/example.html',
 
       'componentNameSpec' : { 'name' : 'Solarflare-NIC',
-                              'uiString' : 'Solarflare XtremeScale \
-                                            NIC Driver'
+                              'uiString' : 'Solarflare XtremeScale NIC Driver'
                             },
       'componentVersionSpec' : { 'version' : fullVersion, 'uiString' : shortVersion },
 

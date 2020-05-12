@@ -366,7 +366,6 @@ sfvmk_txFlushWaitAndDestroy(sfvmk_adapter_t *pAdapter)
       pTxq->flushState = SFVMK_FLUSH_STATE_DONE;
     }
 
-    pTxq->blocked = VMK_FALSE;
     pTxq->pending = pTxq->added;
 
     pEvq = pAdapter->ppEvq[qIndex];
@@ -602,7 +601,6 @@ sfvmk_txqStart(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   pTxq->pPendDesc = pPendDesc;
   pTxq->nPendDesc = 0;
   pTxq->added = pTxq->pending = pTxq->completed = pTxq->reaped = descIndex;
-  pTxq->blocked = VMK_FALSE;
   pTxq->state = SFVMK_TXQ_STATE_STARTED;
   pTxq->flushState = SFVMK_FLUSH_STATE_REQUIRED;
   vmk_SpinlockUnlock(pTxq->lock);
@@ -726,9 +724,8 @@ sfvmk_txqUnblock(sfvmk_txq_t *pTxq)
     goto done;
   }
 
-  /* Reaped must be in sync with blocked */
+  /* Reaped must be in sync with pTxq stats */
   sfvmk_txqReap(pTxq);
-  pTxq->blocked = VMK_FALSE;
   sfvmk_updateQueueStatus(pTxq->pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
 
 done:
@@ -787,7 +784,8 @@ sfvmk_txqComplete(sfvmk_txq_t *pTxq, sfvmk_evq_t *pEvq, sfvmk_pktCompCtx_t *pCom
 
   /* Check whether we need to unblock the queue. */
   vmk_CPUMemFenceWrite();
-  if (pTxq->blocked) {
+  if (pTxq->state == SFVMK_TXQ_STATE_STARTED &&
+      sfvmk_isTxqStopped(pAdapter, pTxq->index)) {
     unsigned int level;
 
     level = pTxq->added - pTxq->completed;
@@ -1602,7 +1600,6 @@ sfvmk_txqListPost(sfvmk_txq_t *pTxq)
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
   VMK_ASSERT(pTxq->nPendDesc != 0);
-  VMK_ASSERT(pTxq->blocked == VMK_FALSE);
 
   oldAdded = pTxq->added;
 
@@ -1759,18 +1756,19 @@ done:
 vmk_Bool
 sfvmk_isTxqStopped(sfvmk_adapter_t *pAdapter, vmk_uint32 txqIndex)
 {
-  vmk_UplinkSharedQueueData *pQueueData;
-  vmk_UplinkSharedQueueInfo *pQueueInfo;
-  vmk_uint32 queueIndex;
+  vmk_Bool stopped;
+  vmk_uint32 txqStartIndex;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_TX);
 
-  pQueueInfo = &pAdapter->uplink.queueInfo;
-  queueIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
-  pQueueData = &pQueueInfo->queueData[queueIndex];
+  txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+
+  stopped = !vmk_BitVectorTest(pAdapter->uplink.queueInfo.activeQueues,
+                               txqIndex + txqStartIndex);
+
 
   SFVMK_ADAPTER_DEBUG_FUNC_EXIT(pAdapter, SFVMK_DEBUG_TX);
-  return (pQueueData[txqIndex].state == VMK_UPLINK_QUEUE_STATE_STOPPED);
+  return stopped;
 }
 
 /*! \brief transmit the packet on the uplink interface
@@ -1830,7 +1828,6 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
   if (pTxq->added - pTxq->reaped + nTotalDesc > EFX_TXQ_LIMIT(pTxq->numDesc)) {
     VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, pTxq->index) == VMK_FALSE,
                "Txq index = %u", pTxq->index);
-    pTxq->blocked = VMK_TRUE;
     sfvmk_updateQueueStatus(pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED,
                             pTxq->index);
     SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_TX, SFVMK_LOG_LEVEL_IO,
@@ -1840,7 +1837,6 @@ sfvmk_transmitPkt(sfvmk_txq_t *pTxq,
     goto done;
   }
 
-  VMK_ASSERT_EQ(pTxq->blocked, VMK_FALSE);
 
   xmitInfo.pOrigPkt = NULL;
   xmitInfo.pXmitPkt = pkt;

@@ -107,7 +107,7 @@ sfvmk_modInfoCleanup(void)
 static vmk_ByteCount
 sfvmk_calcHeapSize(void)
 {
-#define SFVMK_ALLOC_DESC_SIZE  31
+#define SFVMK_ALLOC_DESC_SIZE  32
   vmk_ByteCount maxSize = 0;
   vmk_HeapAllocationDescriptor allocDesc[SFVMK_ALLOC_DESC_SIZE];
   VMK_ReturnStatus status;
@@ -261,6 +261,11 @@ sfvmk_calcHeapSize(void)
   vmk_MutexAllocSize(VMK_MUTEX, &allocDesc[index].size, &allocDesc[index].alignment);
   allocDesc[index++].count = 1;
 #endif
+
+  /* Allocation for activeQueues */
+  allocDesc[index].size = vmk_BitVectorSize(SFVMK_MAX_NETQ_COUNT * 2);
+  allocDesc[index].alignment = 0;
+  allocDesc[index++].count = SFVMK_MAX_ADAPTER;
 
   VMK_ASSERT(index <= SFVMK_ALLOC_DESC_SIZE);
 

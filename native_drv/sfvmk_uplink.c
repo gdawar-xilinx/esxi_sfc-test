@@ -681,13 +681,11 @@ sfvmk_uplinkTx(vmk_AddrCookie cookie, vmk_PktList pktList)
       continue;
     }
 
-    if (pAdapter->ppTxq[qid]->blocked) {
-      VMK_ASSERT(sfvmk_isTxqStopped(pAdapter, qid),
-                 "Txq index = %u", qid);
+    if (sfvmk_isTxqStopped(pAdapter, qid)) {
       vmk_SpinlockUnlock(pAdapter->ppTxq[qid]->lock);
 
       SFVMK_ADAPTER_DEBUG_IO(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_IO,
-                             "Queue blocked, returning");
+                             "Queue stopped, returning");
       vmk_PktListIterInsertPktBefore(iter, pkt);
       pAdapter->ppTxq[qid]->stats[SFVMK_TXQ_QUEUE_BUSY]++;
       status = VMK_BUSY;
@@ -1422,9 +1420,6 @@ sfvmk_privStatsGet(vmk_AddrCookie cookie,
   totalBytes += bytesCopied;
   pCurr += bytesCopied;
 
-  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
-                      "max Bytes %d, bytes copied %lu, bytes remaining %lu",
-                      SFVMK_PRIV_STATS_BUFFER_SZ, totalBytes, maxBytes);
   status = VMK_OK;
 
 failed_stats_update:
@@ -1784,6 +1779,8 @@ sfvmk_uplinkLinkStatusSet(vmk_AddrCookie cookie,
                           vmk_StatusToString(status));
   }
 
+  SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_UPLINK, SFVMK_LOG_LEVEL_DBG,
+                      "device Link up");
 quiesceio_done:
 startio_done:
   sfvmk_MutexUnlock(pAdapter->lock);
@@ -2121,13 +2118,17 @@ done:
 **
 */
 void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
-                             vmk_UplinkQueueState qState, vmk_uint32 qIndex)
+                             vmk_UplinkQueueState qState,
+                             vmk_uint32 qIndex)
 {
   vmk_UplinkSharedQueueData *queueData;
   sfvmk_txqStats_t idx = SFVMK_TXQ_QUEUE_BLOCKED;
+  sfvmk_uplink_t *pUplink = &pAdapter->uplink;
+  vmk_uint32 txqStartIndex;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK);
 
+  txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
   queueData = sfvmk_getUplinkTxSharedQueueData(&pAdapter->uplink);
 
   if (queueData[qIndex].state != qState) {
@@ -2139,6 +2140,15 @@ void sfvmk_updateQueueStatus(sfvmk_adapter_t *pAdapter,
     if (queueData[qIndex].flags &
         (VMK_UPLINK_QUEUE_FLAG_IN_USE | VMK_UPLINK_QUEUE_FLAG_DEFAULT)) {
       queueData[qIndex].state = qState;
+      if (qState == VMK_UPLINK_QUEUE_STATE_STOPPED) {
+        pUplink->queueInfo.activeTxQueues--;
+        vmk_BitVectorClear(pUplink->queueInfo.activeQueues,
+                           qIndex + txqStartIndex);
+      } else {
+        pUplink->queueInfo.activeTxQueues++;
+        vmk_BitVectorSet(pUplink->queueInfo.activeQueues,
+                         qIndex + txqStartIndex);
+      }
     }
     sfvmk_sharedAreaEndWrite(&pAdapter->uplink);
 
@@ -3437,6 +3447,15 @@ sfvmk_sharedQueueInfoInit(sfvmk_adapter_t *pAdapter)
   pQueueInfo->activeRxQueues = 0;
   pQueueInfo->activeTxQueues = 0;
 
+  pQueueInfo->activeQueues = vmk_BitVectorAlloc(sfvmk_modInfo.heapID,
+						numSharedQueue);
+  if (!pQueueInfo->activeQueues) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "vmk_BitVectorAlloc failed");
+    goto failed_bitvector_alloc;
+  }
+
+  vmk_BitVectorZap(pQueueInfo->activeQueues);
+
   status = vmk_ServiceGetID(VMK_SERVICE_ACCT_NAME_NET, &serviceID);
   if (status != VMK_OK) {
     goto failed_get_service_id;
@@ -3497,6 +3516,8 @@ failed_create_netpoll_rss:
 
 failed_rxqdata_init:
 failed_get_service_id:
+  vmk_BitVectorFree(sfvmk_modInfo.heapID, pQueueInfo->activeQueues);
+failed_bitvector_alloc:
   vmk_HeapFree(sfvmk_modInfo.heapID, pQueueInfo->queueData);
   pQueueInfo->queueData = NULL;
 
@@ -3528,6 +3549,11 @@ sfvmk_sharedQueueInfoFini(sfvmk_adapter_t *pAdapter)
 
   if (sfvmk_isRSSEnable(pAdapter))
     sfvmk_destroyNetPollForRSSQs(pAdapter);
+
+  if (pAdapter->uplink.queueInfo.activeQueues) {
+    vmk_BitVectorFree(sfvmk_modInfo.heapID,
+                      pAdapter->uplink.queueInfo.activeQueues);
+  }
 
   vmk_HeapFree(sfvmk_modInfo.heapID, pAdapter->uplink.queueInfo.queueData);
   pAdapter->uplink.queueInfo.queueData = NULL;
@@ -3900,6 +3926,7 @@ sfvmk_quiesceUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   sfvmk_sharedAreaBeginWrite(pUplink);
   pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;
   pUplink->queueInfo.activeRxQueues--;
+  vmk_BitVectorClear(pUplink->queueInfo.activeQueues, qIndex);
   sfvmk_sharedAreaEndWrite(pUplink);
 
   status = VMK_OK;
@@ -3913,16 +3940,17 @@ done:
 /*! \brief  quiesce uplink TXQ
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
-** \param[in]  qid        ID of already created queue.
+** \param[in]  qIndex     index in to ppTxq array.
 **
 ** \return: VMK_OK on success or error code otherwise.
 */
 static VMK_ReturnStatus
-sfvmk_quiesceUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
+sfvmk_quiesceUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
-  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
   sfvmk_uplink_t *pUplink;
+  sfvmk_txq_t *pTxq = NULL;
+  vmk_uint32 txqStartIndex;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
@@ -3936,24 +3964,24 @@ sfvmk_quiesceUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
     goto done;
   }
 
-  if (!sfvmk_isUplinkQStarted(pUplink, qIndex)) {
-    status = VMK_EALREADY;
-    goto done;
-  }
-
   if (sfvmk_isQueueFree(pUplink, qIndex)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not in use", qIndex);
     status = VMK_FAILURE;
     goto done;
   }
 
-  sfvmk_sharedAreaBeginWrite(pUplink);
-  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STOPPED;
-  pUplink->queueInfo.activeTxQueues--;
-  sfvmk_sharedAreaEndWrite(pUplink);
+  if (!sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is already stopped", qIndex);
+    status = VMK_OK;
+    goto done;
+  }
 
-  if (!sfvmk_isDefaultUplinkTxq(pUplink, qIndex))
-    vmk_UplinkQueueStop(pUplink->handle, qid);
+  txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+  pTxq = pAdapter->ppTxq[qIndex - txqStartIndex];
+
+  vmk_SpinlockLock(pTxq->lock);
+  sfvmk_updateQueueStatus(pAdapter, VMK_UPLINK_QUEUE_STATE_STOPPED, pTxq->index);
+  vmk_SpinlockUnlock(pTxq->lock);
 
   status = VMK_OK;
 
@@ -3995,7 +4023,7 @@ sfvmk_quiesceQueue(vmk_AddrCookie cookie,
       }
       break;
     case VMK_UPLINK_QUEUE_TYPE_TX:
-      status = sfvmk_quiesceUplinkTxq(pAdapter, qid);
+      status = sfvmk_quiesceUplinkTxq(pAdapter, qIndex);
       if ((status != VMK_OK)  && (status != VMK_EALREADY)){
         SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_quiesceUplinkTxq(%u) failed status: %s",
                             qIndex, vmk_StatusToString(status));
@@ -4052,6 +4080,7 @@ sfvmk_startUplinkRxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
   sfvmk_sharedAreaBeginWrite(pUplink);
   pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STARTED;
   pUplink->queueInfo.activeRxQueues++;
+  vmk_BitVectorSet(pUplink->queueInfo.activeQueues, qIndex);
   sfvmk_sharedAreaEndWrite(pUplink);
 
   status = VMK_OK;
@@ -4065,16 +4094,17 @@ done:
 /*! \brief  start uplink TXQ
 **
 ** \param[in]  pAdapter   pointer to sfvmk_adapter_t.
-** \param[in]  qid        ID of already created queue.
+** \param[in]  qIndex     index in to ppTxq array.
 **
 ** \return: VMK_OK on success or error code otherwise.
 */
 static VMK_ReturnStatus
-sfvmk_startUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
+sfvmk_startUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_uint32 qIndex)
 {
   VMK_ReturnStatus status = VMK_FAILURE;
-  vmk_uint32 qIndex = vmk_UplinkQueueIDVal(qid);
   sfvmk_uplink_t *pUplink;
+  vmk_uint32 txqStartIndex;
+  sfvmk_txq_t *pTxq = NULL;
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_UPLINK, "qIndex(%u)", qIndex);
 
@@ -4088,25 +4118,24 @@ sfvmk_startUplinkTxq(sfvmk_adapter_t *pAdapter, vmk_UplinkQueueID qid)
     goto done;
   }
 
-  if (sfvmk_isUplinkQStarted(pUplink, qIndex)) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) already started", qIndex);
-    status = VMK_FAILURE;
-    goto done;
-  }
-
   if (sfvmk_isQueueFree(pUplink, qIndex)) {
     SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) is not in use", qIndex);
     status = VMK_FAILURE;
     goto done;
   }
 
-  sfvmk_sharedAreaBeginWrite(pUplink);
-  pUplink->queueInfo.queueData[qIndex].state = VMK_UPLINK_QUEUE_STATE_STARTED;
-  pUplink->queueInfo.activeTxQueues++;
-  sfvmk_sharedAreaEndWrite(pUplink);
+  if (sfvmk_isUplinkQStarted(pUplink, qIndex)) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "TXQ(%u) already started", qIndex);
+    status = VMK_OK;
+    goto done;
+  }
 
-  if (!sfvmk_isDefaultUplinkTxq(pUplink, qIndex))
-    vmk_UplinkQueueStart(pUplink->handle, qid);
+  txqStartIndex = sfvmk_getUplinkTxqStartIndex(&pAdapter->uplink);
+  pTxq = pAdapter->ppTxq[qIndex - txqStartIndex];
+
+  vmk_SpinlockLock(pTxq->lock);
+  sfvmk_updateQueueStatus(pAdapter, VMK_UPLINK_QUEUE_STATE_STARTED, pTxq->index);
+  vmk_SpinlockUnlock(pTxq->lock);
 
   status = VMK_OK;
 
@@ -4148,7 +4177,7 @@ sfvmk_startQueue(vmk_AddrCookie cookie,
       }
       break;
     case VMK_UPLINK_QUEUE_TYPE_TX:
-      status = sfvmk_startUplinkTxq(pAdapter, qid);
+      status = sfvmk_startUplinkTxq(pAdapter, qIndex);
       if (status != VMK_OK) {
         SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_startUplinkTxq(%u) failed status: %s",
                             qIndex, vmk_StatusToString(status));

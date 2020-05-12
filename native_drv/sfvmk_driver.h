@@ -396,7 +396,6 @@ typedef struct sfvmk_txq_s {
   /* The following fields change more often and are read regularly
    * on the transmit and transmit completion path */
   vmk_uint32              pending VMK_ATTRIBUTE_L1_ALIGNED;
-  vmk_Bool                blocked VMK_ATTRIBUTE_L1_ALIGNED;
 } sfvmk_txq_t;
 
 /* Descriptor for each buffer */

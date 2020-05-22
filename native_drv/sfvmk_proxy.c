@@ -271,15 +271,15 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
 
   pPrimary = pAdapter->pPrimary;
 
-  if (pPrimary == NULL) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "Primary adapter NULL");
-    goto done;
-  }
-
   if (pPrimary != pAdapter) {
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                         "Secondary adapter, exit");
     status = VMK_OK;
+    goto done;
+  }
+
+  if (pPrimary == NULL) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Primary adapter NULL");
     goto done;
   }
 

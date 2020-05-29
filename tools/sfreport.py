@@ -202,7 +202,7 @@ def system_summary(output_file, server, mode):
             system_values.append("not updated")
 
         # Capture the logs specific to Processor
-        processor_info = execute("smbiosDump | grep -m1 -A20 'Processor Info:'")
+        processor_info = execute("smbiosDump | grep -m1 -A20 'Processor Info'")
         if processor_info == 1:
             return
         try:

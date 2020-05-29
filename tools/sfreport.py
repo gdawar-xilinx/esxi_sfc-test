@@ -35,7 +35,7 @@ def terminate(process, timeout, cmd, mode):
 def execute(cmd, mode='esxi'):
     """ function to execute the command on the cmdline using subprocess """
     global TXT_FILE, out
-    timeout_sec = 5
+    timeout_sec = 10
     if not "date" in cmd:
        TXT_FILE.write("\ncmd:"+cmd)
     process = subprocess.Popen((cmd), stdout=subprocess.PIPE, \
@@ -1080,7 +1080,7 @@ def get_geneve_info(output_file, server, mode):
     output_file.write('<h1 id="GENEVE"style="font-size:26px;">\
                           GENEVE: <br></H1>')
     # get GENEVE vib info:
-    geneve_vib = execute("esxcli " + server + " software vib list |grep nsx-aggservice")
+    geneve_vib = execute("esxcli " + server + " software vib list |grep nsxcli")
     if geneve_vib == 1:
         return 0
     elif geneve_vib == None:

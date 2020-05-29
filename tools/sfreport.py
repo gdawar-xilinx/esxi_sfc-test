@@ -526,8 +526,8 @@ def sfvmk_parameter_info(output_file, server, sfvmk_adapter_list, mode,
         return
     get_pause_settings = get_pause_settings.split('\n')
     if mode == 'esxi':
-       output_file.write('<h1 style="font-size:18px;">Rx/Tx Queue Info Tables:\
-                                             </H1>')
+        output_file.write('<h1 style="font-size:18px;">Rx/Tx Queue Info Tables:\
+                                              </H1>')
         for intf in sfvmk_adapter_list:
             rxq_html = '<table><th>%s RX Queue Info Table</th></tr>\
                                         <table border="1">' % intf

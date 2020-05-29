@@ -16,6 +16,7 @@ from collections import defaultdict
 
 global TXT_FILE
 global out
+global vcli_connectivity
 
 # sfreport version to be incremented for any changes made before releases:
 # major minor build
@@ -23,6 +24,7 @@ SFREPORT_VERSION = "2.4.0.0010"
 
 def terminate(process, timeout, cmd, mode):
     """ function to terminate a process """
+    global vcli_connectivity
     timeout["value"] = True
     process.kill()
     print("ERROR: Following command took longer than expected:\ncmd: " +cmd)
@@ -30,6 +32,8 @@ def terminate(process, timeout, cmd, mode):
         print("CAUTION: Check connectivity with the target machine\n\t\tOR"
               " \n\t Make sure thumbprints were added\n")
         print ("INFO: Press enter to return to prompt")
+        vcli_connectivity = "false"
+        sys.exit()
     return 1
 
 def execute(cmd, mode='esxi'):
@@ -1596,6 +1600,8 @@ if __name__ == "__main__":
     GET_NIC_CMD = 'esxcli ' + SERVER_NAME + ' network nic list |grep sfvmk'
     SF_ADAPTERS = execute(GET_NIC_CMD, CURRENT_MODE)
     if SF_ADAPTERS == 1 or SF_ADAPTERS == None:
+        if vcli_connectivity == "false":
+           sys.exit()
         print("\nCAUTION: Either sfvmk driver is NOT loaded OR Solarflare "
               "NIC is NOT visible\n")
         sys.exit()

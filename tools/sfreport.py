@@ -1563,6 +1563,7 @@ if __name__ == "__main__":
     SF_VER = {}
     CLI_VIB = False
     CURRENT_TIME = (execute('date +"%Y-%m-%d-%H-%M-%S"'))
+    vcli_connectivity = None
     if CURRENT_TIME == 1:
         print("Error: Couldn't retrieve current time on the system")
         sys.exit()

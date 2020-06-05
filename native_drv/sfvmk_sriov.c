@@ -1135,7 +1135,7 @@ sfvmk_sriovSetVfSpoofChk(sfvmk_adapter_t *pAdapter, vmk_uint32 vfIdx,
 
   SFVMK_ADAPTER_DEBUG_FUNC_ENTRY(pAdapter, SFVMK_DEBUG_SRIOV);
 
-  status = efx_proxy_auth_set_privilege_mask(pAdapter->pPrimary->pNic, vfIdx,
+  status = efx_proxy_auth_set_privilege_mask(pAdapter->pNic, vfIdx,
                 MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX,
                 spoofChk ? 0 : MC_CMD_PRIVILEGE_MASK_IN_GRP_MAC_SPOOFING_TX);
 

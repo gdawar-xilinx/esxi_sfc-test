@@ -272,9 +272,18 @@ sfvmk_proxyAuthInit(sfvmk_adapter_t *pAdapter)
   pPrimary = pAdapter->pPrimary;
 
   if (pPrimary != pAdapter) {
+    if (pAdapter->numVfsEnabled) {
+      status = efx_proxy_auth_init(pAdapter->pNic);
+      if (status != VMK_OK) {
+        SFVMK_ADAPTER_ERROR(pAdapter, "efx_proxy_auth_init failed: %s",
+                            vmk_StatusToString(status));
+      }
+    } else {
+      status = VMK_OK;
+    }
+
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                         "Secondary adapter, exit");
-    status = VMK_OK;
     goto done;
   }
 
@@ -359,13 +368,10 @@ sfvmk_proxyAuthFini(sfvmk_adapter_t *pAdapter)
   sfvmk_MutexLock(sfvmk_modInfo.listsLock);
 
   pPrimary = pAdapter->pPrimary;
-  if (pPrimary == NULL) {
-    SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
-                        "Primary adapter not found");
-    goto done;
-  }
-
   if (pPrimary != pAdapter) {
+    if (pAdapter->numVfsEnabled) {
+      efx_proxy_auth_fini(pAdapter->pNic);
+    }
     SFVMK_ADAPTER_DEBUG(pAdapter, SFVMK_DEBUG_PROXY, SFVMK_LOG_LEVEL_DBG,
                         "Secondary adapter, exit");
     goto done;

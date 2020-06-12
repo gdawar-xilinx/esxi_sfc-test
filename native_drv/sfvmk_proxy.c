@@ -1439,6 +1439,12 @@ sfvmk_proxyAuthorizeRequest(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
+  if (vf > pAdapter->numVfsEnabled) {
+    SFVMK_ADAPTER_ERROR(pAdapter, "Invalid vf index %u", vf);
+    status = VMK_FAILURE;
+    goto done;
+  }
+
   pPfAdapter = sfvmk_findPfAdapter(pAdapter, pf);
   if (pPfAdapter == NULL) {
     SFVMK_ADAPTER_ERROR(pAdapter, "sfvmk_findPfAdapter returned NULL, pf: %u",

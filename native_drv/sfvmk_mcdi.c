@@ -100,7 +100,7 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
       SFVMK_ADAPTER_ERROR(pAdapter, "vmk_WorldSleep failed status: %s",
                           vmk_StatusToString(status));
       /* World is dying */
-      return;
+      goto abort_it;
     }
 
     /* Exponentially back off the poll frequency. */
@@ -111,6 +111,7 @@ sfvmk_mcdiPoll(sfvmk_adapter_t *pAdapter, vmk_uint32 timeoutUS)
     sfvmk_getTime(&currentTime);
   }
 
+abort_it:
   aborted = efx_mcdi_request_abort(pAdapter->pNic);
   if (!aborted)
     SFVMK_ADAPTER_ERROR(pAdapter, "Abort failed");

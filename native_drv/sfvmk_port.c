@@ -580,13 +580,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
     goto failed_mac_stats;
   }
 
-  status = efx_mac_drain(pNic, B_FALSE);
-  if (status != VMK_OK) {
-    SFVMK_ADAPTER_ERROR(pAdapter, "efx_mac_drain failed status: %s",
-                        vmk_StatusToString(status));
-    goto failed_mac_drain;
-  }
-
   pPort->state = SFVMK_PORT_STATE_STARTED;
 
   /* Single poll in case there were missing initial events */
@@ -607,7 +600,6 @@ sfvmk_portStart(sfvmk_adapter_t *pAdapter)
   goto done;
 
 failed_port_poll:
-failed_mac_drain:
   (void)efx_mac_stats_periodic(pNic, &pPort->macStatsDmaBuf, 0, B_FALSE);
 failed_mac_stats:
 failed_mac_filter_set:
@@ -655,8 +647,6 @@ void sfvmk_portStop(sfvmk_adapter_t *pAdapter)
   pPort->state = SFVMK_PORT_STATE_INITIALIZED;
 
   (void)efx_mac_stats_periodic(pNic, &pPort->macStatsDmaBuf, 0, B_FALSE);
-
-  efx_mac_drain(pNic, B_TRUE);
 
   pPort->linkMode = EFX_LINK_UNKNOWN;
 

@@ -593,8 +593,7 @@ sfvmk_evqPoll(sfvmk_evq_t *pEvq, vmk_Bool panic)
 
   if (pEvq == NULL) {
     SFVMK_ERROR("NULL event queue ptr");
-    status = VMK_BAD_PARAM;
-    goto done;
+    return VMK_BAD_PARAM;
   }
 
   vmk_SpinlockLock(pEvq->lock);

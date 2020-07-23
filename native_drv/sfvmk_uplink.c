@@ -5814,7 +5814,7 @@ sfvmk_requestQueueStats(sfvmk_adapter_t *pAdapter,
     goto done;
   }
 
-  if (pBytesCopied == NULL)
+  if (pBytesCopied != NULL)
     *pBytesCopied = 0;
 
   pCurr = pStart;

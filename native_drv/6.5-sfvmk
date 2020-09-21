@@ -28,6 +28,8 @@
 # identification section
 #
 
+# This file is used for both ESXi 6.5 and 6.7 builds
+#
 from devkitUtilities import IsDevKit
 inbox = not IsDevKit()
 

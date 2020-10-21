@@ -24,6 +24,7 @@
 
 # Get the NDDK version
 NDDK_VER := $(shell sh ./find_ver.sh)
+BUILD_VER  := $(shell sh ../native_drv/buildcfg.sh GET_NDDKBUILDVER)
 RELEASE_CONTAINER_VER := 1.1.1.1000
 
 # Initialise VIB name and other key params used by Host extension tools
@@ -40,14 +41,15 @@ PLUGIN_XML =
 DESC_VENDOR_EMAIL=support@solarflare.com
 DESC_VERSION=$(UWTOOL_VERSION)-00
 DESC_VERSION=$(PLUGIN_VERSION)-00
-DESC_VENDOR=SFC
 DESC_SUMMARY=This VIB contains firmware images
 DESC_DESCRIPTION=Custom VIB for firmware images
 DESC_URLS=descriptor-urls.xml
 ifeq ($(NDDK_VER),7.0)
 DESC_DEPENDS=7.0-descriptor-depends.xml
+DESC_VENDOR=Solarflare
 else
 DESC_DEPENDS=descriptor-depends.xml
+DESC_VENDOR=SFC
 endif
 DESC_CONFLICTS=
 DESC_REPLACES=
@@ -71,8 +73,8 @@ CERTPATH=/opt/vmware/vibtools/testcerts/vmpartner.cert
 ifeq ($(NDDK_VER),7.0)
 BULL_CNS_NAME=SFC-FWVIB
 BULL_CNS_STRING=$(DESC_DESCRIPTION)
-BULL_CVS_VERSION=1.0-0.0.0001
-BULL_CVS_STRING=1.0 - Build 0001
+BULL_CVS_VERSION=$(UWTOOL_VERSION)OEM-$(BUILD_VER)
+BULL_CVS_STRING=$(UWTOOL_VERSION)
 endif
 
 include $(NDDK_VER)-Makefile.user

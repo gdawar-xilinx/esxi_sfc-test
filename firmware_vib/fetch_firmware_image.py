@@ -644,6 +644,8 @@ def main():
         if rc == 0:
             fail("No image Description found in manifest list. Exiting")
 
+        if (manifest_list_path.find("dell") > 0):
+            version_num = version_num + ".d"
         if json_handle.create_json_file == 1:
             json_handle.writejsonfile()
         if ((options.vib_author is None) or

@@ -215,7 +215,12 @@ do
   ddk=${esx_arr[1]}
   ddk_vm=${esx_arr[2]}
   fw_vib=${esx_arr[3]}
-  fw_pkg_dir="/projects/vmware/fw_vib/$fw_family/esxi_$esx_ver"
+  if [[ $MANIFEST_LIST =~ .*dell.* ]]
+    then
+    fw_pkg_dir="/projects/vmware/fw_vib/DELL/$fw_family/esxi_$esx_ver"
+  else
+    fw_pkg_dir="/projects/vmware/fw_vib/$fw_family/esxi_$esx_ver"
+  fi
   if [ $fw_vib != "yes" ];then
      continue
   fi
@@ -230,6 +235,13 @@ do
   cmd="mkdir $ddk_tag_dir"
   ssh -l root ${ddk_vm} "${cmd}"
   scp -r firmware_vib root@$ddk_vm:$ddk_tag_dir
+  scp -r native_drv root@$ddk_vm:$ddk_tag_dir
+  if [ $? -ne 0 ] ;then
+     echo "ERROR: SCP failed"
+     echo "Aborting!.."
+     exit
+  fi
+  echo "Initiating build"
   if [ $? -ne 0 ] ;then
      echo "ERROR: SCP failed"
      echo "Aborting!.."
@@ -272,7 +284,13 @@ do
         echo "Aborting!.."
         exit
      fi
-     scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/bundle/SFC-ESX-fw-*.zip" $fw_pkg_dir
+     if [ $esx_ver == "7.0" ] ;then
+        echo "Copying firmware_vib component"
+        scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/component/VMW*.zip" $fw_pkg_dir
+     else
+        echo "Copying esxcli_ext_bundle.zip"
+        scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/bundle/SFC-ESX-fw-*.zip" $fw_pkg_dir
+     fi
      if [ $? -ne 0 ] ;then
         echo "ERROR: SCP failed"
         echo "Aborting!.."
@@ -284,7 +302,14 @@ do
         echo "Aborting!.."
         exit
      fi
-     scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/stage/opt/sfc/firmware/FirmwareMetadata.json" $fw_pkg_dir
+     if [ $esx_ver == "7.0" ] ;then
+        echo "Copying Metadata Json"
+        scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/payloads/sfvmkfw/opt/sfc/firmware/FirmwareMetadata.json" $fw_pkg_dir
+     else
+        echo "Copying Metadata Json"
+        scp root@$ddk_vm:"$ddk_tag_dir/firmware_vib/build/stage/opt/sfc/firmware/FirmwareMetadata.json" $fw_pkg_dir
+     fi
+
      if [ $? -ne 0 ] ;then
         echo "ERROR: SCP failed"
         echo "Aborting!.."
@@ -316,7 +341,12 @@ do
    fw_status=${fw_arr[3]}
    ver=${fw_arr[0]}
    if [ $fw_status == "yes" ] ;then
-      ls -R "/projects/vmware/fw_vib/$fw_family/esxi_$ver"
+      if [[ $MANIFEST_LIST =~ .*dell.* ]]
+      then
+         ls -R "/projects/vmware/fw_vib/DELL/$fw_family/esxi_$ver"
+      else
+         ls -R "/projects/vmware/fw_vib/$fw_family/esxi_$ver"
+      fi
    fi
 done
 # Report errors/warnings if any
